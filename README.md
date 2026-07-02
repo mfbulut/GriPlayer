@@ -9,6 +9,9 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **Synced Lyrics:** View synchronized lyrics as your songs play using `.lrc` files.
 - **SMTC:** Full Windows System Media Transport Controls integration.
 - **Supported Formats:** .opus
+  
+<img width="1282" height="752" alt="image" src="https://github.com/user-attachments/assets/d6477ecc-e0ae-43cc-b2d4-c6e215616377" />
+<img width="1282" height="752" alt="image" src="https://github.com/user-attachments/assets/e4a92605-fa0d-40d5-8435-586da8f1c706" />
 
 ## Roadmap
 
