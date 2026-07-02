@@ -4,6 +4,7 @@
 > GriPlayer is in early development and currently only supports `.opus` audio files.
 
 GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
+### [Download Latest Release](https://github.com/mfbulut/GriPlayer/releases/latest)
 
 ## Features
 
@@ -14,8 +15,10 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **DirectX 11 & WASAPI:** Built from scratch, low latency, fast performance.
 - **Supported Formats:** .opus
   
-<img width="1282" height="752" alt="image" src="https://github.com/user-attachments/assets/d6477ecc-e0ae-43cc-b2d4-c6e215616377" />
-<img width="1282" height="752" alt="image" src="https://github.com/user-attachments/assets/e4a92605-fa0d-40d5-8435-586da8f1c706" />
+## Screenshots
+
+<img src="https://github.com/user-attachments/assets/d6477ecc-e0ae-43cc-b2d4-c6e215616377" />
+<img src="https://github.com/user-attachments/assets/e4a92605-fa0d-40d5-8435-586da8f1c706" />
 
 ## Roadmap
 
