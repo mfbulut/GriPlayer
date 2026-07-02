@@ -85,13 +85,12 @@ handle_search_input :: proc() {
 
 	if fx.key_is_pressed(.Delete) do edit.perform_command(&search.box, ctrl ? .Delete_Word_Right : .Delete)
 	if fx.key_is_pressed(.Home) do edit.perform_command(&search.box, shift ? .Select_Line_Start : .Line_Start)
-	if fx.key_is_pressed(.End)  do edit.perform_command(&search.box, shift ? .Select_Line_End : .Line_End)
+	if fx.key_is_pressed(.End) do edit.perform_command(&search.box, shift ? .Select_Line_End : .Line_End)
+	if fx.key_is_pressed(.Z) && ctrl do edit.perform_command(&search.box, shift ? .Redo : .Undo)
 	if fx.key_is_pressed(.A) && ctrl do edit.perform_command(&search.box, .Select_All)
 	if fx.key_is_pressed(.C) && ctrl do edit.copy(&search.box)
 	if fx.key_is_pressed(.X) && ctrl do edit.cut(&search.box)
 	if fx.key_is_pressed(.V) && ctrl do edit.paste(&search.box)
-	if fx.key_is_pressed(.Z) && ctrl do edit.perform_command(&search.box, .Undo)
-	if fx.key_is_pressed(.Y) && ctrl do edit.perform_command(&search.box, .Redo)
 	if fx.key_is_pressed(.Esc) do search.focused = false
 	if fx.key_is_pressed(.Enter) && len(search.results) > 0 {
 		player_start_playlist(search.results[:], 0)
