@@ -26,7 +26,7 @@ context_menu : struct {
 }
 
 main :: proc() {
-	fx.init("Music Player")
+	fx.init("GriPlayer")
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
 	fft_init()

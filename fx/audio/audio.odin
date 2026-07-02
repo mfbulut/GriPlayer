@@ -3,72 +3,53 @@ package audio
 import "core:slice"
 import "core:strings"
 
-import win "core:sys/windows"
+import "core:sys/windows"
+import "vendor:windows/wasapi"
 import "opusfile"
-import "wasapi"
 
 SAMPLES_PER_SECOND :: 48000
-BITS_PER_CHANNEL :: 32
-CHANNEL_COUNT :: 2
 
 state: struct {
-    client:        ^wasapi.IAudioClient,
+    client: ^wasapi.IAudioClient,
     render_client: ^wasapi.IAudioRenderClient,
-    volume:        ^wasapi.ISimpleAudioVolume,
-    buffer_size:   win.UINT32,
-    of:            ^opusfile.OggOpusFile,
+    buffer_size: windows.UINT32,
+    of: ^opusfile.OggOpusFile,
+    volume: f32,
 }
 
 initialize :: proc() {
-    hr := win.CoInitializeEx(nil, cast(win.COINIT)2)
-    if hr != win.S_OK && hr != win.S_FALSE {
-        panic("[ERROR] Failed to initialize COM")
-    }
+    windows.CoInitializeEx(nil, cast(windows.COINIT)4)
 
     enumerator: ^wasapi.IMMDeviceEnumerator
-    hr = win.CoCreateInstance(&wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL, &wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
-    if win.FAILED(hr) do panic("[ERROR] Failed to create MMDeviceEnumerator")
-    defer (cast(^win.IUnknown)enumerator)->Release()
+    windows.CoCreateInstance(wasapi.CLSID_MMDeviceEnumerator, nil, windows.CLSCTX_INPROC_SERVER, wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
 
     device: ^wasapi.IMMDevice
-    hr = enumerator->GetDefaultAudioEndpoint(.eRender, .eConsole, &device)
-    if win.FAILED(hr) do panic("[ERROR] Failed to get default audio endpoint")
-    defer (cast(^win.IUnknown)device)->Release()
+    enumerator->GetDefaultAudioEndpoint(.Render, .Console, &device)
+    device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&state.client)
 
-    hr = device->Activate(&wasapi.IID_IAudioClient, win.CLSCTX_ALL, nil, cast(^rawptr)&state.client)
-    if win.FAILED(hr) do panic("[ERROR] Failed to activate IAudioClient")
+    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT := windows.GUID {0x00000003,0x0000,0x0010,{0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}
 
-    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT := win.GUID {0x00000003,0x0000,0x0010,{0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}
-
-    format := win.WAVEFORMATEXTENSIBLE {
+    format := windows.WAVEFORMATEXTENSIBLE {
         Format = {
-            wFormatTag = win.WAVE_FORMAT_EXTENSIBLE,
-            nChannels = CHANNEL_COUNT,
+            wFormatTag = windows.WAVE_FORMAT_EXTENSIBLE,
+            nChannels = 2,
             nSamplesPerSec = SAMPLES_PER_SECOND,
-            nAvgBytesPerSec = BITS_PER_CHANNEL * CHANNEL_COUNT * SAMPLES_PER_SECOND / 8,
-            nBlockAlign = BITS_PER_CHANNEL * CHANNEL_COUNT / 8,
-            wBitsPerSample = BITS_PER_CHANNEL,
-            cbSize = size_of(win.WAVEFORMATEXTENSIBLE) - size_of(win.WAVEFORMATEX),
+            nAvgBytesPerSec = 32 * 2 * SAMPLES_PER_SECOND / 8,
+            nBlockAlign = 32 * 2 / 8,
+            wBitsPerSample = 32,
+            cbSize = size_of(windows.WAVEFORMATEXTENSIBLE) - size_of(windows.WAVEFORMATEX),
         },
-        Samples = {wValidBitsPerSample = BITS_PER_CHANNEL},
+        Samples = {wValidBitsPerSample = 32},
         dwChannelMask = {.FRONT_LEFT, .FRONT_RIGHT},
         SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
     }
 
-    hr = state.client->Initialize(.AUDCLNT_SHAREMODE_SHARED, wasapi.AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | wasapi.AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 500000, 0, cast(^win.WAVEFORMATEX)&format, nil)
-    if win.FAILED(hr) do panic("[WARN] Failed to initialize IAudioClient with preferred format. Error:")
+    stream_flags := cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_AUTOCONVERTPCM | cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY
 
-    hr = state.client->GetService(&wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
-    if win.FAILED(hr) do panic("[ERROR] Failed to get IAudioRenderClient")
-
-    hr = state.client->GetService(&wasapi.IID_ISimpleAudioVolume, cast(^rawptr)&state.volume)
-    if win.FAILED(hr) do panic("[WARN] Failed to get ISimpleAudioVolume")
-
-    hr = state.client->Start()
-    if win.FAILED(hr) do panic("[ERROR] Failed to start IAudioClient")
-
-    hr = state.client->GetBufferSize(&state.buffer_size)
-    if win.FAILED(hr) do panic("[ERROR] Failed to get buffer size")
+    state.client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
+    state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
+    state.client->GetBufferSize(&state.buffer_size)
+    state.volume = 1.0
 }
 
 open :: proc(path: string, gapless := false) -> bool {
@@ -93,29 +74,30 @@ open :: proc(path: string, gapless := false) -> bool {
 update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     if state.of == nil do return false
 
-    padding: win.UINT32
-    hr := state.client->GetCurrentPadding(&padding)
-    if win.FAILED(hr) do return false
+    padding: windows.UINT32
+    state.client->GetCurrentPadding(&padding)
 
     available_frames := state.buffer_size - padding
     if available_frames == 0 do return false
 
-    buffer: [^]f32
-    hr = state.render_client->GetBuffer(available_frames, cast(^^win.BYTE)&buffer)
-    if win.FAILED(hr) do return false
+    buffer: [^]u8
+    state.render_client->GetBuffer(available_frames, &buffer)
 
-    frames_read := opusfile.read_float_stereo(state.of, buffer, cast(i32)(available_frames * CHANNEL_COUNT))
+    frames_read := opusfile.read_float_stereo(state.of, cast([^]f32)buffer, cast(i32)(available_frames * 2))
 
-    if frames_read < 0 {
-        state.render_client->ReleaseBuffer(0, 0)
-        return true
-    } else if frames_read == 0 {
+    if frames_read <= 0 {
         state.render_client->ReleaseBuffer(0, 0)
         return true
     }
 
+    samples_slice := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
+
+    for &sample in samples_slice {
+        sample[0] *= state.volume
+        sample[1] *= state.volume
+    }
+
     if callback != nil {
-        samples_slice := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
         callback(samples_slice)
     }
 
@@ -150,6 +132,5 @@ resume :: proc() {
 }
 
 set_volume :: proc(volume: f32) {
-    v := clamp(volume * volume, 0.0, 1.0)
-    state.volume->SetMasterVolume(v, nil)
+    state.volume = clamp(volume * volume, 0.0, 1.0)
 }
