@@ -74,11 +74,12 @@ layout_stack: [dynamic]Layout_Container
 animation_state: map[int]f32
 
 @(deferred_out=layout_end)
-layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 = 0, gap: f32 = 0) -> bool {
+layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 = 0, gap: f32 = 0, dir: Layout_Direction = .Col) -> bool {
 	if scroll != nil {
 		dt := fx.frame_time()
 		mouse_scroll := fx.mouse_scroll()
-		max_scroll := max(scroll.content_size + padding * 2 - bounds.h, 0)
+		container_size := dir == .Row ? bounds.w : bounds.h
+		max_scroll := max(scroll.content_size + padding * 2 - container_size, 0)
 
 		if mouse_hover(bounds) && mouse_scroll.y != 0 {
 			scroll.target = max(scroll.target - mouse_scroll.y * 60, 0)
@@ -94,11 +95,15 @@ layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 
 	scroll_curr := scroll != nil ? scroll.current : 0
 	@(static) grow_elems := [1]f32{GROW}
 
+	origin := dir == .Row ? bounds.x : bounds.y
+	span   := dir == .Row ? bounds.w : bounds.h
+
 	append(&layout_stack, Layout_Container{
 		bounds = bounds,
 		elems = grow_elems[:],
-		grow_size = max(0.0, bounds.h - padding * 2),
-		current_pos = bounds.y - scroll_curr + padding,
+		dir = dir,
+		grow_size = max(0.0, span - padding * 2),
+		current_pos = origin - scroll_curr + padding,
 		padding = padding,
 		gap = gap,
 		scroll_state = scroll,
@@ -165,13 +170,14 @@ layout_next :: proc(set_size := f32(0)) -> fx.Rect {
 
 	scroll_curr := c.scroll_state != nil ? c.scroll_state.current : 0
 	if c.scroll_state != nil {
-		c.scroll_state.content_size = max(c.scroll_state.content_size, (c.current_pos + size) - (c.bounds.y + c.padding - scroll_curr))
+		origin := c.dir == .Row ? c.bounds.x : c.bounds.y
+		c.scroll_state.content_size = max(c.scroll_state.content_size, (c.current_pos + size) - (origin + c.padding - scroll_curr))
 	}
 
 	if c.dir == .Row {
 		return fx.Rect{
 			x = c.current_pos,
-			y = c.bounds.y + c.padding - scroll_curr,
+			y = c.bounds.y + c.padding,
 			w = size,
 			h = max(0.0, c.bounds.h - c.padding * 2),
 		}

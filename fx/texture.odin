@@ -1,9 +1,6 @@
 package fx
 
-import "core:fmt"
 import "core:os"
-
-import "core:c"
 
 import win "core:sys/windows"
 import D3D11 "vendor:directx/d3d11"
@@ -82,11 +79,10 @@ load_texture_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 load_texture_from_bytes :: proc(bytes: []byte, mipmaps := true) -> Texture {
 	if len(bytes) == 0 do return {}
 
-	w, h, channels: c.int
-	pixels := stbi.load_from_memory(raw_data(bytes), cast(c.int)len(bytes), &w, &h, &channels, 4)
+	w, h, channels: i32
+	pixels := stbi.load_from_memory(raw_data(bytes), cast(i32)len(bytes), &w, &h, &channels, 4)
 
 	if pixels == nil {
-		fmt.eprintfln("[ERROR] Failed to parse image from bytes using stb_image")
 		return {}
 	}
 	defer stbi.image_free(pixels)
@@ -97,8 +93,8 @@ load_texture_from_bytes :: proc(bytes: []byte, mipmaps := true) -> Texture {
 load_and_resize_texture :: proc(bytes: []byte, size: int) -> Texture {
 	if len(bytes) == 0 do return {}
 
-	w, h, channels: c.int
-	pixels := stbi.load_from_memory(raw_data(bytes), cast(c.int)len(bytes), &w, &h, &channels, 4)
+	w, h, channels: i32
+	pixels := stbi.load_from_memory(raw_data(bytes), cast(i32)len(bytes), &w, &h, &channels, 4)
 
 	if pixels == nil do return {}
 	defer stbi.image_free(pixels)
@@ -117,7 +113,7 @@ load_and_resize_texture :: proc(bytes: []byte, size: int) -> Texture {
 
 	success := stbi.resize_uint8(
 		pixels, w, h, 0, raw_data(resized_pixels),
-		cast(c.int)dest_w, cast(c.int)dest_h, 0, 4,
+		cast(i32)dest_w, cast(i32)dest_h, 0, 4,
 	)
 
 	if success == 0 do return {}
@@ -128,7 +124,6 @@ load_and_resize_texture :: proc(bytes: []byte, size: int) -> Texture {
 load_texture_from_file :: proc(filepath: string, mipmaps := true) -> Texture {
 	file_data, err := os.read_entire_file(filepath, context.temp_allocator)
 	if err != nil {
-		fmt.eprintfln("[ERROR] Failed to read texture file: %v", filepath)
 		return {}
 	}
 

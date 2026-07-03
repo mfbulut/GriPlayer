@@ -48,10 +48,7 @@ renderer_initialize :: proc() {
 		CPUAccessFlags = {.WRITE},
 	}
 
-	hr := d3d11_state.device->CreateBuffer(&desc, nil, &d3d11_state.instanced_buffer_gpu)
-	if win.FAILED(hr) {
-		panic("[ERROR] Failed to create draw instance buffer")
-	}
+	d3d11_state.device->CreateBuffer(&desc, nil, &d3d11_state.instanced_buffer_gpu)
 
 	// Shader + uniforms
 	d3d11_vshader_init(shader, "shader.hlsl")
@@ -441,7 +438,7 @@ flush_batch :: proc() -> bool {
 		return true
 	}
 
-	{ 	// Map instances
+	{
 		sub_rsrc: D3D11.MAPPED_SUBRESOURCE
 		hr := d3d11_state.device_ctx->Map(
 			d3d11_state.instanced_buffer_gpu,
