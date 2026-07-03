@@ -6,6 +6,9 @@ import "core:slice"
 import "core:strings"
 import "core:strconv"
 import "core:hash/xxhash"
+import "core:container/bit_array"
+import "core:unicode/utf8"
+import "core:unicode"
 
 import "fx"
 import "fx/audio"
@@ -25,6 +28,7 @@ Music :: struct {
     duration:     f32,
     liked:        bool,
     lyrics:       [dynamic]LyricLine,
+    lyrics_filter: ^bit_array.Bit_Array,
     thumbnail:    fx.Texture,
 }
 
@@ -115,6 +119,8 @@ load_lrc :: proc(music: ^Music) {
         return
     }
 
+    music.lyrics_filter, _ = bit_array.create(32768)
+
     it := string(data)
     for line in strings.split_lines_iterator(&it) {
         l := strings.trim_space(line)
@@ -148,6 +154,22 @@ load_lrc :: proc(music: ^Music) {
                 if min_ok && sec_ok {
                     time := mins * 60.0 + secs
                     append(&music.lyrics, LyricLine{text = text, time = time})
+
+                    lower_text := strings.to_lower(text, context.temp_allocator)
+                    runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
+                    for r in lower_text {
+                        if unicode.is_letter(r) || unicode.is_digit(r) {
+                            append(&norm_runes, r)
+                        }
+                    }
+
+                    if len(runes) >= 5 {
+                        for i := 0; i <= len(runes) - 5; i += 1 {
+                            bytes := slice.reinterpret([]byte, runes[i : i+5])
+                            hash := xxhash.XXH32(bytes)
+                            bit_array.set(music.lyrics_filter, uint(hash & 32767))
+                        }
+                    }
                 }
             }
         }
@@ -169,8 +191,8 @@ save_music_state :: proc() {
 
     save_file := os.open(save_path, os.O_WRONLY | os.O_CREATE | os.O_TRUNC) or_else panic("Failed to save the data")
 
-    songs_to_save: [dynamic]SongSaveData
     liked_hashes: [dynamic]u64
+    songs_to_save: [dynamic]SongSaveData
 
     for m in playlists[0].songs {
         hash := xxhash.XXH3_64(transmute([]byte)fmt.tprintf("%s%s", m.title, m.artist))

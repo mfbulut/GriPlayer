@@ -4,6 +4,9 @@ import "core:slice"
 import "core:strings"
 import "core:text/edit"
 import "core:unicode/utf8"
+import "core:hash/xxhash"
+import "core:container/bit_array"
+import "core:unicode"
 
 import "fx"
 
@@ -145,7 +148,38 @@ score_song :: proc(song: ^Music, query: string, query_words: []string) -> int {
 			}
 		}
 
-		score += best_word_score
+		if best_word_score > 0 {
+			score += best_word_score
+		} else {
+			score -= 500
+		}
+	}
+
+	if song.lyrics_filter != nil {
+		query_runes := make([dynamic]rune, 0, len(query), context.temp_allocator)
+		for r in query {
+			if unicode.is_letter(r) || unicode.is_digit(r) {
+				append(&query_runes, r)
+			}
+		}
+
+		if len(query_runes) >= 5 {
+			match_count := 0
+			total_windows := len(query_runes) - 5 + 1
+
+			for i in 0..<total_windows {
+				bytes := slice.reinterpret([]byte, query_runes[i : i+5])
+				hash := xxhash.XXH32(bytes)
+
+				if bit_array.unsafe_get(song.lyrics_filter, uint(hash & 32767)) {
+					match_count += 1
+				}
+			}
+
+			if match_count > 0 {
+				score += (match_count * 5000) / total_windows
+			}
+		}
 	}
 
 	return score
