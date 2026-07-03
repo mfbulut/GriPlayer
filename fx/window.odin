@@ -111,12 +111,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 		nil,
 	)
 
-	if hwnd == nil {
-		panic("[ERROR] Failed to create HWND")
-	}
-
 	window.hwnd = hwnd
-
 	scale := dpi_scale()
 	if scale != 1.0 {
 		scaled_rect: win.RECT = {
@@ -136,7 +131,6 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	client_w := r.right - r.left
 	client_h := r.bottom - r.top
 
-	window.hwnd = hwnd
 	window.size_last_frame = {client_w, client_h}
 	window.size_this_frame = {client_w, client_h}
 
@@ -146,8 +140,12 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	window.mouse_pos_this_frame = mouse_pos()
 	window.mouse_pos_last_frame = window.mouse_pos_this_frame
 
-	value: win.BOOL = true
-	win.DwmSetWindowAttribute(hwnd, 20, &value, size_of(value))
+	value := win.TRUE
+	win.DwmSetWindowAttribute(hwnd,
+		u32(win.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE),
+		&value,
+		size_of(value)
+	)
 	win.RegisterHotKey(hwnd, 1, 0, win.VK_MEDIA_NEXT_TRACK)
 	win.RegisterHotKey(hwnd, 2, 0, win.VK_MEDIA_PREV_TRACK)
 	win.RegisterHotKey(hwnd, 3, 0, win.VK_MEDIA_PLAY_PAUSE)
@@ -200,9 +198,9 @@ key_is_released :: proc(key: Key) -> bool {
 	return !is_down && was_down
 }
 
-frame_time :: proc() -> f32 {return min(window.frame_time, 1.0 / 60.0)}
-total_time :: proc() -> f32 {return window.total_time}
-text_input :: proc() -> []rune {return window.text_input[:]}
+frame_time :: proc() -> f32 { return min(window.frame_time, 1.0 / 60.0) }
+total_time :: proc() -> f32 { return window.total_time }
+text_input :: proc() -> []rune { return window.text_input[:] }
 
 set_cursor :: proc(cursor: Cursor) {
 	window.current_cursor = cursor
@@ -417,10 +415,10 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		result = 1
 
 	case win.WM_MOUSEWHEEL:
-		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / f32(120.0)
+		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
 		window.mouse_scroll.y += vert_scroll
 	case win.WM_MOUSEHWHEEL:
-		horz_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / f32(120.0)
+		horz_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
 		window.mouse_scroll.x += horz_scroll
 
 	case win.WM_SYSKEYDOWN:

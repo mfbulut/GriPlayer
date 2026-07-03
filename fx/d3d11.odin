@@ -376,7 +376,7 @@ flush_batch :: proc() -> bool {
 
 	{
 		sub_rsrc: D3D11.MAPPED_SUBRESOURCE
-		hr := d3d11_state.device_ctx->Map(
+		d3d11_state.device_ctx->Map(
 			d3d11_state.instanced_buffer_gpu,
 			0,
 			.WRITE_DISCARD,

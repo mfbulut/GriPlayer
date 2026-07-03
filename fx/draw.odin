@@ -107,7 +107,7 @@ draw_texture :: proc(tex: Texture, rect: Rect, tint_rect := cast([4]Color)WHITE,
 
 draw_text :: proc {
 	draw_text_vec,
-	draw_text_rect,
+	draw_text_ex,
 }
 
 draw_text_vec :: proc(font: Font, str: string, pos: Vec2, font_size: f32, color: [4]Color) {
@@ -160,7 +160,7 @@ draw_text_vec :: proc(font: Font, str: string, pos: Vec2, font_size: f32, color:
 	}
 }
 
-draw_text_rect :: proc(font: Font, str: string, bounds: Rect, font_size: f32, color: Color, center_x := false, center_y := false) {
+draw_text_ex :: proc(font: Font, str: string, bounds: Rect, font_size: f32, color: Color, center_x := false, center_y := false) {
 	if str == "" do return
 
 	d3d11_state.batch.binding.texture = font.atlas.srv
