@@ -106,11 +106,7 @@ visualizer_update :: proc() {
 			current = max(current - dt * SPECTRUM_FALL_SPEED, target)
 		}
 
-		if current > spectrum_peak[band] {
-			spectrum_peak[band] = current
-		} else {
-			spectrum_peak[band] = max(spectrum_peak[band] - SPECTRUM_PEAK_FALL * dt, current)
-		}
+		spectrum_peak[band] = max(spectrum_peak[band] - SPECTRUM_PEAK_FALL * dt, current)
 	}
 }
 

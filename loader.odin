@@ -7,7 +7,6 @@ import "core:strings"
 import "core:strconv"
 import "core:hash/xxhash"
 import "core:container/bit_array"
-import "core:unicode/utf8"
 import "core:unicode"
 
 import "fx"
@@ -124,38 +123,36 @@ load_lrc :: proc(music: ^Music) {
     it := string(data)
     for line in strings.split_lines_iterator(&it) {
         line := strings.trim_space(line)
-        if len(line) == 0 do continue
+        (len(line) > 0) or_continue
 
         open_bracket := strings.index(line, "[")
+        (open_bracket != -1) or_continue
         close_bracket := strings.index(line, "]")
-
-        if open_bracket == -1 || close_bracket == -1 do break
+        (close_bracket != -1) or_continue
 
         tag := line[open_bracket+1 : close_bracket]
         text := line[close_bracket+1:]
 
         colon_idx := strings.index(tag, ":")
+        (colon_idx != -1) or_continue
 
-        if colon_idx != -1 {
-            mins := strconv.parse_f32(tag[:colon_idx]) or_continue
-            secs := strconv.parse_f32(tag[colon_idx+1:]) or_continue
-            append(&music.lyrics, LyricLine{text = text, time = mins * 60 + secs})
+        mins := strconv.parse_f32(tag[:colon_idx]) or_continue
+        secs := strconv.parse_f32(tag[colon_idx+1:]) or_continue
+        append(&music.lyrics, LyricLine{text = text, time = mins * 60 + secs})
 
-            lower_text := strings.to_lower(text, context.temp_allocator)
-            runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
-            for r in lower_text {
-                if unicode.is_letter(r) || unicode.is_digit(r) {
-                    append(&runes, r)
-                }
-            }
-
-            for i in 0..=len(runes)-5 {
-                bytes := slice.reinterpret([]byte, runes[i : i+5])
-                hash := xxhash.XXH32(bytes)
-                bit_array.set(music.lyrics_filter, uint(hash & 32767))
+        lower_text := strings.to_lower(text, context.temp_allocator)
+        runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
+        for r in lower_text {
+            if unicode.is_letter(r) || unicode.is_digit(r) {
+                append(&runes, r)
             }
         }
 
+        for i in 0..=len(runes)-5 {
+            bytes := slice.reinterpret([]byte, runes[i : i+5])
+            hash := xxhash.XXH32(bytes)
+            bit_array.set(music.lyrics_filter, uint(hash & 32767))
+        }
     }
 }
 

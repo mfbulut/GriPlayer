@@ -31,16 +31,16 @@ main :: proc() {
 	search_init()
 
 	font = fx.load_font(#load("assets/Inter.json"), #load("assets/Inter.png"))
-	icons[.Shuffle]  = fx.load_texture(#load("assets/shuffle.png"))
+	icons[.Shuffle] = fx.load_texture(#load("assets/shuffle.png"))
 	icons[.Previous] = fx.load_texture(#load("assets/previous.png"))
-	icons[.Pause]    = fx.load_texture(#load("assets/pause.png"))
-	icons[.Play]     = fx.load_texture(#load("assets/play.png"))
-	icons[.Next]     = fx.load_texture(#load("assets/next.png"))
-	icons[.Heart]    = fx.load_texture(#load("assets/heart.png"))
-	icons[.Volume]   = fx.load_texture(#load("assets/volume.png"))
-	icons[.Note]     = fx.load_texture(#load("assets/note.png"))
-	icons[.Search]   = fx.load_texture(#load("assets/search.png"))
-	icons[.Cross]    = fx.load_texture(#load("assets/cross.png"))
+	icons[.Pause] = fx.load_texture(#load("assets/pause.png"))
+	icons[.Play] = fx.load_texture(#load("assets/play.png"))
+	icons[.Next] = fx.load_texture(#load("assets/next.png"))
+	icons[.Heart] = fx.load_texture(#load("assets/heart.png"))
+	icons[.Volume] = fx.load_texture(#load("assets/volume.png"))
+	icons[.Note] = fx.load_texture(#load("assets/note.png"))
+	icons[.Search] = fx.load_texture(#load("assets/search.png"))
+	icons[.Cross] = fx.load_texture(#load("assets/cross.png"))
 
 	load_music()
 
@@ -445,7 +445,7 @@ ui_lyrics :: proc() {
 			color := fx.color_lerp(fx.color_lerp(TEXT_SECONDARY, TEXT_PRIMARY, anim_hover), fx.WHITE, anim_act)
 
 			if strings.trim_space(lyric.text) == "" {
-				fx.sprite(icons[.Note], {item_rect.x + 8, item_rect.y + (item_rect.h - 18) * 0.5, 18, 18}, color)
+				fx.sprite(icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 18) * 0.5, 18, 18}, color)
 			} else {
 				fx.text_faded(font, lyric.text, item_rect, math.lerp(f32(18), f32(22), anim_act), color, true)
 			}
@@ -526,8 +526,7 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 ui_label :: proc(text_str: string, font_size: f32) -> bool {
 	rect := layout_next()
 	full_w := fx.text_size(font, text_str, font_size).x
-	ui_w := min(full_w, rect.w)
-	hovered := mouse_hover({rect.x, rect.y, ui_w, rect.h})
+	hovered := mouse_hover({rect.x, rect.y, full_w, rect.h})
 
 	color := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
 	fx.text(font, text_str, rect, font_size, color, false, true)
