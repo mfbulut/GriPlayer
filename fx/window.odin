@@ -83,11 +83,6 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 		win.SetWindowPos(window.hwnd, nil, new_x, new_y, new_w, new_h, win.SWP_NOZORDER)
 	}
 
-	r: win.RECT
-	win.GetClientRect(window.hwnd, &r)
-	client_w := r.right - r.left
-	client_h := r.bottom - r.top
-
 	window.prev_time = time.now()
 	window.mouse_pos = mouse_pos()
 

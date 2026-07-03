@@ -5,9 +5,9 @@ import "core:fmt"
 import "core:slice"
 import "core:strings"
 import "core:strconv"
+import "core:unicode"
 import "core:hash/xxhash"
 import "core:container/bit_array"
-import "core:unicode"
 
 import "fx"
 import "fx/audio"
@@ -18,17 +18,17 @@ LyricLine :: struct {
 }
 
 Music :: struct {
-    fullpath:     string,
-    title:        string,
-    artist:       string,
-    album:        string,
-    track:        int,
-    playtime:     f32,
-    duration:     f32,
-    liked:        bool,
-    lyrics:       [dynamic]LyricLine,
+    fullpath:      string,
+    title:         string,
+    artist:        string,
+    album:         string,
+    track:         int,
+    playtime:      f32,
+    duration:      f32,
+    liked:         bool,
+    lyrics:        [dynamic]LyricLine,
     lyrics_filter: ^bit_array.Bit_Array,
-    thumbnail:    fx.Texture,
+    thumbnail:     fx.Texture,
 }
 
 Playlist :: struct {
@@ -122,27 +122,27 @@ load_lrc :: proc(music: ^Music) {
 
     it := string(data)
     for line in strings.split_lines_iterator(&it) {
-        line := strings.trim_space(line)
-        (len(line) > 0) or_continue
+        text := strings.trim_space(line)
+        (len(text) > 0) or_continue
 
-        open_bracket := strings.index(line, "[")
+        open_bracket := strings.index(text, "[")
         (open_bracket != -1) or_continue
-        close_bracket := strings.index(line, "]")
+        close_bracket := strings.index(text, "]")
         (close_bracket != -1) or_continue
 
-        tag := line[open_bracket+1 : close_bracket]
-        text := line[close_bracket+1:]
+        tag := text[open_bracket+1 : close_bracket]
+        lyric := text[close_bracket+1:]
 
-        colon_idx := strings.index(tag, ":")
-        (colon_idx != -1) or_continue
+        colon_index := strings.index(tag, ":")
+        (colon_index != -1) or_continue
 
-        mins := strconv.parse_f32(tag[:colon_idx]) or_continue
-        secs := strconv.parse_f32(tag[colon_idx+1:]) or_continue
+        mins := strconv.parse_f32(tag[:colon_index]) or_continue
+        secs := strconv.parse_f32(tag[colon_index+1:]) or_continue
         append(&music.lyrics, LyricLine{text = text, time = mins * 60 + secs})
 
-        lower_text := strings.to_lower(text, context.temp_allocator)
-        runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
-        for r in lower_text {
+        lower_lyric := strings.to_lower(text, context.temp_allocator)
+        runes := make([dynamic]rune, 0, len(lyric), context.temp_allocator)
+        for r in lower_lyric {
             if unicode.is_letter(r) || unicode.is_digit(r) {
                 append(&runes, r)
             }
