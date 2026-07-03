@@ -273,7 +273,7 @@ ui_search_bar :: proc() {
 	was_focused := search.focused
 	was_active := search.active
 
-	if fx.mouse_is_pressed(.Left) {
+	if fx.key_is_pressed(.Mouse_Left) {
 		if hovered {
 			search.active = true
 			search.focused = true
@@ -320,7 +320,7 @@ ui_search_bar :: proc() {
 
 		if close_hover {
 			fx.set_cursor(.Hand)
-			if fx.mouse_is_pressed(.Left) && was_active == search.active {
+			if fx.key_is_pressed(.Mouse_Left) && was_active == search.active {
 				search_close()
 			}
 		}
@@ -376,13 +376,13 @@ update_search_scroll :: proc(query: string, visible_w: f32) {
 handle_search_drag :: proc(query: string, area: fx.Rect) {
 	hovered := mouse_hover(area)
 
-	if !search.focused || !fx.mouse_is_down(.Left) {
+	if !search.focused || !fx.key_is_down(.Mouse_Left) {
 		if drag_id == int(UI_ID.Search) do drag_id = 0
 	}
 
 	if drag_id != 0 && drag_id != int(UI_ID.Search) do return
 	if drag_id != int(UI_ID.Search) {
-		if !hovered || !fx.mouse_is_pressed(.Left) do return
+		if !hovered || !fx.key_is_pressed(.Mouse_Left) do return
 		drag_id = int(UI_ID.Search)
 	}
 
@@ -399,7 +399,7 @@ handle_search_drag :: proc(query: string, area: fx.Rect) {
 		}
 	}
 
-	if fx.mouse_is_pressed(.Left) {
+	if fx.key_is_pressed(.Mouse_Left) {
 		search.box.selection = {closest_idx, closest_idx}
 	} else {
 		search.box.selection[0] = closest_idx

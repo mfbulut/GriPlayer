@@ -62,8 +62,8 @@ Rect :: struct {
 	x, y, w, h: f32,
 }
 
-point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
-	return 	point.x >= rect.x && point.x < rect.x + rect.w && point.y >= rect.y && point.y < rect.y + rect.h
+point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
+	return 	p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
 
 rect_overlapping :: proc(a: Rect, b: Rect) -> bool {

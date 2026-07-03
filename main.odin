@@ -158,7 +158,7 @@ ui_context_menu :: proc() {
 	song := context_menu.selection
 	if song == nil do return
 
-	if fx.mouse_is_pressed(.Left) || fx.mouse_is_pressed(.Right) {
+	if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
 		if !mouse_hover(rect, true) {
 			context_menu.selection = nil
 			return
@@ -255,7 +255,7 @@ ui_songs_panel :: proc(songs: []^Music) {
 			item_rect.w -= 16
 			item_rect.w = max(item_rect.w, 0)
 
-			if mouse_hover(item_rect) && fx.mouse_is_pressed(.Right) {
+			if mouse_hover(item_rect) && fx.key_is_pressed(.Mouse_Right) {
 				if (context_menu.selection != nil || drag_id != 0) || !mouse_hover(context_menu.rect, true) {
 					window_size := fx.window_size()
 					menu_w := f32(160)
@@ -385,7 +385,7 @@ ui_progress :: proc() {
 			ui_tooltip(format_time(scrub_time), {tooltip_x, prog_rect.y + prog_rect.h * 0.5})
 		}
 
-		if prog_changed && fx.mouse_is_released(.Left) {
+		if prog_changed && fx.key_is_released(.Mouse_Left) {
 			player_seek(progress * audio.duration())
 			lyrics_synced = true
 			scrub_time = -1
@@ -436,7 +436,7 @@ ui_lyrics :: proc() {
 			is_hover := mouse_hover(item_rect) && fx.mouse_pos().y >= rect.y
 			anim_hover := animate(int(UI_ID.Lyric_Hover) + i, is_hover)
 
-			if is_hover && fx.mouse_is_pressed(.Left) {
+			if is_hover && fx.key_is_pressed(.Mouse_Left) {
 				player_seek(lyric.time)
 				lyrics_synced = true
 			}
@@ -491,7 +491,7 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false) -> bool {
 	text_color := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
 	fx.draw_text(font, text, rect, 14, text_color, true, true)
 
-	if hovered && fx.mouse_is_pressed(.Left) {
+	if hovered && fx.key_is_pressed(.Mouse_Left) {
 		return true
 	}
 
@@ -517,7 +517,7 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 
 	if hovered {
 		fx.set_cursor(.Hand)
-		if fx.mouse_is_pressed(.Left) do return true
+		if fx.key_is_pressed(.Mouse_Left) do return true
 	}
 
 	return false
@@ -533,7 +533,7 @@ ui_label :: proc(text_str: string, font_size: f32) -> bool {
 
 	if hovered {
 		fx.set_cursor(.Hand)
-		if fx.mouse_is_pressed(.Left) do return true
+		if fx.key_is_pressed(.Mouse_Left) do return true
 	}
 
 	return false
@@ -580,7 +580,7 @@ ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32
 
 	hovered := mouse_hover({x, rect.y - pad, w, rect.h + pad * 2})
 
-	if hovered && fx.mouse_is_pressed(.Left) && drag_id == 0 {
+	if hovered && fx.key_is_pressed(.Mouse_Left) && drag_id == 0 {
 		drag_id = id
 	}
 
@@ -592,7 +592,7 @@ ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32
 		changed = true
 	}
 
-	if active && !fx.mouse_is_down(.Left) {
+	if active && !fx.key_is_down(.Mouse_Left) {
 		drag_id = 0
 		active = false
 	}

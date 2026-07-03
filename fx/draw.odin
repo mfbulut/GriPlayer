@@ -51,6 +51,11 @@ add_instance :: proc(inst: Instance) {
 	batch.runs[len(batch.runs) - 1].count += 1
 }
 
+present :: proc(sync := u32(1)) {
+	flush_batch()
+	d3d11_state.swapchain.swapchain1->Present(sync, nil)
+}
+
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 	add_instance(
 		Instance {
