@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:math"
 import "core:time"
 import "core:strings"
-import "core:text/edit"
 
 import "fx"
 import "fx/audio"
@@ -14,7 +13,6 @@ drag_id: int
 playlist_id: int
 lyrics_synced := true
 scrub_time := f32(-1)
-volume := f32(0.5)
 
 lyrics_scroll: Scroll_State
 playlist_scroll: Scroll_State
@@ -30,19 +28,7 @@ main :: proc() {
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
 	fft_init()
-
-	edit.init(&search.box, context.allocator, context.allocator)
-	edit.setup_once(&search.box, &search.builder)
-
-	search.box.set_clipboard = proc(user_data: rawptr, text: string) -> (ok: bool) {
-		return fx.set_clipboard(text)
-	}
-	search.box.get_clipboard = proc(user_data: rawptr) -> (text: string, ok: bool) {
-		contents := fx.get_clipboard(context.temp_allocator) or_return
-		contents, _ = strings.remove_all(contents, "\n", context.temp_allocator)
-		contents, _ = strings.remove_all(contents, "\r", context.temp_allocator)
-		return contents, true
-	}
+	search_init()
 
 	font = fx.load_font(#load("assets/Inter.json"), #load("assets/Inter.png"))
 	icons[.Shuffle]  = fx.load_texture(#load("assets/shuffle.png"))
@@ -56,12 +42,13 @@ main :: proc() {
 	icons[.Search]   = fx.load_texture(#load("assets/search.png"))
 	icons[.Cross]    = fx.load_texture(#load("assets/cross.png"))
 
-	audio.set_volume(volume)
 	load_music()
+
 	fx.set_frame_callback(frame)
 	for fx.update() {
 		frame()
 	}
+
 	save_music_state()
 }
 
@@ -113,8 +100,9 @@ frame :: proc() {
 handle_input :: proc() {
 	if search.focused do return
 
-	if fx.key_is_pressed(.Esc) && search.active do close_search()
-
+	if fx.key_is_pressed(.Esc) && search.active {
+		search_close()
+	}
 
 	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
 		search.focused = true
@@ -122,17 +110,17 @@ handle_input :: proc() {
 	}
 
 	if fx.key_is_pressed_repeat(.Up) {
-		volume = clamp(volume + 0.05, 0, 1)
-		audio.set_volume(volume)
+		audio.volume = clamp(audio.volume + 0.05, 0, 1)
 	}
 	if fx.key_is_pressed_repeat(.Down) {
-		volume = clamp(volume - 0.05, 0, 1)
-		audio.set_volume(volume)
+		audio.volume = clamp(audio.volume - 0.05, 0, 1)
 	}
 
 	if player.music == nil do return
 
-	if fx.key_is_pressed(.Space) do player_toggle_pause()
+	if fx.key_is_pressed(.Space) {
+		player_toggle_pause()
+	}
 
 	if fx.key_is_down(.Ctrl) {
 		lyric_index := current_lyric()
@@ -193,12 +181,12 @@ ui_context_menu :: proc() {
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 3, layout_next(), "Show Artist", false) {
-				open_search_filtered_by(artist = song.artist)
+				search_open(artist = song.artist)
 				context_menu.selection = nil
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 4, layout_next(), "Show Album", false) {
-				open_search_filtered_by(album = song.album)
+				search_open(album = song.album)
 				context_menu.selection = nil
 			}
 		}
@@ -239,7 +227,7 @@ ui_playlists_panel :: proc() {
 			}
 		}
 
-		ui_ui_gradients(rect, playlist_scroll.current, playlist_scroll.content_size, 30, BACKGROUND_COLOR, 6)
+		ui_gradients(rect, playlist_scroll.current, playlist_scroll.content_size, 30, BACKGROUND_COLOR, 6)
 	}
 }
 
@@ -310,7 +298,7 @@ ui_songs_panel :: proc(songs: []^Music) {
 			}
 		}
 
-		ui_ui_gradients(rect, songs_scroll.current, songs_scroll.content_size, 40, PRIMARY_DARK, 6)
+		ui_gradients(rect, songs_scroll.current, songs_scroll.content_size, 40, PRIMARY_DARK, 6)
 	}
 }
 
@@ -331,11 +319,11 @@ ui_detail_panel :: proc() {
 
 				if layout({artist_size, dot_size, album_size}, .Row, gap = 8) {
 					if ui_label(song.artist, 16) {
-						open_search_filtered_by(artist = song.artist)
+						search_open(artist = song.artist)
 					}
 					fx.circle(fx.rect_center(layout_next()), dot_size, TEXT_SECONDARY)
 					if ui_label(song.album, 16) {
-						open_search_filtered_by(album = song.album)
+						search_open(album = song.album)
 					}
 				}
 
@@ -409,15 +397,13 @@ ui_progress :: proc() {
 		fx.sprite(icons[.Volume], vol_icon_rect)
 
 		vol_rect := layout_next()
-		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &volume)
+		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &audio.volume)
 
 		if mouse_hover(vol_rect) && scroll.y != 0 {
-			volume = clamp(volume + scroll.y * 0.05, 0, 1)
-			audio.set_volume(volume)
+			audio.volume = clamp(audio.volume + scroll.y * 0.05, 0, 1)
 		}
 
 		if vol_changed || drag_id == int(UI_ID.Volume) {
-			audio.set_volume(volume)
 			hover_vol := clamp((mouse.x - vol_rect.x) / vol_rect.w, 0, 1)
 			tooltip_x := clamp(mouse.x, vol_rect.x, vol_rect.x + vol_rect.w)
 			ui_tooltip(fmt.tprintf("%d%%", int(hover_vol * 100)), {tooltip_x, vol_rect.y + vol_rect.h * 0.5})
@@ -465,11 +451,11 @@ ui_lyrics :: proc() {
 			}
 		}
 
-		ui_ui_gradients(rect, lyrics_scroll.current, lyrics_scroll.content_size, 60, BACKGROUND_COLOR)
+		ui_gradients(rect, lyrics_scroll.current, lyrics_scroll.content_size, 60, BACKGROUND_COLOR)
 	}
 }
 
-ui_ui_gradients :: proc(rect: fx.Rect, current_scroll, content_h, grad_h_in: f32, bg_color: fx.Color, radius := f32(0)) {
+ui_gradients :: proc(rect: fx.Rect, current_scroll, content_h, grad_h_in: f32, bg_color: fx.Color, radius := f32(0)) {
 	if rect.h <= 0 do return
 	grad_h := min(grad_h_in, rect.h * 0.5)
 	max_scroll := max(content_h - rect.h, 0)

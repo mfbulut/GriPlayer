@@ -14,8 +14,9 @@ state: struct {
     render_client: ^wasapi.IAudioRenderClient,
     buffer_size: windows.UINT32,
     of: ^opusfile.OggOpusFile,
-    volume: f32,
 }
+
+volume := f32(0.5)
 
 initialize :: proc() {
     windows.CoInitializeEx(nil, cast(windows.COINIT)4)
@@ -49,7 +50,6 @@ initialize :: proc() {
     state.client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
     state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
     state.client->GetBufferSize(&state.buffer_size)
-    state.volume = 1.0
 }
 
 open :: proc(path: string, gapless := false) -> bool {
@@ -93,8 +93,8 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     samples_slice := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
 
     for &sample in samples_slice {
-        sample[0] *= state.volume
-        sample[1] *= state.volume
+        sample[0] *= volume
+        sample[1] *= volume
     }
 
     if callback != nil {
@@ -129,8 +129,4 @@ pause :: proc() {
 
 resume :: proc() {
     state.client->Start()
-}
-
-set_volume :: proc(volume: f32) {
-    state.volume = clamp(volume * volume, 0.0, 1.0)
 }

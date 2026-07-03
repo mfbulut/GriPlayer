@@ -29,7 +29,22 @@ search : struct {
 	scroll: 		f32,
 }
 
-open_search_filtered_by :: proc(artist := "", album := "") {
+search_init :: proc() {
+	edit.init(&search.box, context.allocator, context.allocator)
+	edit.setup_once(&search.box, &search.builder)
+
+	search.box.set_clipboard = proc(user_data: rawptr, text: string) -> (ok: bool) {
+		return fx.set_clipboard(text)
+	}
+	search.box.get_clipboard = proc(user_data: rawptr) -> (text: string, ok: bool) {
+		contents := fx.get_clipboard(context.temp_allocator) or_return
+		contents, _ = strings.remove_all(contents, "\n", context.temp_allocator)
+		contents, _ = strings.remove_all(contents, "\r", context.temp_allocator)
+		return contents, true
+	}
+}
+
+search_open :: proc(artist := "", album := "") {
 	search.focused = true
 	search.active = true
 	strings.builder_reset(&search.builder)
@@ -38,7 +53,7 @@ open_search_filtered_by :: proc(artist := "", album := "") {
 	search.initialized = false
 }
 
-close_search :: proc() {
+search_close :: proc() {
 	strings.builder_reset(&search.builder)
 	search.initialized = false
 	search.filter_artist = ""
@@ -256,18 +271,13 @@ ui_search_bar :: proc() {
 	hovered := mouse_hover(bounds)
 
 	was_focused := search.focused
+	was_active := search.active
 	if fx.mouse_is_pressed(.Left) {
 		if hovered {
 			search.active = true
 			search.focused = true
 		} else {
-			if !mouse_hover(rect) {
-				search.focused = false
-			}
-			clicked_outside_box := mouse_hover(rect) && !mouse_hover(bounds)
-			if clicked_outside_box && strings.builder_len(search.builder) == 0 && !(context_menu.selection != nil || drag_id != 0) {
-				close_search()
-			}
+			search.focused = false
 		}
 	}
 
@@ -283,21 +293,6 @@ ui_search_bar :: proc() {
 		fx.rect({bounds.x + offset_x, bounds.y + 8, filter_w, 20}, ACCENT_BRIGHT, 4)
 		fx.text(font, filter_text, {bounds.x + offset_x, bounds.y + 8, filter_w, 20}, 12, TEXT_PRIMARY, true, true)
 		offset_x += filter_w + 8
-	}
-
-	if len(query_text) > 0 || search.active {
-		discard_w := f32(12)
-		discard_pos := fx.Vec2{bounds.x + bounds.w - 26, bounds.y + (bounds.h - discard_w) * 0.5}
-		hover_discard := mouse_hover({discard_pos.x - 4, discard_pos.y - 4, discard_w + 8, discard_w + 8})
-
-		if hover_discard {
-			fx.set_cursor(.Hand)
-			if fx.mouse_is_pressed(.Left) {
-				close_search()
-			}
-		}
-
-		fx.sprite(icons[.Cross], {discard_pos.x, discard_pos.y, discard_w, discard_w}, hover_discard ? TEXT_PRIMARY : TEXT_SECONDARY)
 	}
 
 	bounds.x += offset_x
@@ -318,6 +313,21 @@ ui_search_bar :: proc() {
 	}
 
 	fx.reset_scissor()
+	
+	if len(query_text) > 0 || search.active {
+		discard_w := f32(12)
+		discard_pos := fx.Vec2{bounds.x + bounds.w - 26, bounds.y + (bounds.h - discard_w) * 0.5}
+		hover_discard := mouse_hover({discard_pos.x - 4, discard_pos.y - 4, discard_w + 8, discard_w + 8})
+
+		if hover_discard {
+			fx.set_cursor(.Hand)
+			if fx.mouse_is_pressed(.Left) && (was_active == search.active) {
+				search_close()
+			}
+		}
+
+		fx.sprite(icons[.Cross], {discard_pos.x, discard_pos.y, discard_w, discard_w}, hover_discard ? TEXT_PRIMARY : TEXT_SECONDARY)
+	}
 }
 
 ui_search_selection :: proc(query_text: string, bounds: fx.Rect) {

@@ -196,7 +196,7 @@ save_music_state :: proc() {
     os.write(save_file, slice.reinterpret([]byte, liked_hashes[:]))
     os.write(save_file, slice.reinterpret([]byte, songs_to_save[:]))
 
-    vol_slice := []f32{volume}
+    vol_slice := []f32{audio.volume}
     os.write(save_file, slice.reinterpret([]byte, vol_slice))
 }
 
@@ -249,6 +249,6 @@ load_music_state :: proc() {
 
     if len(data) >= expected_size + size_of(f32) {
         vol_slice := slice.reinterpret([]f32, data[expected_size : expected_size + size_of(f32)])
-        audio.set_volume(vol_slice[0])
+        audio.volume = vol_slice[0]
     }
 }
