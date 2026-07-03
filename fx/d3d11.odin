@@ -553,10 +553,7 @@ float4 ps_main(vs_out input) : SV_TARGET {
         {
             float sd = msdf_median(tex_color.r, tex_color.g, tex_color.b) - 0.5;
 
-            uint tex_w, tex_h;
-            tex.GetDimensions(tex_w, tex_h);
-
-            float2 msdf_tex_size = float2((float)tex_w, (float)tex_h);
+            float2 msdf_tex_size = float2(548.0, 548.0);
             float2 unit_range = float2(MSDF_PXRANGE, MSDF_PXRANGE) / msdf_tex_size;
 
             float2 screen_tex_size = float2(1.0, 1.0) / fwidth(input.tex_uv);
