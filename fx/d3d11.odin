@@ -311,6 +311,7 @@ d3d11_uniforms_init :: proc($T: typeid) {
 		panic("[ERROR] Failed to create uniform buffer")
 	}
 }
+
 Instance :: struct {
 	// LT, LR, BL, BR
 	dest: Rect,
@@ -344,9 +345,6 @@ Batch :: struct {
 	runs:      [dynamic; RUNS_MAX]Batch_Run,
 	binding:   Binding,
 }
-
-
-
 
 begin_frame :: proc() {
 	logical_size := window_size()
@@ -409,6 +407,11 @@ flush_batch :: proc() -> bool {
 	clear(&d3d11_state.batch.runs)
 
 	return true
+}
+
+present :: proc(sync := u32(1)) {
+	flush_batch()
+	d3d11_state.swapchain.swapchain1->Present(sync, nil)
 }
 
 upload_uniforms :: proc(size: Vec2) {
