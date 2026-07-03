@@ -119,8 +119,8 @@ ui_visualizer :: proc() {
 		bar_h := max(bounds.h * level, 2)
 		x := bounds.x + f32(i) * (bar_w + SPECTRUM_BAR_GAP)
 		y := bounds.y + bounds.h - bar_h
-		fx.rect({x, y, bar_w, bar_h}, [4]fx.Color{ACCENT_BRIGHT, ACCENT_BRIGHT, ACCENT_DARK, ACCENT_DARK})
+		fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{ACCENT_BRIGHT, ACCENT_BRIGHT, ACCENT_DARK, ACCENT_DARK})
 		peak_y := bounds.y + bounds.h - bounds.h * spectrum_peak[i]
-		fx.rect({x, peak_y - 2, bar_w, 2}, TEXT_SECONDARY, 1)
+		fx.draw_rect({x, peak_y - 2, bar_w, 2}, TEXT_SECONDARY, 1)
 	}
 }

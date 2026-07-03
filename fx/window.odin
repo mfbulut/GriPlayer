@@ -156,7 +156,6 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	win.UpdateWindow(hwnd)
 
 	d3d11_initialize()
-	renderer_initialize()
 }
 
 mouse_scroll :: proc() -> Vec2 {return window.mouse_scroll}

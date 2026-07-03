@@ -165,8 +165,8 @@ ui_context_menu :: proc() {
 		}
 	}
 
-	fx.rect(fx.rect_expand(rect, 4, 4), PRIMARY_BRIGHT, 8)
-	fx.rect(fx.rect_expand(rect, 2, 2), PRIMARY_DARK, 6)
+	fx.draw_rect(fx.rect_expand(rect, 4, 4), PRIMARY_BRIGHT, 8)
+	fx.draw_rect(fx.rect_expand(rect, 2, 2), PRIMARY_DARK, 6)
 
 	if layout_start(rect) {
 		if layout({GROW, GROW, GROW, GROW}, .Col) {
@@ -213,16 +213,16 @@ ui_playlists_panel :: proc() {
 			}
 
 			count_str := fmt.tprintf("%d", len(playlist.songs))
-			badge_w := max(fx.text_size(font, count_str, 11).x + 14, 22)
+			badge_w := max(fx.measure_text(font, count_str, 11).x + 14, 22)
 
 			if layout_start(item_rect) {
 				if layout({GROW, badge_w}, .Row, padding = 16) {
 					text_rect := layout_next()
 					badge_area := fx.rect_expand(layout_next(), 0, 4)
 
-					fx.text_faded(font, playlist.name, text_rect, 14, is_selected ? TEXT_PRIMARY : TEXT_SECONDARY, true)
-					fx.rect(badge_area, is_selected ? ACCENT_BRIGHT : PRIMARY_COLOR, 6)
-					fx.text(font, count_str, badge_area, 11, is_selected ? TEXT_PRIMARY : TEXT_SECONDARY, true, true)
+					fx.draw_text_faded(font, playlist.name, text_rect, 14, is_selected ? TEXT_PRIMARY : TEXT_SECONDARY, true)
+					fx.draw_rect(badge_area, is_selected ? ACCENT_BRIGHT : PRIMARY_COLOR, 6)
+					fx.draw_text(font, count_str, badge_area, 11, is_selected ? TEXT_PRIMARY : TEXT_SECONDARY, true, true)
 				}
 			}
 		}
@@ -235,7 +235,7 @@ ui_songs_panel :: proc(songs: []^Music) {
 	rect := layout_next()
 
 	if layout_start(rect, &songs_scroll, padding = 8, gap = 8) {
-		fx.rect(rect, PRIMARY_DARK, 12)
+		fx.draw_rect(rect, PRIMARY_DARK, 12)
 
 		for song, i in songs {
 			item_rect := layout_next(46)
@@ -284,15 +284,15 @@ ui_songs_panel :: proc(songs: []^Music) {
 						layout_next()
 						title_rect := layout_next()
 						artist_rect := layout_next()
-						fx.text_faded(font, song.title, title_rect, 16, c1, true)
-						fx.text_faded(font, song.artist, artist_rect, 13, c2, true)
+						fx.draw_text_faded(font, song.title, title_rect, 16, c1, true)
+						fx.draw_text_faded(font, song.artist, artist_rect, 13, c2, true)
 					}
 
 					if layout({GROW, 38, GROW}, .Col) {
 						layout_next()
 						time_rect := layout_next()
 						time_str := format_time(song.duration)
-						fx.text(font, time_str, time_rect, 13, c2, false, true)
+						fx.draw_text(font, time_str, time_rect, 13, c2, false, true)
 					}
 				}
 			}
@@ -311,17 +311,17 @@ ui_detail_panel :: proc() {
 			ui_cover(player.cover, 6)
 
 			if layout({30, 26, 20, 20}, .Col, padding = 12, gap = 4) {
-				fx.text(font, song.title, layout_next(), 26, TEXT_PRIMARY, false, true)
+				fx.draw_text(font, song.title, layout_next(), 26, TEXT_PRIMARY, false, true)
 
-				artist_size := fx.text_size(font, song.artist, 16).x
+				artist_size := fx.measure_text(font, song.artist, 16).x
 				dot_size := song.artist != "" && song.album != "" ? f32(2) : 0
-				album_size := fx.text_size(font, song.album, 16).x
+				album_size := fx.measure_text(font, song.album, 16).x
 
 				if layout({artist_size, dot_size, album_size}, .Row, gap = 8) {
 					if ui_label(song.artist, 16) {
 						search_open(artist = song.artist)
 					}
-					fx.circle(fx.rect_center(layout_next()), dot_size, TEXT_SECONDARY)
+					fx.draw_circle(fx.rect_center(layout_next()), dot_size, TEXT_SECONDARY)
 					if ui_label(song.album, 16) {
 						search_open(album = song.album)
 					}
@@ -329,12 +329,12 @@ ui_detail_panel :: proc() {
 
 				if play_count := int(song.playtime / song.duration); play_count > 0 {
 					play_count_str := fmt.tprintf("%d plays", play_count)
-					fx.text(font, play_count_str, layout_next(), 14, TEXT_SECONDARY)
+					fx.draw_text(font, play_count_str, layout_next(), 14, TEXT_SECONDARY)
 				}
 
 				if len(player.queue) > 0 {
 					queue_str := fmt.tprintf("Next: %s", player.queue[0].title)
-					fx.text(font, queue_str, layout_next(), 14, ACCENT_BRIGHT)
+					fx.draw_text(font, queue_str, layout_next(), 14, ACCENT_BRIGHT)
 				}
 			}
 		}
@@ -362,11 +362,11 @@ ui_progress :: proc() {
 
 	cur_time := format_time(audio.position())
 	tot_time := format_time(audio.duration())
-	cur_w := fx.text_size(font, cur_time, 13).x
-	tot_w := fx.text_size(font, tot_time, 13).x
+	cur_w := fx.measure_text(font, cur_time, 13).x
+	tot_w := fx.measure_text(font, tot_time, 13).x
 
 	if layout({cur_w, GROW, tot_w, 24, 80}, .Row, gap = 8) {
-		fx.text(font, cur_time, layout_next(), 13, TEXT_SECONDARY, false, true)
+		fx.draw_text(font, cur_time, layout_next(), 13, TEXT_SECONDARY, false, true)
 
 		progress: f32
 		if scrub_time >= 0 {
@@ -391,10 +391,10 @@ ui_progress :: proc() {
 			scrub_time = -1
 		}
 
-		fx.text(font, tot_time, layout_next(), 13, TEXT_SECONDARY, false, true)
+		fx.draw_text(font, tot_time, layout_next(), 13, TEXT_SECONDARY, false, true)
 
 		vol_icon_rect := fx.rect_shrink(layout_next(), 3, 3)
-		fx.sprite(icons[.Volume], vol_icon_rect)
+		fx.draw_texture(icons[.Volume], vol_icon_rect)
 
 		vol_rect := layout_next()
 		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &audio.volume)
@@ -445,9 +445,9 @@ ui_lyrics :: proc() {
 			color := fx.color_lerp(fx.color_lerp(TEXT_SECONDARY, TEXT_PRIMARY, anim_hover), fx.WHITE, anim_act)
 
 			if strings.trim_space(lyric.text) == "" {
-				fx.sprite(icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 18) * 0.5, 18, 18}, color)
+				fx.draw_texture(icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 18) * 0.5, 18, 18}, color)
 			} else {
-				fx.text_faded(font, lyric.text, item_rect, math.lerp(f32(18), f32(22), anim_act), color, true)
+				fx.draw_text_faded(font, lyric.text, item_rect, math.lerp(f32(18), f32(22), anim_act), color, true)
 			}
 		}
 
@@ -465,11 +465,11 @@ ui_gradients :: proc(rect: fx.Rect, current_scroll, content_h, grad_h_in: f32, b
 
 	if top_t > 0 {
 		top_opaque := fx.color_opacity(bg_color, top_t)
-		fx.rect({rect.x, rect.y, rect.w, grad_h}, [4]fx.Color{top_opaque, top_opaque, trans, trans}, radius)
+		fx.draw_rect({rect.x, rect.y, rect.w, grad_h}, [4]fx.Color{top_opaque, top_opaque, trans, trans}, radius)
 	}
 	if bot_t > 0 {
 		bot_opaque := fx.color_opacity(bg_color, bot_t)
-		fx.rect({rect.x, rect.y + rect.h - grad_h, rect.w, grad_h}, [4]fx.Color{trans, trans, bot_opaque, bot_opaque}, radius)
+		fx.draw_rect({rect.x, rect.y + rect.h - grad_h, rect.w, grad_h}, [4]fx.Color{trans, trans, bot_opaque, bot_opaque}, radius)
 	}
 }
 
@@ -485,11 +485,11 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false) -> bool {
 	}
 
 	if active || anim_t > 0 {
-		fx.rect(rect, color, 6)
+		fx.draw_rect(rect, color, 6)
 	}
 
 	text_color := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-	fx.text(font, text, rect, 14, text_color, true, true)
+	fx.draw_text(font, text, rect, 14, text_color, true, true)
 
 	if hovered && fx.mouse_is_pressed(.Left) {
 		return true
@@ -512,8 +512,8 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 		base_color, hover_color = ACCENT_BRIGHT, ACCENT_BRIGHT
 	}
 
-	fx.circle(pos, radius, fx.color_lerp(base_color, hover_color, anim))
-	fx.sprite(icons[icon], {pos.x - icon_size * 0.5, pos.y - icon_size * 0.5, icon_size, icon_size}, TEXT_PRIMARY)
+	fx.draw_circle(pos, radius, fx.color_lerp(base_color, hover_color, anim))
+	fx.draw_texture(icons[icon], {pos.x - icon_size * 0.5, pos.y - icon_size * 0.5, icon_size, icon_size}, TEXT_PRIMARY)
 
 	if hovered {
 		fx.set_cursor(.Hand)
@@ -525,11 +525,11 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 
 ui_label :: proc(text_str: string, font_size: f32) -> bool {
 	rect := layout_next()
-	full_w := fx.text_size(font, text_str, font_size).x
+	full_w := fx.measure_text(font, text_str, font_size).x
 	hovered := mouse_hover({rect.x, rect.y, full_w, rect.h})
 
 	color := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-	fx.text(font, text_str, rect, font_size, color, false, true)
+	fx.draw_text(font, text_str, rect, font_size, color, false, true)
 
 	if hovered {
 		fx.set_cursor(.Hand)
@@ -543,9 +543,9 @@ ui_cover :: proc(tex: fx.Texture, radius: f32 = 6) {
 	rect := layout_next()
 
 	if tex.srv == nil {
-		fx.rect(rect, PRIMARY_BRIGHT, radius)
+		fx.draw_rect(rect, PRIMARY_BRIGHT, radius)
 		shrink := min(rect.w, rect.h) * 0.25
-		fx.sprite(icons[.Note], fx.rect_shrink(rect, shrink, shrink), TEXT_SECONDARY)
+		fx.draw_texture(icons[.Note], fx.rect_shrink(rect, shrink, shrink), TEXT_SECONDARY)
 		return
 	}
 
@@ -561,15 +561,15 @@ ui_cover :: proc(tex: fx.Texture, radius: f32 = 6) {
 	}
 
 	src_rect := fx.Rect{pos.x, pos.y, size.x, size.y}
-	fx.sprite_ex(tex, src_rect, dst_rect, fx.WHITE, radius)
+	fx.draw_texture_ex(tex, src_rect, dst_rect, fx.WHITE, radius)
 }
 
 ui_tooltip :: proc(label: string, pos: fx.Vec2) {
-	tip_w := fx.text_size(font, label, 12).x + 16
+	tip_w := fx.measure_text(font, label, 12).x + 16
 	rect := fx.Rect{pos.x - tip_w * 0.5,  pos.y - 30, tip_w, 22}
-	fx.rect(fx.rect_expand(rect, 2, 2), PRIMARY_BRIGHT, 4)
-	fx.rect(rect, PRIMARY_COLOR, 4)
-	fx.text(font, label, {rect.x, rect.y, tip_w, 22}, 12, fx.WHITE, true, true)
+	fx.draw_rect(fx.rect_expand(rect, 2, 2), PRIMARY_BRIGHT, 4)
+	fx.draw_rect(rect, PRIMARY_COLOR, 4)
+	fx.draw_text(font, label, {rect.x, rect.y, tip_w, 22}, 12, fx.WHITE, true, true)
 }
 
 ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32 = 12) -> (changed: bool) {
@@ -597,10 +597,10 @@ ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32
 		active = false
 	}
 
-	fx.rect({x, y, w, h}, PRIMARY_BRIGHT, 2)
+	fx.draw_rect({x, y, w, h}, PRIMARY_BRIGHT, 2)
 	fill_w := w * value^
-	fx.rect({x, y, fill_w, h}, ACCENT_BRIGHT, 2)
-	fx.circle({x + fill_w, y + h * 0.5}, 4 + 1 * anim, ACCENT_BRIGHT)
+	fx.draw_rect({x, y, fill_w, h}, ACCENT_BRIGHT, 2)
+	fx.draw_circle({x + fill_w, y + h * 0.5}, 4 + 1 * anim, ACCENT_BRIGHT)
 
 	if active || hovered {
 		fx.set_cursor(.Hand)

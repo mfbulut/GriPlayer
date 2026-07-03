@@ -66,29 +66,18 @@ point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
 	return 	point.x >= rect.x && point.x < rect.x + rect.w && point.y >= rect.y && point.y < rect.y + rect.h
 }
 
+rect_overlapping :: proc(a: Rect, b: Rect) -> bool {
+	return  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
 
 rect_center :: proc(r: Rect) -> Vec2 {
 	return { r.x + r.w/2, r.y + r.h/2 }
 }
 
 rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {
-		r.x + x,
-		r.y + y,
-		r.w - x * 2,
-		r.h - y * 2,
-	}
+	return { r.x + x, r.y + y, r.w - x * 2, r.h - y * 2 }
 }
 
 rect_expand :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {
-		r.x - x,
-		r.y - y,
-		r.w + x * 2,
-		r.h + y * 2,
-	}
-}
-
-rect_overlapping :: proc(a: Rect, b: Rect) -> bool {
-	return  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+	return { r.x - x, r.y - y, r.w + x * 2, r.h + y * 2 }
 }

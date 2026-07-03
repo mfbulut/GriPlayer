@@ -283,15 +283,15 @@ ui_search_bar :: proc() {
 	}
 
 	anim_t := animate(int(UI_ID.Search), search.focused || hovered)
-	fx.rect(bar, fx.color_lerp(PRIMARY_COLOR, HOVER_COLOR, anim_t), 18)
-	fx.sprite(icons[.Search], {bar.x + 14, bar.y + 10, 16, 16}, TEXT_SECONDARY)
+	fx.draw_rect(bar, fx.color_lerp(PRIMARY_COLOR, HOVER_COLOR, anim_t), 18)
+	fx.draw_texture(icons[.Search], {bar.x + 14, bar.y + 10, 16, 16}, TEXT_SECONDARY)
 
 	text_start := bar.x + f32(38)
 	if filter != "" {
-		badge_w := fx.text_size(font, filter, 12).x + 16
+		badge_w := fx.measure_text(font, filter, 12).x + 16
 		badge := fx.Rect{text_start, bar.y + 8, badge_w, 20}
-		fx.rect(badge, ACCENT_BRIGHT, 4)
-		fx.text(font, filter, badge, 12, TEXT_PRIMARY, true, true)
+		fx.draw_rect(badge, ACCENT_BRIGHT, 4)
+		fx.draw_text(font, filter, badge, 12, TEXT_PRIMARY, true, true)
 		text_start += badge_w + 8
 	}
 
@@ -306,9 +306,9 @@ ui_search_bar :: proc() {
 
 	scrolled := fx.Rect{text_area.x - search.scroll, text_area.y, text_area.w + search.scroll, text_area.h}
 	if len(query) == 0 && !search.focused && !was_focused {
-		fx.text(font, "Search...", scrolled, 14, TEXT_SECONDARY, false, true)
+		fx.draw_text(font, "Search...", scrolled, 14, TEXT_SECONDARY, false, true)
 	} else {
-		fx.text(font, query, scrolled, 14, TEXT_PRIMARY, false, true)
+		fx.draw_text(font, query, scrolled, 14, TEXT_PRIMARY, false, true)
 	}
 	fx.reset_scissor()
 
@@ -325,7 +325,7 @@ ui_search_bar :: proc() {
 			}
 		}
 
-		fx.sprite(icons[.Cross], {icon_pos.x, icon_pos.y, icon_size, icon_size}, close_hover ? TEXT_PRIMARY : TEXT_SECONDARY)
+		fx.draw_texture(icons[.Cross], {icon_pos.x, icon_pos.y, icon_size, icon_size}, close_hover ? TEXT_PRIMARY : TEXT_SECONDARY)
 	}
 }
 
@@ -333,9 +333,9 @@ draw_search_cursor :: proc(query: string, area: fx.Rect) {
 	lo, hi := edit.sorted_selection(&search.box)
 
 	if lo != hi {
-		before_w := fx.text_size(font, query[:lo], 14).x
-		sel_w := fx.text_size(font, query[lo:hi], 14).x
-		fx.rect({area.x + before_w - search.scroll - 2, area.y + 7, sel_w + 4, 20}, ACCENT_BRIGHT, 3)
+		before_w := fx.measure_text(font, query[:lo], 14).x
+		sel_w := fx.measure_text(font, query[lo:hi], 14).x
+		fx.draw_rect({area.x + before_w - search.scroll - 2, area.y + 7, sel_w + 4, 20}, ACCENT_BRIGHT, 3)
 		return
 	}
 
@@ -344,12 +344,12 @@ draw_search_cursor :: proc(query: string, area: fx.Rect) {
 	cursor_idx := clamp(search.box.selection[0], 0, len(query))
 	cursor_x := area.x - search.scroll
 	if cursor_idx > 0 {
-		cursor_x += fx.text_size(font, query[:cursor_idx], 14).x
+		cursor_x += fx.measure_text(font, query[:cursor_idx], 14).x
 	}
 
 	search.blink_timer += fx.frame_time()
 	if search.blink_timer < 0.5 {
-		fx.rect({cursor_x, area.y + 10, 2, 15}, fx.WHITE, 2)
+		fx.draw_rect({cursor_x, area.y + 10, 2, 15}, fx.WHITE, 2)
 	} else if search.blink_timer > 1.0 {
 		search.blink_timer = 0
 	}
@@ -362,7 +362,7 @@ update_search_scroll :: proc(query: string, visible_w: f32) {
 	}
 
 	cursor_idx := clamp(search.box.selection[0], 0, len(query))
-	cursor_x := cursor_idx > 0 ? fx.text_size(font, query[:cursor_idx], 14).x : 0
+	cursor_x := cursor_idx > 0 ? fx.measure_text(font, query[:cursor_idx], 14).x : 0
 
 	if cursor_x - search.scroll > visible_w - 10 {
 		search.scroll = cursor_x - visible_w + 10
@@ -392,7 +392,7 @@ handle_search_drag :: proc(query: string, area: fx.Rect) {
 	closest_dist := abs(mouse_x)
 	for r, i in query {
 		byte_end := i + utf8.rune_size(r)
-		char_x := fx.text_size(font, query[:byte_end], 14).x
+		char_x := fx.measure_text(font, query[:byte_end], 14).x
 		if dist := abs(char_x - mouse_x); dist < closest_dist {
 			closest_dist = dist
 			closest_idx = byte_end
