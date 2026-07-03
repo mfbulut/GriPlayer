@@ -119,60 +119,43 @@ load_lrc :: proc(music: ^Music) {
         return
     }
 
-    music.lyrics_filter, _ = bit_array.create(32768)
+    music.lyrics_filter  = bit_array.create(32768)
 
     it := string(data)
     for line in strings.split_lines_iterator(&it) {
-        l := strings.trim_space(line)
-        if len(l) == 0 do continue
+        line := strings.trim_space(line)
+        if len(line) == 0 do continue
 
-        last_bracket := strings.last_index(l, "]")
-        if last_bracket == -1 do continue
+        open_bracket := strings.index(line, "[")
+        close_bracket := strings.index(line, "]")
 
-        text := strings.trim_space(l[last_bracket+1:])
+        if open_bracket == -1 || close_bracket == -1 do break
 
-        rem := l[:last_bracket+1]
-        for {
-            start_idx := strings.index(rem, "[")
-            if start_idx == -1 do break
+        tag := line[open_bracket+1 : close_bracket]
+        text := line[close_bracket+1:]
 
-            end_idx := strings.index(rem[start_idx:], "]")
-            if end_idx == -1 do break
-            end_idx += start_idx
+        colon_idx := strings.index(tag, ":")
 
-            tag := rem[start_idx+1 : end_idx]
-            rem = rem[end_idx+1:]
+        if colon_idx != -1 {
+            mins := strconv.parse_f32(tag[:colon_idx]) or_continue
+            secs := strconv.parse_f32(tag[colon_idx+1:]) or_continue
+            append(&music.lyrics, LyricLine{text = text, time = mins * 60 + secs})
 
-            colon_idx := strings.index(tag, ":")
-            if colon_idx != -1 {
-                min_str := tag[:colon_idx]
-                sec_str := tag[colon_idx+1:]
-
-                mins, min_ok := strconv.parse_f32(min_str)
-                secs, sec_ok := strconv.parse_f32(sec_str)
-
-                if min_ok && sec_ok {
-                    time := mins * 60.0 + secs
-                    append(&music.lyrics, LyricLine{text = text, time = time})
-
-                    lower_text := strings.to_lower(text, context.temp_allocator)
-                    runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
-                    for r in lower_text {
-                        if unicode.is_letter(r) || unicode.is_digit(r) {
-                            append(&norm_runes, r)
-                        }
-                    }
-
-                    if len(runes) >= 5 {
-                        for i := 0; i <= len(runes) - 5; i += 1 {
-                            bytes := slice.reinterpret([]byte, runes[i : i+5])
-                            hash := xxhash.XXH32(bytes)
-                            bit_array.set(music.lyrics_filter, uint(hash & 32767))
-                        }
-                    }
+            lower_text := strings.to_lower(text, context.temp_allocator)
+            runes := make([dynamic]rune, 0, len(lower_text), context.temp_allocator)
+            for r in lower_text {
+                if unicode.is_letter(r) || unicode.is_digit(r) {
+                    append(&runes, r)
                 }
             }
+
+            for i in 0..=len(runes)-5 {
+                bytes := slice.reinterpret([]byte, runes[i : i+5])
+                hash := xxhash.XXH32(bytes)
+                bit_array.set(music.lyrics_filter, uint(hash & 32767))
+            }
         }
+
     }
 }
 

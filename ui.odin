@@ -80,7 +80,7 @@ layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 
 		mouse_scroll := fx.mouse_scroll()
 		max_scroll := max(scroll.content_size + padding * 2 - bounds.h, 0)
 
-		if !is_blocker_active() && fx.mouse_in_rect(bounds) && mouse_scroll.y != 0 {
+		if mouse_hover(bounds) && mouse_scroll.y != 0 {
 			scroll.target = max(scroll.target - mouse_scroll.y * 60, 0)
 		}
 
@@ -204,7 +204,9 @@ animate :: proc(id: int, active: bool, speed: f32 = 12.0) -> f32 {
 	return t
 }
 
-is_blocker_active :: proc() -> bool {
-	return context_menu.selection != nil || drag_id != 0
+mouse_hover :: proc(rect: fx.Rect, is_overlay: bool = false) -> bool {
+	if !is_overlay && (context_menu.selection != nil || drag_id != 0) {
+		return false
+	}
+	return fx.point_in_rect(fx.mouse_pos(), rect)
 }
-

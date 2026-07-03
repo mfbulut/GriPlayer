@@ -114,7 +114,7 @@ visualizer_update :: proc() {
 	}
 }
 
-draw_visualizer :: proc() {
+ui_visualizer :: proc() {
 	bounds := layout_next()
 
 	bar_w := max((bounds.w - SPECTRUM_BAR_GAP * f32(SPECTRUM_BANDS - 1)) / f32(SPECTRUM_BANDS), 1)

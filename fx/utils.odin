@@ -66,9 +66,6 @@ point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
 	return 	point.x >= rect.x && point.x < rect.x + rect.w && point.y >= rect.y && point.y < rect.y + rect.h
 }
 
-mouse_in_rect :: proc(rect: Rect) -> bool {
-	return point_in_rect(mouse_pos(), rect)
-}
 
 rect_center :: proc(r: Rect) -> Vec2 {
 	return { r.x + r.w/2, r.y + r.h/2 }
