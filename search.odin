@@ -72,9 +72,9 @@ handle_search_input :: proc() {
 	edit.input_runes(&search.box, runes)
 
 	shift := fx.key_is_down(.Shift)
-	ctrl  := fx.key_is_down(.Ctrl)
+	ctrl := fx.key_is_down(.Ctrl)
 
-	if fx.key_is_pressed(.Backspace) {
+	if fx.key_is_pressed_repeat(.Backspace) {
 		if strings.builder_len(search.builder) == 0 && (search.filter_artist != "" || search.filter_album != "") {
 			search.filter_artist = ""
 			search.filter_album = ""

@@ -312,16 +312,22 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 
 	case win.WM_LBUTTONUP:
 		update_button(.Mouse_Left, false)
+		win.ReleaseCapture()
 	case win.WM_LBUTTONDOWN:
 		update_button(.Mouse_Left, true)
+		win.SetCapture(hwnd)
 	case win.WM_MBUTTONUP:
 		update_button(.Mouse_Middle, false)
+		win.ReleaseCapture()
 	case win.WM_MBUTTONDOWN:
 		update_button(.Mouse_Middle, true)
+		win.SetCapture(hwnd)
 	case win.WM_RBUTTONUP:
 		update_button(.Mouse_Right, false)
+		win.ReleaseCapture()
 	case win.WM_RBUTTONDOWN:
 		update_button(.Mouse_Right, true)
+		win.SetCapture(hwnd)
 
 	case win.WM_MOUSEWHEEL:
 		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
