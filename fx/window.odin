@@ -206,8 +206,10 @@ set_clipboard :: proc(text: string) -> (ok: bool) {
 }
 
 update :: proc(poll_msg := true) -> bool {
-	if !window_is_minimized() {
-		win.WaitForSingleObject(d3d11_state.swapchain.waitable_handle, win.INFINITE)
+	if poll_msg {
+		if !window_is_minimized() {
+			win.WaitForSingleObject(d3d11_state.swapchain.waitable_handle, win.INFINITE)
+		}
 	}
 
 	for &state in window.key_state {
