@@ -1,0 +1,230 @@
+package audio
+
+import "core:slice"
+import "core:strings"
+
+import "core:sys/windows"
+import "vendor:windows/wasapi"
+import "opusfile"
+import "vorbisfile"
+
+Decoder :: union {
+    ^opusfile.File,
+    ^vorbisfile.File,
+}
+
+state: struct {
+    device: ^wasapi.IMMDevice,
+    client: ^wasapi.IAudioClient,
+    render_client: ^wasapi.IAudioRenderClient,
+    buffer_size: windows.UINT32,
+    decoder: Decoder,
+    sample_rate: u32,
+    channels: u32,
+    total_pcm: i64,
+}
+
+volume := f32(0.5)
+muted := false
+
+initialize :: proc() {
+    windows.CoInitializeEx(nil, cast(windows.COINIT)4)
+    enumerator: ^wasapi.IMMDeviceEnumerator
+    windows.CoCreateInstance(wasapi.CLSID_MMDeviceEnumerator, nil, windows.CLSCTX_INPROC_SERVER, wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
+    enumerator->GetDefaultAudioEndpoint(.Render, .Console, &state.device)
+    init_wasapi(48000)
+}
+
+init_wasapi :: proc(sample_rate: u32) {
+    if state.client != nil {
+        state.client->Stop()
+        state.client->Release()
+    }
+    if state.render_client != nil {
+        state.render_client->Release()
+    }
+
+    state.device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&state.client)
+
+    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT := windows.GUID {0x00000003,0x0000,0x0010,{0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}
+
+    format := windows.WAVEFORMATEXTENSIBLE {
+        Format = {
+            wFormatTag = windows.WAVE_FORMAT_EXTENSIBLE,
+            nChannels = 2,
+            nSamplesPerSec = sample_rate,
+            nAvgBytesPerSec = 32 * 2 * sample_rate / 8,
+            nBlockAlign = 32 * 2 / 8,
+            wBitsPerSample = 32,
+            cbSize = size_of(windows.WAVEFORMATEXTENSIBLE) - size_of(windows.WAVEFORMATEX),
+        },
+        Samples = {wValidBitsPerSample = 32},
+        dwChannelMask = {.FRONT_LEFT, .FRONT_RIGHT},
+        SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+    }
+
+    stream_flags := cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_AUTOCONVERTPCM | cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY
+
+    state.client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
+    state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
+    state.client->GetBufferSize(&state.buffer_size)
+    state.sample_rate = sample_rate
+}
+
+open :: proc(path: string, gapless := false) -> bool {
+    switch d in state.decoder {
+    case ^opusfile.File:
+        opusfile.free(d)
+    case ^vorbisfile.File:
+        vorbisfile.clear(d)
+        free(d)
+    case:
+    }
+    state.decoder = nil
+
+    c_str := strings.clone_to_cstring(path, context.temp_allocator)
+    old_sample_rate := state.sample_rate
+
+    opened := false
+    if strings.has_suffix(path, ".ogg") {
+        vf := new(vorbisfile.File)
+        if vorbisfile.fopen(c_str, vf) == 0 {
+            state.decoder = vf
+            info := vorbisfile.info(vf, -1)
+            state.sample_rate = u32(info.rate)
+            state.channels = u32(info.channels)
+            state.total_pcm = vorbisfile.pcm_total(vf, -1)
+            opened = true
+        } else {
+            free(vf)
+        }
+    }
+
+    if !opened {
+        of := opusfile.open_file(c_str, nil)
+        if of != nil {
+            opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
+            state.decoder = of
+            state.sample_rate = 48000
+            state.channels = 2
+            state.total_pcm = opusfile.pcm_total(of, -1)
+            opened = true
+        } else {
+            return false
+        }
+    }
+
+    if state.sample_rate != old_sample_rate {
+        init_wasapi(state.sample_rate)
+    } else if gapless == false {
+        state.client->Reset()
+    }
+
+    return true
+}
+
+update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
+    if state.decoder == nil do return false
+
+    padding: windows.UINT32
+    state.client->GetCurrentPadding(&padding)
+
+    available_frames := state.buffer_size - padding
+    if available_frames == 0 do return false
+
+    buffer: [^]u8
+    state.render_client->GetBuffer(available_frames, &buffer)
+
+    frames_read: i32
+    switch d in state.decoder {
+    case ^opusfile.File:
+        frames_read = opusfile.read_float_stereo(d, cast([^]f32)buffer, cast(i32)(available_frames * 2))
+    case ^vorbisfile.File:
+        channels_ptr: ^^f32
+        bitstream: i32
+        frames_read = vorbisfile.read_float(d, &channels_ptr, cast(i32)available_frames, &bitstream)
+
+        if frames_read > 0 {
+            out := cast([^][2]f32)buffer
+            ch := cast([^][^]f32)channels_ptr
+
+            if state.channels >= 2 {
+                left := ch[0]
+                right := ch[1]
+                for i in 0..<frames_read {
+                    out[i][0] = left[i]
+                    out[i][1] = right[i]
+                }
+            } else if state.channels == 1 {
+                mono := ch[0]
+                for i in 0..<frames_read {
+                    out[i][0] = mono[i]
+                    out[i][1] = mono[i]
+                }
+            }
+        }
+    case:
+    }
+
+    if frames_read <= 0 {
+        state.render_client->ReleaseBuffer(0, 0)
+        return true
+    }
+
+    samples := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
+
+    current_vol := muted ? f32(0) : volume * 2
+    for &sample in samples {
+        sample[0] *= current_vol
+        sample[1] *= current_vol
+    }
+
+    if callback != nil {
+        callback(samples)
+    }
+
+    state.render_client->ReleaseBuffer(u32(frames_read), 0)
+
+    return false
+}
+
+seek :: proc(position: f32) {
+    if state.decoder == nil do return
+    target_pcm := i64(position * f32(state.sample_rate))
+    target_pcm = clamp(target_pcm, 0, state.total_pcm - 1)
+
+    switch d in state.decoder {
+    case ^opusfile.File:
+        opusfile.pcm_seek(d, target_pcm)
+    case ^vorbisfile.File:
+        vorbisfile.pcm_seek(d, target_pcm)
+    case:
+    }
+    state.client->Reset()
+}
+
+position :: proc() -> f32 {
+    current_pcm: i64
+    switch d in state.decoder {
+    case ^opusfile.File:
+        current_pcm = opusfile.pcm_tell(d)
+    case ^vorbisfile.File:
+        current_pcm = vorbisfile.pcm_tell(d)
+    case:
+        return 0
+    }
+    return f32(current_pcm) / f32(state.sample_rate)
+}
+
+duration :: proc() -> f32 {
+    if state.decoder == nil do return 0
+    return f32(state.total_pcm) / f32(state.sample_rate)
+}
+
+pause :: proc() {
+    state.client->Stop()
+}
+
+resume :: proc() {
+    state.client->Start()
+}
