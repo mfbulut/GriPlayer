@@ -26,7 +26,11 @@ Icon :: enum{
 	Mute,
 	Note,
 	Search,
-	Cross
+	Cross,
+	Add_Last,
+	Add_Next,
+	Album,
+	Artist
 }
 
 UI_ID :: enum {

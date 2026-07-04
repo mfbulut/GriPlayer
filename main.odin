@@ -42,6 +42,10 @@ main :: proc() {
 	icons[.Note] = fx.load_texture(#load("assets/note.png"))
 	icons[.Search] = fx.load_texture(#load("assets/search.png"))
 	icons[.Cross] = fx.load_texture(#load("assets/cross.png"))
+	icons[.Add_Last] = fx.load_texture(#load("assets/add_last.png"))
+	icons[.Add_Next] = fx.load_texture(#load("assets/add_next.png"))
+	icons[.Album] = fx.load_texture(#load("assets/album.png"))
+	icons[.Artist] = fx.load_texture(#load("assets/artist.png"))
 
 	load_music()
 
@@ -171,22 +175,22 @@ ui_context_menu :: proc() {
 
 	if layout_start(rect) {
 		if layout({GROW, GROW, GROW, GROW}, .Col) {
-			if ui_button(int(UI_ID.Context_Menu) + 1, layout_next(), "Add to Queue", false) {
+			if ui_button(int(UI_ID.Context_Menu) + 1, layout_next(), "Add to Queue", false, .Add_Last) {
 				append(&player.queue, song)
 				context_menu.selection = nil
 			}
 
-			if ui_button(int(UI_ID.Context_Menu) + 2, layout_next(), "Play Next", false) {
+			if ui_button(int(UI_ID.Context_Menu) + 2, layout_next(), "Play Next", false, .Add_Next) {
 				inject_at(&player.queue, 0, song)
 				context_menu.selection = nil
 			}
 
-			if ui_button(int(UI_ID.Context_Menu) + 3, layout_next(), "Show Artist", false) {
+			if ui_button(int(UI_ID.Context_Menu) + 3, layout_next(), "Show Artist", false, .Artist) {
 				search_open(artist = song.artist)
 				context_menu.selection = nil
 			}
 
-			if ui_button(int(UI_ID.Context_Menu) + 4, layout_next(), "Show Album", false) {
+			if ui_button(int(UI_ID.Context_Menu) + 4, layout_next(), "Show Album", false, .Album) {
 				search_open(album = song.album)
 				context_menu.selection = nil
 			}
@@ -483,7 +487,7 @@ ui_gradients :: proc(rect: fx.Rect, current_scroll, content_h, grad_h_in: f32, b
 	}
 }
 
-ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false) -> bool {
+ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false, icon: Maybe(Icon) = nil) -> bool {
 	is_context_menu := id > int(UI_ID.Context_Menu) && id < int(UI_ID.Playlist)
 	hovered := mouse_hover(rect, is_context_menu)
 
@@ -499,7 +503,29 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false) -> bool {
 	}
 
 	text_color := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-	fx.draw_text(font, text, rect, 14, text_color, true, true)
+
+	if ic, ok := icon.?; ok {
+		text_w := text != "" ? fx.measure_text(font, text, 14).x : 0
+		icon_size: f32 = 18
+		gap: f32 = text != "" ? 8 : 0
+		
+		start_x: f32 = is_context_menu ? rect.x + 12 : rect.x + (rect.w - (icon_size + gap + text_w)) / 2.0
+		
+		fx.draw_texture(icons[ic], {start_x, rect.y + (rect.h - icon_size) / 2.0, icon_size, icon_size}, text_color)
+		
+		if text != "" {
+			text_rect := fx.Rect{start_x + icon_size + gap, rect.y, text_w, rect.h}
+			fx.draw_text(font, text, text_rect, 14, text_color, false, true)
+		}
+	} else {
+		if is_context_menu {
+			text_w := text != "" ? fx.measure_text(font, text, 14).x : 0
+			text_rect := fx.Rect{rect.x + 12, rect.y, text_w, rect.h}
+			fx.draw_text(font, text, text_rect, 14, text_color, false, true)
+		} else {
+			fx.draw_text(font, text, rect, 14, text_color, true, true)
+		}
+	}
 
 	if hovered && fx.key_is_pressed(.Mouse_Left) {
 		return true
