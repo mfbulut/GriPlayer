@@ -43,7 +43,7 @@ player_play_music :: proc(song: ^Music, gapless := false) {
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
     if cover_bytes != nil {
-        player.cover = fx.load_texture_from_bytes(cover_bytes, false)
+        player.cover = fx.load_texture_from_bytes(cover_bytes)
     } else {
         player.cover = {}
     }

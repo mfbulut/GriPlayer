@@ -405,7 +405,7 @@ ui_progress :: proc() {
 				audio.muted = !audio.muted
 			}
 		}
-		
+
 		vol_tex := audio.muted ? icons[.Mute] : icons[.Volume]
 		fx.draw_texture(vol_tex, vol_icon_rect)
 
@@ -508,11 +508,11 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false, icon: May
 		text_w := text != "" ? fx.measure_text(font, text, 14).x : 0
 		icon_size: f32 = 18
 		gap: f32 = text != "" ? 8 : 0
-		
+
 		start_x: f32 = is_context_menu ? rect.x + 12 : rect.x + (rect.w - (icon_size + gap + text_w)) / 2.0
-		
+
 		fx.draw_texture(icons[ic], {start_x, rect.y + (rect.h - icon_size) / 2.0, icon_size, icon_size}, text_color)
-		
+
 		if text != "" {
 			text_rect := fx.Rect{start_x + icon_size + gap, rect.y, text_w, rect.h}
 			fx.draw_text(font, text, text_rect, 14, text_color, false, true)

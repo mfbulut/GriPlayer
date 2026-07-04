@@ -9,8 +9,9 @@ import "core:mem"
 import "core:math/linalg"
 
 Sampler_Kind :: enum {
-	BilinearClamp,
 	PointClamp,
+	BilinearClamp,
+	AnisotropicClamp,
 }
 
 Swapchain :: struct {
@@ -129,12 +130,18 @@ d3d11_initialize :: proc() {
 		}
 
 		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.PointClamp])
+
 		desc.Filter = .MIN_MAG_MIP_LINEAR
 		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.BilinearClamp])
+
+		desc.Filter = .ANISOTROPIC
+		desc.MaxAnisotropy = 8
+		desc.MipLODBias = -0.5
+		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.AnisotropicClamp])
 	}
 
 	{ 	// First Run
-		d3d11_state.device_ctx->PSSetSamplers(0, 1, &d3d11_state.samplers[.BilinearClamp])
+		d3d11_state.device_ctx->PSSetSamplers(0, 1, &d3d11_state.samplers[.AnisotropicClamp])
 		d3d11_state.device_ctx->RSSetState(d3d11_state.rasterizer)
 		d3d11_state.device_ctx->OMSetBlendState(d3d11_state.blend_state, nil, 0xffffffff)
 	}
