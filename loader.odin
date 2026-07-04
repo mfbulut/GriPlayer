@@ -138,7 +138,7 @@ load_lrc :: proc(music: ^Music) {
 
         mins := strconv.parse_f32(tag[:colon_index]) or_continue
         secs := strconv.parse_f32(tag[colon_index+1:]) or_continue
-        append(&music.lyrics, LyricLine{text = text, time = mins * 60 + secs})
+        append(&music.lyrics, LyricLine{text = lyric, time = mins * 60 + secs})
 
         lower_lyric := strings.to_lower(text, context.temp_allocator)
         runes := make([dynamic]rune, 0, len(lyric), context.temp_allocator)

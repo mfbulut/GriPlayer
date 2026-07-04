@@ -17,7 +17,7 @@ state: struct {
 }
 
 volume := f32(0.5)
-
+muted := false
 initialize :: proc() {
     windows.CoInitializeEx(nil, cast(windows.COINIT)4)
 
@@ -90,15 +90,16 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
         return true
     }
 
-    samples_slice := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
+    samples := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
 
-    for &sample in samples_slice {
-        sample[0] *= volume
-        sample[1] *= volume
+    current_vol := muted ? f32(0) : volume
+    for &sample in samples {
+        sample[0] *= current_vol
+        sample[1] *= current_vol
     }
 
     if callback != nil {
-        callback(samples_slice)
+        callback(samples)
     }
 
     state.render_client->ReleaseBuffer(u32(frames_read), 0)

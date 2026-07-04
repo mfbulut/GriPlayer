@@ -23,6 +23,7 @@ Icon :: enum{
 	Next,
 	Heart,
 	Volume,
+	Mute,
 	Note,
 	Search,
 	Cross

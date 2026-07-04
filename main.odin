@@ -38,6 +38,7 @@ main :: proc() {
 	icons[.Next] = fx.load_texture(#load("assets/next.png"))
 	icons[.Heart] = fx.load_texture(#load("assets/heart.png"))
 	icons[.Volume] = fx.load_texture(#load("assets/volume.png"))
+	icons[.Mute] = fx.load_texture(#load("assets/mute.png"))
 	icons[.Note] = fx.load_texture(#load("assets/note.png"))
 	icons[.Search] = fx.load_texture(#load("assets/search.png"))
 	icons[.Cross] = fx.load_texture(#load("assets/cross.png"))
@@ -394,10 +395,19 @@ ui_progress :: proc() {
 		fx.draw_text(font, tot_time, layout_next(), 13, TEXT_SECONDARY, false, true)
 
 		vol_icon_rect := fx.rect_shrink(layout_next(), 3, 3)
-		fx.draw_texture(icons[.Volume], vol_icon_rect)
+		if mouse_hover(vol_icon_rect) {
+			fx.set_cursor(.Hand)
+			if fx.key_is_pressed(.Mouse_Left) {
+				audio.muted = !audio.muted
+			}
+		}
+		
+		vol_tex := audio.muted ? icons[.Mute] : icons[.Volume]
+		fx.draw_texture(vol_tex, vol_icon_rect)
 
 		vol_rect := layout_next()
-		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &audio.volume)
+		vol_color := audio.muted ? TEXT_SECONDARY : ACCENT_BRIGHT
+		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &audio.volume, color = vol_color)
 
 		if mouse_hover(vol_rect) && scroll.y != 0 {
 			audio.volume = clamp(audio.volume + scroll.y * 0.05, 0, 1)
@@ -572,7 +582,7 @@ ui_tooltip :: proc(label: string, pos: fx.Vec2) {
 	fx.draw_text(font, label, {rect.x, rect.y, tip_w, 22}, 12, fx.WHITE, true, true)
 }
 
-ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32 = 12) -> (changed: bool) {
+ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32 = 12, color: fx.Color = ACCENT_BRIGHT) -> (changed: bool) {
 	mouse := fx.mouse_pos()
 
 	x, w, h := rect.x, rect.w, height
@@ -599,8 +609,8 @@ ui_slider :: proc(id: int, rect: fx.Rect, value: ^f32, height: f32 = 4, pad: f32
 
 	fx.draw_rect({x, y, w, h}, PRIMARY_BRIGHT, 2)
 	fill_w := w * value^
-	fx.draw_rect({x, y, fill_w, h}, ACCENT_BRIGHT, 2)
-	fx.draw_circle({x + fill_w, y + h * 0.5}, 4 + 1 * anim, ACCENT_BRIGHT)
+	fx.draw_rect({x, y, fill_w, h}, color, 2)
+	fx.draw_circle({x + fill_w, y + h * 0.5}, 4 + 1 * anim, color)
 
 	if active || hovered {
 		fx.set_cursor(.Hand)
