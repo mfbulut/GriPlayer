@@ -361,6 +361,7 @@ begin_frame :: proc() {
 
 	if window.is_resized {
 		d3d11_resize_swapchain(pixel_size)
+		window.is_resized = false
 	} else {
 		d3d11_state.device_ctx->OMSetRenderTargets(1, &d3d11_state.swapchain.default_rtv, nil)
 		viewport := D3D11.VIEWPORT {

@@ -173,14 +173,14 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
 
     samples := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
 
-    current_vol := muted ? f32(0) : volume * 2
+    if callback != nil {
+        callback(samples)
+    }
+
+    current_vol := muted ? f32(0) : (volume * volume)
     for &sample in samples {
         sample[0] *= current_vol
         sample[1] *= current_vol
-    }
-
-    if callback != nil {
-        callback(samples)
     }
 
     state.render_client->ReleaseBuffer(u32(frames_read), 0)

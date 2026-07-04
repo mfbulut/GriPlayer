@@ -76,24 +76,35 @@ frame :: proc() {
 	window_size := fx.window_size()
 
 	if layout_start({0, 0, window_size.x, window_size.y}) {
-		panel_size := clamp(window_size.x - 300, 0, 450)
+		left_w := clamp(window_size.x - 328, 0, 500)
+		P_w := clamp(window_size.x - 586, 0, 160)
 
-		if layout({panel_size, GROW}, .Row, padding = 8, gap = 8) {
-			if layout({48, GROW}, .Col, gap = 8) {
-				ui_search_bar()
+		if left_w > 0 {
+			if layout({left_w, GROW}, .Row, padding = 8, gap = 8) {
+				if layout({48, GROW}, .Col, gap = 8) {
+					ui_search_bar()
 
-				if search.active {
-					update_search()
-					ui_songs_panel(search.results[:])
-				} else {
-					if layout({min(160, panel_size), GROW}, .Row, gap = 8) {
-						ui_playlists_panel()
-						ui_songs_panel(playlists[playlist_id].songs[:])
+					if search.active {
+						update_search()
+						ui_songs_panel(search.results[:])
+					} else {
+						if P_w > 0 {
+							if layout({P_w, GROW}, .Row, gap = 8) {
+								ui_playlists_panel()
+								ui_songs_panel(playlists[playlist_id].songs[:])
+							}
+						} else {
+							ui_songs_panel(playlists[playlist_id].songs[:])
+						}
 					}
 				}
-			}
 
-			ui_detail_panel()
+				ui_detail_panel()
+			}
+		} else {
+			if layout({GROW}, .Row, padding = 8, gap = 8) {
+				ui_detail_panel()
+			}
 		}
 	}
 
@@ -309,7 +320,12 @@ ui_songs_panel :: proc(songs: []^Music) {
 
 ui_detail_panel :: proc() {
 	song := player.music
-	if song == nil do return
+	if song == nil {
+		rect := layout_next()
+		m := min(rect.w, rect.h)
+		fx.draw_texture(icons[.Note], fx.Rect{rect.x + rect.w / 2 - m / 4, rect.y + rect.h / 2 - m / 4, m / 2, m / 2}, PRIMARY_BRIGHT)
+		return
+	}
 
 	if layout({128, 8, 56, 24, 36, 8, GROW}, .Col, padding = 8, gap = 8) {
 		if layout({128, GROW}, .Row, gap = 8) {

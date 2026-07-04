@@ -217,7 +217,6 @@ update :: proc(poll_msg := true) -> bool {
 	}
 	window.mouse_pos = {f32(p.x), f32(p.y)} / dpi_scale()
 	window.mouse_scroll = {0, 0}
-	window.is_resized = false
 	clear(&window.text_input)
 
 	cur_time := time.now()
