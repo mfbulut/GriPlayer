@@ -379,7 +379,6 @@ ui_detail_panel :: proc() {
 
 ui_progress :: proc() {
 	mouse := fx.mouse_pos()
-	scroll := fx.mouse_scroll()
 
 	cur_time := format_time(audio.position())
 	tot_time := format_time(audio.duration())
@@ -429,6 +428,7 @@ ui_progress :: proc() {
 		vol_color := audio.muted ? TEXT_SECONDARY : ACCENT_BRIGHT
 		vol_changed := ui_slider(int(UI_ID.Volume), vol_rect, &audio.volume, color = vol_color)
 
+		scroll := fx.mouse_scroll()
 		if mouse_hover(vol_rect) && scroll.y != 0 {
 			audio.volume = clamp(audio.volume + scroll.y * 0.05, 0, 1)
 		}
@@ -591,10 +591,10 @@ ui_label :: proc(text_str: string, font_size: f32) -> bool {
 	return false
 }
 
-ui_cover :: proc(tex: fx.Texture, radius: f32 = 6) {
+ui_cover :: proc(cover: fx.Texture, radius: f32 = 6) {
 	rect := layout_next()
 
-	if tex.srv == nil {
+	if cover.srv == nil {
 		fx.draw_rect(rect, PRIMARY_BRIGHT, radius)
 		shrink := min(rect.w, rect.h) * 0.25
 		fx.draw_texture(icons[.Note], fx.rect_shrink(rect, shrink, shrink), TEXT_SECONDARY)
@@ -605,7 +605,7 @@ ui_cover :: proc(tex: fx.Texture, radius: f32 = 6) {
 	dst_rect := fx.Rect{rect.x, rect.y, dest_size, dest_size}
 
 	pos := fx.Vec2{0, 0}
-	size := fx.Vec2{f32(tex.size.x), f32(tex.size.y)}
+	size := fx.Vec2{f32(cover.size.x), f32(cover.size.y)}
 	if size.x != size.y {
 		min_dim := min(size.x, size.y)
 		pos = {(size.x - min_dim) * 0.5, (size.y - min_dim) * 0.5}
@@ -613,7 +613,7 @@ ui_cover :: proc(tex: fx.Texture, radius: f32 = 6) {
 	}
 
 	src_rect := fx.Rect{pos.x, pos.y, size.x, size.y}
-	fx.draw_texture_ex(tex, src_rect, dst_rect, fx.WHITE, radius)
+	fx.draw_texture_ex(cover, src_rect, dst_rect, fx.WHITE, radius)
 }
 
 ui_tooltip :: proc(label: string, pos: fx.Vec2) {

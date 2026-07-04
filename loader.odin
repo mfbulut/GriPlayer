@@ -5,18 +5,17 @@ import "core:encoding/cbor"
 import "core:hash/xxhash"
 
 import "core:os"
-import "core:fmt"
+import "core:time"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import "core:time"
 import "core:unicode"
 
 import "fx"
 import "fx/audio"
 import "vendor:stb/image"
 
-LyricLine :: struct {
+Lyric :: struct {
 	text: string,
 	time: f32,
 }
@@ -31,7 +30,7 @@ Music :: struct {
 	duration:         f32,
 	liked:            bool,
 	liked_timestamp:  time.Time,
-	lyrics:           [dynamic]LyricLine,
+	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []u8,
 	thumbnail:        fx.Texture `cbor:"-"`,
@@ -42,18 +41,18 @@ Playlist :: struct {
 	songs: [dynamic]^Music,
 }
 
-playlists: #soa[dynamic]Playlist
+playlists: [dynamic]Playlist
 
 load_music :: proc() {
-	append(&playlists, Playlist{name = "Liked"})
+	append(&playlists, Playlist{ name = "Liked" })
 	music_dir := os.user_music_dir(context.allocator) or_else panic("Failed to find music dir")
 
-	state : State
+	state: State
 	cache_map := make(map[string]Music, 1024, context.temp_allocator)
 
 	dir, dir_err := os.user_data_dir(context.temp_allocator)
 	if dir_err == nil {
-		save_path := strings.concatenate({dir, "\\fmusic\\save.bin"}, context.temp_allocator)
+		save_path := strings.concatenate({dir, "\\fmusic\\save.cbor"}, context.temp_allocator)
 		if data, read_err := os.read_entire_file(save_path, context.temp_allocator); read_err == nil {
 			unmarshal_err := cbor.unmarshal(data, &state, {.Trusted_Input})
 			if unmarshal_err == nil {
@@ -178,7 +177,7 @@ load_lrc :: proc(music: ^Music) {
 
 		mins := strconv.parse_f32(tag[:colon_index]) or_continue
 		secs := strconv.parse_f32(tag[colon_index + 1:]) or_continue
-		append(&music.lyrics, LyricLine{text = lyric, time = mins * 60 + secs})
+		append(&music.lyrics, Lyric{text = lyric, time = mins * 60 + secs})
 
 		lower_lyric := strings.to_lower(text, context.temp_allocator)
 		runes := make([dynamic]rune, 0, len(lyric), context.temp_allocator)
@@ -188,7 +187,7 @@ load_lrc :: proc(music: ^Music) {
 			}
 		}
 
-		for i in 0 ..= len(runes) - 5 {
+		for i in 0..=len(runes)-5 {
 			bytes := slice.reinterpret([]byte, runes[i:i + 5])
 			hash := xxhash.XXH32(bytes)
 			bit_array.set(&music.lyrics_filter, uint(hash & 32767))
@@ -230,7 +229,7 @@ save_cache :: proc() {
 
 	fmusic_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
 	os.make_directory(fmusic_dir)
-	save_path := strings.concatenate({fmusic_dir, "\\save.bin"}, context.temp_allocator)
+	save_path := strings.concatenate({fmusic_dir, "\\save.cbor"}, context.temp_allocator)
 
 	state: State
 	state.volume = audio.volume

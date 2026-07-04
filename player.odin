@@ -7,19 +7,20 @@ import "fx/audio"
 import "fx/smtc"
 
 player: struct {
-	playing:  bool,
-	shuffle:  bool,
-	cursor:   int,
 	songs:    [dynamic]^Music,
 	playlist: [dynamic]^Music,
 	queue:    [dynamic]^Music,
-	music:    ^Music,
 	cover:    fx.Texture,
+	music:    ^Music,
+	playing:  bool,
+	shuffle:  bool,
+	cursor:   int,
 }
 
 player_start_playlist :: proc(songs: []^Music, song_idx: int) {
 	clear(&player.songs)
 	clear(&player.playlist)
+
 	for song in songs {
 		append(&player.songs, song)
 		append(&player.playlist, song)
@@ -27,6 +28,7 @@ player_start_playlist :: proc(songs: []^Music, song_idx: int) {
 
 	player.cursor = song_idx
 	player_play_music(player.songs[player.cursor])
+
 	if player.shuffle {
 		player_shuffle()
 	}
