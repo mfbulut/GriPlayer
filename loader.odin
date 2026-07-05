@@ -100,7 +100,7 @@ load_music :: proc() {
 		}
 
 		if len(music.thumbnail_pixels) > 0 {
-			music.thumbnail = fx.load_texture_raw(music.thumbnail_pixels, 64, 64, false)
+			music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
 		}
 
 		playlist_name := os.base(os.dir(fullpath))

@@ -2,16 +2,16 @@ package fx
 
 clear_window :: proc(color: Color) {
 	tmp_color := color_to_vec4(color)
-	d3d11_state.device_ctx->ClearRenderTargetView(d3d11_state.swapchain.default_rtv, &tmp_color)
+	state.device_ctx->ClearRenderTargetView(state.swapchain.default_rtv, &tmp_color)
 }
 
 set_sampler :: proc(kind: Sampler_Kind) {
-	d3d11_state.batch.binding.sampler_kind = kind
+	state.batch.binding.sampler_kind = kind
 }
 
 set_scissor :: proc(rect: Rect) {
 	scale := dpi_scale()
-	d3d11_state.batch.binding.scissor = {
+	state.batch.binding.scissor = {
 		cast(i32)(rect.x * scale),
 		cast(i32)(rect.y * scale),
 		cast(i32)((rect.x + rect.w) * scale),
@@ -25,7 +25,7 @@ reset_scissor :: proc() {
 }
 
 add_instance :: proc(inst: Instance) {
-	batch := &d3d11_state.batch
+	batch := &state.batch
 	if len(batch.instanced) + 1 > cap(batch.instanced) {
 		if !flush_batch() {
 			return
@@ -78,7 +78,7 @@ draw_texture_ex :: proc(
 	tint_rect := cast([4]Color)WHITE,
 	radius := f32(0),
 ) {
-	d3d11_state.batch.binding.texture = tex.srv
+	state.batch.binding.texture = tex.srv
 
 	tw := cast(f32)tex.size.x
 	th := cast(f32)tex.size.y
@@ -115,7 +115,7 @@ draw_text_vec :: proc(font: Font, text: string, pos: Vec2, font_size: f32, color
 
 	set_sampler(.BilinearClamp)
 
-	d3d11_state.batch.binding.texture = font.atlas.srv
+	state.batch.binding.texture = font.atlas.srv
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale
@@ -189,7 +189,7 @@ draw_text_faded :: proc(font: Font, text: string, bounds: Rect, font_size: f32, 
 	if text == "" do return
 	set_sampler(.BilinearClamp)
 
-	d3d11_state.batch.binding.texture = font.atlas.srv
+	state.batch.binding.texture = font.atlas.srv
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale

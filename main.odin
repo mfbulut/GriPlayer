@@ -31,21 +31,21 @@ main :: proc() {
 	search_init()
 
 	font = fx.load_font(#load("assets/Inter.json"), #load("assets/Inter.png"))
-	icons[.Shuffle] = fx.load_texture(#load("assets/shuffle.png"))
-	icons[.Previous] = fx.load_texture(#load("assets/previous.png"))
-	icons[.Pause] = fx.load_texture(#load("assets/pause.png"))
-	icons[.Play] = fx.load_texture(#load("assets/play.png"))
-	icons[.Next] = fx.load_texture(#load("assets/next.png"))
-	icons[.Heart] = fx.load_texture(#load("assets/heart.png"))
-	icons[.Volume] = fx.load_texture(#load("assets/volume.png"))
-	icons[.Mute] = fx.load_texture(#load("assets/mute.png"))
-	icons[.Note] = fx.load_texture(#load("assets/note.png"))
-	icons[.Search] = fx.load_texture(#load("assets/search.png"))
-	icons[.Cross] = fx.load_texture(#load("assets/cross.png"))
-	icons[.Add_Last] = fx.load_texture(#load("assets/add_last.png"))
-	icons[.Add_Next] = fx.load_texture(#load("assets/add_next.png"))
-	icons[.Album] = fx.load_texture(#load("assets/album.png"))
-	icons[.Artist] = fx.load_texture(#load("assets/artist.png"))
+	icons[.Shuffle] = fx.texture_load(#load("assets/shuffle.png"))
+	icons[.Previous] = fx.texture_load(#load("assets/previous.png"))
+	icons[.Pause] = fx.texture_load(#load("assets/pause.png"))
+	icons[.Play] = fx.texture_load(#load("assets/play.png"))
+	icons[.Next] = fx.texture_load(#load("assets/next.png"))
+	icons[.Heart] = fx.texture_load(#load("assets/heart.png"))
+	icons[.Volume] = fx.texture_load(#load("assets/volume.png"))
+	icons[.Mute] = fx.texture_load(#load("assets/mute.png"))
+	icons[.Note] = fx.texture_load(#load("assets/note.png"))
+	icons[.Search] = fx.texture_load(#load("assets/search.png"))
+	icons[.Cross] = fx.texture_load(#load("assets/cross.png"))
+	icons[.Add_Last] = fx.texture_load(#load("assets/add_last.png"))
+	icons[.Add_Next] = fx.texture_load(#load("assets/add_next.png"))
+	icons[.Album] = fx.texture_load(#load("assets/album.png"))
+	icons[.Artist] = fx.texture_load(#load("assets/artist.png"))
 
 	load_music()
 
@@ -604,8 +604,8 @@ ui_cover :: proc(cover: fx.Texture, radius: f32 = 6) {
 	dest_size := min(rect.w, rect.h)
 	dst_rect := fx.Rect{rect.x, rect.y, dest_size, dest_size}
 
-	pos := fx.Vec2{0, 0}
-	size := fx.Vec2{f32(cover.size.x), f32(cover.size.y)}
+	pos: fx.Vec2
+	size := fx.Vec2(cover.size)
 	if size.x != size.y {
 		min_dim := min(size.x, size.y)
 		pos = {(size.x - min_dim) * 0.5, (size.y - min_dim) * 0.5}

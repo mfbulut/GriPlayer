@@ -11,7 +11,7 @@ Texture :: struct {
 	size: [2]int,
 }
 
-load_texture_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true) -> Texture {
+texture_load_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true) -> Texture {
 	tex := Texture {
 		size = {width, height}
 	}
@@ -38,13 +38,13 @@ load_texture_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 	}
 	p_init_data := mipmaps ? nil : &init_data
 
-	hr := d3d11_state.device->CreateTexture2D(&tex_desc, p_init_data, &d3d_tex)
+	hr := state.device->CreateTexture2D(&tex_desc, p_init_data, &d3d_tex)
 	if win.FAILED(hr) {
 		panic("[ERROR] Failed to create D3D11 Texture2D")
 	}
 
 	if mipmaps {
-		d3d11_state.device_ctx->UpdateSubresource(
+		state.device_ctx->UpdateSubresource(
 			cast(^D3D11.IResource)d3d_tex,
 			0,
 			nil,
@@ -60,13 +60,13 @@ load_texture_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 		Texture2D = {MipLevels = mipmaps ? 0xFFFFFFFF : 1},
 	}
 
-	hr = d3d11_state.device->CreateShaderResourceView(d3d_tex, &srv_desc, &tex.srv)
+	hr = state.device->CreateShaderResourceView(d3d_tex, &srv_desc, &tex.srv)
 	if win.FAILED(hr) {
 		panic("[ERROR] Failed to create D3D11 Shader Resource View")
 	}
 
 	if mipmaps {
-		d3d11_state.device_ctx->GenerateMips(tex.srv)
+		state.device_ctx->GenerateMips(tex.srv)
 	}
 
 	if d3d_tex != nil {
@@ -76,7 +76,7 @@ load_texture_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 	return tex
 }
 
-load_texture_from_bytes :: proc(bytes: []byte, mipmaps := true) -> Texture {
+texture_load :: proc(bytes: []byte, mipmaps := true) -> Texture {
 	if len(bytes) == 0 do return {}
 
 	w, h, channels: i32
@@ -87,22 +87,7 @@ load_texture_from_bytes :: proc(bytes: []byte, mipmaps := true) -> Texture {
 	}
 	defer image.image_free(pixels)
 
-	return load_texture_raw(pixels[:w * h * 4], cast(int)w, cast(int)h, mipmaps)
-}
-
-load_texture_from_file :: proc(filepath: string, mipmaps := true) -> Texture {
-	file_data, err := os.read_entire_file(filepath, context.temp_allocator)
-	if err != nil {
-		return {}
-	}
-
-	return load_texture_from_bytes(file_data, mipmaps)
-}
-
-load_texture :: proc{
-	load_texture_raw,
-	load_texture_from_bytes,
-	load_texture_from_file,
+	return texture_load_raw(pixels[:w * h * 4], cast(int)w, cast(int)h, mipmaps)
 }
 
 texture_free :: proc(tex: ^Texture) {

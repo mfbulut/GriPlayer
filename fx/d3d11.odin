@@ -5,6 +5,7 @@ import win "core:sys/windows"
 import D3D11 "vendor:directx/d3d11"
 import D3D_COMPILER "vendor:directx/d3d_compiler"
 import DXGI "vendor:directx/dxgi"
+
 import "core:mem"
 import "core:math/linalg"
 
@@ -20,80 +21,58 @@ Swapchain :: struct {
 	default_rtv:     ^D3D11.IRenderTargetView,
 }
 
-d3d11_state: struct {
-	device:               ^D3D11.IDevice,
-	device_ctx:           ^D3D11.IDeviceContext,
-	dxgi_factory2:        ^DXGI.IFactory2,
-	rasterizer:           ^D3D11.IRasterizerState,
-	blend_state:          ^D3D11.IBlendState,
-	samplers:             [Sampler_Kind]^D3D11.ISamplerState,
-	swapchain:            Swapchain,
+state: struct {
+	device:           ^D3D11.IDevice,
+	device_ctx:       ^D3D11.IDeviceContext,
+	rasterizer:       ^D3D11.IRasterizerState,
+	blend_state:      ^D3D11.IBlendState,
+	samplers:         [Sampler_Kind]^D3D11.ISamplerState,
+	swapchain:        Swapchain,
 
 	// Renderer
-	instanced_buffer_gpu: ^D3D11.IBuffer,
-	uniforms_buffer_gpu:  ^D3D11.IBuffer,
-	vshader:              ^D3D11.IVertexShader,
-	ilayout:              ^D3D11.IInputLayout,
-	pshader:              ^D3D11.IPixelShader,
-	batch:                Batch,
+	instanced_buffer: ^D3D11.IBuffer,
+	uniforms_buffer:  ^D3D11.IBuffer,
+	default_shader:   Shader,
+	batch:            Batch,
 }
 
-d3d11_resize_swapchain :: proc(size: Vec2) {
-	d3d11_state.device_ctx->OMSetRenderTargets(0, nil, nil)
-	if d3d11_state.swapchain.default_rtv != nil {
-		d3d11_state.swapchain.default_rtv->Release()
-		d3d11_state.swapchain.default_rtv = nil
+d3d11_resize_swapchain :: proc() {
+	state.device_ctx->OMSetRenderTargets(0, nil, nil)
+	if state.swapchain.default_rtv != nil {
+		state.swapchain.default_rtv->Release()
+		state.swapchain.default_rtv = nil
 	}
 
-	hr := d3d11_state.swapchain.swapchain1->ResizeBuffers(
+	state.swapchain.swapchain1->ResizeBuffers(
 		2,0,0,
 		.R8G8B8A8_UNORM,
 		{.FRAME_LATENCY_WAITABLE_OBJECT},
 	)
-	if win.FAILED(hr) {
-		panic("[ERROR] DXGI ResizeBuffers failed")
-	}
 
 	rt: ^D3D11.ITexture2D
-	d3d11_state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
-	d3d11_state.device->CreateRenderTargetView(rt, nil, &d3d11_state.swapchain.default_rtv)
+	state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
+	state.device->CreateRenderTargetView(rt, nil, &state.swapchain.default_rtv)
 	rt->Release()
 
-	d3d11_state.device_ctx->OMSetRenderTargets(1, &d3d11_state.swapchain.default_rtv, nil)
-
-	// Viewport
-	viewport := D3D11.VIEWPORT {
-		Width    = size.x,
-		Height   = size.y,
-		MaxDepth = 1,
-	}
-	d3d11_state.device_ctx->RSSetViewports(1, &viewport)
+	state.device_ctx->OMSetRenderTargets(1, &state.swapchain.default_rtv, nil)
 }
 
 d3d11_initialize :: proc() {
-	features := [?]D3D11.FEATURE_LEVEL{._11_0}
-	D3D11.CreateDevice(
-		nil,
-		.HARDWARE,
-		nil,
-		nil,
-		&features[0],
-		len(features),
-		D3D11.SDK_VERSION,
-		&d3d11_state.device,
-		nil,
-		&d3d11_state.device_ctx,
-	)
+	{
+		features := [?]D3D11.FEATURE_LEVEL{._11_0}
+		D3D11.CreateDevice(nil, .HARDWARE, nil, nil, &features[0], len(features), D3D11.SDK_VERSION, &state.device, nil, &state.device_ctx)
+	}
 
-	dxgi_device: ^DXGI.IDevice
-	dxgi_adapter: ^DXGI.IAdapter
+	{
+		dxgi_device: ^DXGI.IDevice
+		dxgi_adapter: ^DXGI.IAdapter
 
-	d3d11_state.device->QueryInterface(DXGI.IDevice_UUID, cast(^rawptr)&dxgi_device)
-	dxgi_device->GetAdapter(&dxgi_adapter)
-	dxgi_adapter->GetParent(DXGI.IFactory2_UUID, cast(^rawptr)&d3d11_state.dxgi_factory2)
+		state.device->QueryInterface(DXGI.IDevice_UUID, cast(^rawptr)&dxgi_device)
+		dxgi_device->GetAdapter(&dxgi_adapter)
 
-	dxgi_device->Release()
-	dxgi_adapter->Release()
+		dxgi_device->Release()
+		dxgi_adapter->Release()
+	}
 
 
 	{ 	// Rasterizer
@@ -102,7 +81,7 @@ d3d11_initialize :: proc() {
 			CullMode      = .NONE,
 			ScissorEnable = true,
 		}
-		d3d11_state.device->CreateRasterizerState(&desc, &d3d11_state.rasterizer)
+		state.device->CreateRasterizerState(&desc, &state.rasterizer)
 	}
 
 	{ 	// Blend Alpha
@@ -115,7 +94,7 @@ d3d11_initialize :: proc() {
 		desc.RenderTarget[0].BlendOp = .ADD
 		desc.RenderTarget[0].BlendOpAlpha = .ADD
 		desc.RenderTarget[0].RenderTargetWriteMask = cast(u8)D3D11.COLOR_WRITE_ENABLE_ALL
-		d3d11_state.device->CreateBlendState(&desc, &d3d11_state.blend_state)
+		state.device->CreateBlendState(&desc, &state.blend_state)
 	}
 
 	{ 	// Samplers
@@ -129,21 +108,21 @@ d3d11_initialize :: proc() {
 			MaxLOD         = 1000,
 		}
 
-		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.PointClamp])
+		state.device->CreateSamplerState(&desc, &state.samplers[.PointClamp])
 
 		desc.Filter = .MIN_MAG_MIP_LINEAR
-		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.BilinearClamp])
+		state.device->CreateSamplerState(&desc, &state.samplers[.BilinearClamp])
 
 		desc.Filter = .ANISOTROPIC
 		desc.MaxAnisotropy = 8
 		desc.MipLODBias = -0.5
-		d3d11_state.device->CreateSamplerState(&desc, &d3d11_state.samplers[.AnisotropicClamp])
+		state.device->CreateSamplerState(&desc, &state.samplers[.AnisotropicClamp])
 	}
 
 	{ 	// First Run
-		d3d11_state.device_ctx->PSSetSamplers(0, 1, &d3d11_state.samplers[.AnisotropicClamp])
-		d3d11_state.device_ctx->RSSetState(d3d11_state.rasterizer)
-		d3d11_state.device_ctx->OMSetBlendState(d3d11_state.blend_state, nil, 0xffffffff)
+		state.device_ctx->PSSetSamplers(0, 1, &state.samplers[.AnisotropicClamp])
+		state.device_ctx->RSSetState(state.rasterizer)
+		state.device_ctx->OMSetBlendState(state.blend_state, nil, 0xffffffff)
 	}
 
 	{ 	// Swapchain
@@ -157,34 +136,44 @@ d3d11_initialize :: proc() {
 			Flags = {.FRAME_LATENCY_WAITABLE_OBJECT},
 		}
 
-		d3d11_state.dxgi_factory2->CreateSwapChainForHwnd(
-			d3d11_state.device,
+		dxgi_device: ^DXGI.IDevice
+		dxgi_adapter: ^DXGI.IAdapter
+		state.device->QueryInterface(DXGI.IDevice_UUID, cast(^rawptr)&dxgi_device)
+		dxgi_device->GetAdapter(&dxgi_adapter)
+
+		dxgi_factory2: ^DXGI.IFactory2
+		dxgi_adapter->GetParent(DXGI.IFactory2_UUID, cast(^rawptr)&dxgi_factory2)
+		dxgi_device->Release()
+		dxgi_adapter->Release()
+
+		dxgi_factory2->CreateSwapChainForHwnd(
+			state.device,
 			window.hwnd,
 			&desc,
 			nil,
 			nil,
-			&d3d11_state.swapchain.swapchain1,
+			&state.swapchain.swapchain1,
 		)
 
-		d3d11_state.dxgi_factory2->MakeWindowAssociation(window.hwnd, {.NO_ALT_ENTER})
+		dxgi_factory2->MakeWindowAssociation(window.hwnd, {.NO_ALT_ENTER})
 	}
 
 	{ 	// Waitable Obj
 		swapchain2: ^DXGI.ISwapChain2
-		d3d11_state.swapchain.swapchain1->QueryInterface(
+		state.swapchain.swapchain1->QueryInterface(
 			DXGI.ISwapChain2_UUID,
 			cast(^rawptr)&swapchain2,
 		)
 
 		swapchain2->SetMaximumFrameLatency(1)
-		d3d11_state.swapchain.waitable_handle = swapchain2->GetFrameLatencyWaitableObject()
+		state.swapchain.waitable_handle = swapchain2->GetFrameLatencyWaitableObject()
 		swapchain2->Release()
 	}
 
 	{
 		rt: ^D3D11.ITexture2D
-		d3d11_state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
-		d3d11_state.device->CreateRenderTargetView(rt, nil, &d3d11_state.swapchain.default_rtv)
+		state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
+		state.device->CreateRenderTargetView(rt, nil, &state.swapchain.default_rtv)
 		rt->Release()
 	}
 	{
@@ -196,126 +185,37 @@ d3d11_initialize :: proc() {
 			CPUAccessFlags = {.WRITE},
 		}
 
-		d3d11_state.device->CreateBuffer(&desc, nil, &d3d11_state.instanced_buffer_gpu)
+		state.device->CreateBuffer(&desc, nil, &state.instanced_buffer)
 
-		// Shader + uniforms
-		d3d11_vshader_init(shader, "shader.hlsl")
-		d3d11_pshader_init(shader, "shader.hlsl")
-		d3d11_uniforms_init(type_of(uniforms))
+		state.default_shader = load_shader(shader, "shader.hlsl")
+	}
+
+	{
+		// Uniform Buffer
+		desc := D3D11.BUFFER_DESC {
+			ByteWidth      = size_of(uniforms),
+			Usage          = .DYNAMIC,
+			BindFlags      = {.CONSTANT_BUFFER},
+			CPUAccessFlags = {.WRITE},
+		}
+
+		state.device->CreateBuffer(&desc, nil, &state.uniforms_buffer)
+		upload_uniforms()
 	}
 
 	{
 		// Bind pipeline
 		stride := cast(u32)size_of(Instance)
 		offset := u32(0)
-		d3d11_state.device_ctx->IASetVertexBuffers(0, 1, &d3d11_state.instanced_buffer_gpu, &stride, &offset,)
-		d3d11_state.device_ctx->IASetInputLayout(d3d11_state.ilayout)
-		d3d11_state.device_ctx->IASetPrimitiveTopology(.TRIANGLESTRIP)
+		state.device_ctx->IASetVertexBuffers(0, 1, &state.instanced_buffer, &stride, &offset,)
+		state.device_ctx->IASetPrimitiveTopology(.TRIANGLESTRIP)
 
-		d3d11_state.device_ctx->VSSetShader(d3d11_state.vshader, nil, 0)
-		d3d11_state.device_ctx->VSSetConstantBuffers(0, 1, &d3d11_state.uniforms_buffer_gpu)
+		state.device_ctx->VSSetConstantBuffers(0, 1, &state.uniforms_buffer)
 
-		d3d11_state.device_ctx->PSSetShader(d3d11_state.pshader, nil, 0)
-		d3d11_state.device_ctx->PSSetConstantBuffers(0, 1, &d3d11_state.uniforms_buffer_gpu)
+		state.device_ctx->PSSetConstantBuffers(0, 1, &state.uniforms_buffer)
 
-		d3d11_state.device_ctx->RSSetState(d3d11_state.rasterizer)
-		d3d11_state.device_ctx->OMSetBlendState(d3d11_state.blend_state, nil, 0xffffffff)
-	}
-}
-
-d3d11_vshader_init :: proc(src: string, dbg_name: cstring) {
-	vshader_blob: ^D3D11.IBlob
-	vshader_error: ^D3D11.IBlob
-
-	hr := D3D_COMPILER.Compile(
-		raw_data(src),
-		len(src),
-		dbg_name,
-		nil,
-		nil,
-		"vs_main",
-		"vs_5_0",
-		0,
-		0,
-		&vshader_blob,
-		&vshader_error,
-	)
-	defer if vshader_blob != nil {
-		vshader_blob->Release()
-	}
-
-	if win.FAILED(hr) {
-		ptr := cast([^]byte)vshader_error->GetBufferPointer()
-		len := vshader_error->GetBufferSize()
-		panic(string(ptr[:len]))
-	} else {
-		d3d11_state.device->CreateVertexShader(
-			vshader_blob->GetBufferPointer(),
-			vshader_blob->GetBufferSize(),
-			nil,
-			&d3d11_state.vshader,
-		)
-	}
-
-	// Input Layout
-	hr = d3d11_state.device->CreateInputLayout(
-		raw_data(vs_input_layout),
-		u32(len(vs_input_layout)),
-		vshader_blob->GetBufferPointer(),
-		vshader_blob->GetBufferSize(),
-		&d3d11_state.ilayout,
-	)
-	if win.FAILED(hr) {
-		panic("[ERROR] Failed to create D3D11 input layout")
-	}
-}
-
-d3d11_pshader_init :: proc(src: string, dbg_name: cstring) {
-	pshader_blob: ^D3D11.IBlob
-	pshader_error: ^D3D11.IBlob
-
-	hr := D3D_COMPILER.Compile(
-		raw_data(src),
-		len(src),
-		dbg_name,
-		nil,
-		nil,
-		"ps_main",
-		"ps_5_0",
-		0,
-		0,
-		&pshader_blob,
-		&pshader_error,
-	)
-	defer if pshader_blob != nil {
-		pshader_blob->Release()
-	}
-
-	if win.FAILED(hr) {
-		ptr := cast([^]byte)pshader_error->GetBufferPointer()
-		len := pshader_error->GetBufferSize()
-		panic(string(ptr[:len]))
-	} else {
-		d3d11_state.device->CreatePixelShader(
-			pshader_blob->GetBufferPointer(),
-			pshader_blob->GetBufferSize(),
-			nil,
-			&d3d11_state.pshader,
-		)
-	}
-}
-
-d3d11_uniforms_init :: proc($T: typeid) {
-	desc := D3D11.BUFFER_DESC {
-		ByteWidth      = size_of(T),
-		Usage          = .DYNAMIC,
-		BindFlags      = {.CONSTANT_BUFFER},
-		CPUAccessFlags = {.WRITE},
-	}
-
-	hr := d3d11_state.device->CreateBuffer(&desc, nil, &d3d11_state.uniforms_buffer_gpu)
-	if win.FAILED(hr) {
-		panic("[ERROR] Failed to create uniform buffer")
+		state.device_ctx->RSSetState(state.rasterizer)
+		state.device_ctx->OMSetBlendState(state.blend_state, nil, 0xffffffff)
 	}
 }
 
@@ -354,36 +254,34 @@ Batch :: struct {
 }
 
 begin_frame :: proc() {
-	logical_size := window_size()
-	pixel_size := window_size_pixels()
-
-	d3d11_state.batch.binding.scissor = {0, 0, cast(i32)pixel_size.x, cast(i32)pixel_size.y}
+	state.batch.binding.scissor = {0, 0, window.size.x, window.size.y}
+	set_shader(state.default_shader)
 
 	if window.is_resized {
-		d3d11_resize_swapchain(pixel_size)
+		d3d11_resize_swapchain()
+		upload_uniforms()
 		window.is_resized = false
 	} else {
-		d3d11_state.device_ctx->OMSetRenderTargets(1, &d3d11_state.swapchain.default_rtv, nil)
-		viewport := D3D11.VIEWPORT {
-			Width    = pixel_size.x,
-			Height   = pixel_size.y,
-			MaxDepth = 1,
-		}
-		d3d11_state.device_ctx->RSSetViewports(1, &viewport)
+		state.device_ctx->OMSetRenderTargets(1, &state.swapchain.default_rtv, nil)
 	}
 
-	upload_uniforms(logical_size)
+	viewport := D3D11.VIEWPORT {
+		Width    = f32(window.size.x),
+		Height   = f32(window.size.y),
+		MaxDepth = 1,
+	}
+	state.device_ctx->RSSetViewports(1, &viewport)
 }
 
 flush_batch :: proc() -> bool {
-	if len(d3d11_state.batch.instanced) == 0 {
+	if len(state.batch.instanced) == 0 {
 		return true
 	}
 
 	{
 		sub_rsrc: D3D11.MAPPED_SUBRESOURCE
-		d3d11_state.device_ctx->Map(
-			d3d11_state.instanced_buffer_gpu,
+		state.device_ctx->Map(
+			state.instanced_buffer,
 			0,
 			.WRITE_DISCARD,
 			{},
@@ -392,42 +290,43 @@ flush_batch :: proc() -> bool {
 
 		mem.copy(
 			sub_rsrc.pData,
-			raw_data(d3d11_state.batch.instanced[:]),
-			len(d3d11_state.batch.instanced) * size_of(Instance),
+			raw_data(state.batch.instanced[:]),
+			len(state.batch.instanced) * size_of(Instance),
 		)
-		d3d11_state.device_ctx->Unmap(d3d11_state.instanced_buffer_gpu, 0)
+		state.device_ctx->Unmap(state.instanced_buffer, 0)
 	}
 
-	for &run in d3d11_state.batch.runs {
-		d3d11_state.device_ctx->PSSetShaderResources(0, 1, &run.binding.texture)
-		d3d11_state.device_ctx->PSSetSamplers(0, 1, &d3d11_state.samplers[run.binding.sampler_kind],)
+	for &run in state.batch.runs {
+		state.device_ctx->PSSetShaderResources(0, 1, &run.binding.texture)
+		state.device_ctx->PSSetSamplers(0, 1, &state.samplers[run.binding.sampler_kind],)
 		rect := D3D11.RECT {
 			left   = run.binding.scissor[0],
 			top    = run.binding.scissor[1],
 			right  = run.binding.scissor[2],
 			bottom = run.binding.scissor[3],
 		}
-		d3d11_state.device_ctx->RSSetScissorRects(1, &rect)
-		d3d11_state.device_ctx->DrawInstanced(4, run.count, 0, run.first)
+		state.device_ctx->RSSetScissorRects(1, &rect)
+		state.device_ctx->DrawInstanced(4, run.count, 0, run.first)
 	}
 
-	clear(&d3d11_state.batch.instanced)
-	clear(&d3d11_state.batch.runs)
+	clear(&state.batch.instanced)
+	clear(&state.batch.runs)
 
 	return true
 }
 
 present :: proc(sync := u32(1)) {
 	flush_batch()
-	d3d11_state.swapchain.swapchain1->Present(sync, nil)
+	state.swapchain.swapchain1->Present(sync, nil)
 }
 
-upload_uniforms :: proc(size: Vec2) {
+upload_uniforms :: proc() {
+	size := window_size()
 	uniforms.proj_matrix = linalg.matrix_ortho3d_f32(0, size.x, size.y, 0, 0, 1, true)
 
 	sub_rsrc: D3D11.MAPPED_SUBRESOURCE
-	d3d11_state.device_ctx->Map(
-		d3d11_state.uniforms_buffer_gpu,
+	state.device_ctx->Map(
+		state.uniforms_buffer,
 		0,
 		.WRITE_DISCARD,
 		{},
@@ -435,14 +334,14 @@ upload_uniforms :: proc(size: Vec2) {
 	)
 
 	mem.copy(sub_rsrc.pData, &uniforms, size_of(uniforms))
-	d3d11_state.device_ctx->Unmap(d3d11_state.uniforms_buffer_gpu, 0)
+	state.device_ctx->Unmap(state.uniforms_buffer, 0)
 }
 
 uniforms: struct #align (16) {
 	proj_matrix: matrix[4, 4]f32,
 }
 
-vs_input_layout := []D3D11.INPUT_ELEMENT_DESC {
+input_layout := []D3D11.INPUT_ELEMENT_DESC {
 	{"POS", 0, .R32G32B32A32_FLOAT, 0, 0, .INSTANCE_DATA, 1},
 	{"TEX", 0, .R32G32B32A32_FLOAT, 0, D3D11.APPEND_ALIGNED_ELEMENT, .INSTANCE_DATA, 1},
 	{"COL", 0, .R8G8B8A8_UNORM, 0, D3D11.APPEND_ALIGNED_ELEMENT, .INSTANCE_DATA, 1},
@@ -459,15 +358,15 @@ cbuffer Globals : register(b0) {
 }
 
 Texture2D tex : register(t0);
-SamplerState sampler_ : register(s0);
+SamplerState tex_sampler : register(s0);
 
 struct vs_in {
-    float4 dest      : POS;
+    float4 dest     : POS;
     float4 src      : TEX;
     float4 color[4] : COL;
-    float radius         : RADIUS;
-    uint kind            : KIND;
-    uint vertex_id       : SV_VertexID;
+    float radius    : RADIUS;
+    uint kind       : KIND;
+    uint vertex_id  : SV_VertexID;
 };
 
 struct vs_out {
@@ -513,6 +412,7 @@ vs_out vs_main(vs_in input) {
 
 #define TEXT_THICKNESS 0.6
 #define MSDF_PXRANGE   8.0
+#define MSDF_TEXSIZE   548.0
 
 #define KIND_RECT  0
 #define KIND_TEX2D 1
@@ -537,7 +437,7 @@ float4 ps_main(vs_out input) : SV_TARGET {
     float4 tex_color = float4(1, 1, 1, 1);
 
     if (input.kind == KIND_TEX2D || input.kind == KIND_MSDF) {
-        tex_color = tex.Sample(sampler_, input.tex_uv);
+        tex_color = tex.Sample(tex_sampler, input.tex_uv);
     }
 
     switch (input.kind) {
@@ -561,7 +461,7 @@ float4 ps_main(vs_out input) : SV_TARGET {
         {
             float sd = msdf_median(tex_color.r, tex_color.g, tex_color.b) - 0.5;
 
-            float2 msdf_tex_size = float2(548.0, 548.0);
+            float2 msdf_tex_size = float2(MSDF_TEXSIZE, MSDF_TEXSIZE);
             float2 unit_range = float2(MSDF_PXRANGE, MSDF_PXRANGE) / msdf_tex_size;
 
             float2 screen_tex_size = float2(1.0, 1.0) / fwidth(input.tex_uv);

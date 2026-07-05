@@ -45,7 +45,7 @@ load_font :: proc(json_bytes: []u8, img_bytes: []u8) -> (font: Font) {
 		panic("[ERROR] Failed to parse MSDF JSON")
 	}
 
-	font.atlas = load_texture_from_bytes(img_bytes, false)
+	font.atlas = texture_load(img_bytes, false)
 	font.metrics = msdf_data.metrics
 
 	for glyph in msdf_data.glyphs {
