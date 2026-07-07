@@ -5,6 +5,8 @@ import "core:strings"
 import "core:strconv"
 import "core:encoding/base64"
 import "core:encoding/endian"
+import "core:os"
+import "core:io"
 
 import "opusfile"
 import "vorbisfile"
@@ -18,11 +20,9 @@ Metadata :: struct {
 }
 
 metadata :: proc(path: string) -> (meta: Metadata) {
-    c_str := strings.clone_to_cstring(path, context.temp_allocator)
-
     if strings.has_suffix(path, ".ogg") {
         vf: vorbisfile.File
-        if vorbisfile.fopen(c_str, &vf) == 0 {
+        if ok := vorbisfile.open_file(path, &vf); ok {
             defer vorbisfile.clear(&vf)
 
             tags := vorbisfile.comment(&vf, -1)
@@ -62,8 +62,10 @@ metadata :: proc(path: string) -> (meta: Metadata) {
         }
     }
 
-    of := opusfile.open_file(c_str, nil)
-    if of == nil do return
+    of := opusfile.open_file(path)
+    if of == nil {
+        return
+    }
     defer opusfile.free(of)
 
     tags := opusfile.tags(of, -1)
@@ -95,11 +97,9 @@ metadata :: proc(path: string) -> (meta: Metadata) {
 }
 
 cover :: proc(path: string) -> []byte {
-    c_str := strings.clone_to_cstring(path, context.temp_allocator)
-
     if strings.has_suffix(path, ".ogg") {
         vf: vorbisfile.File
-        if vorbisfile.fopen(c_str, &vf) == 0 {
+        if ok := vorbisfile.open_file(path, &vf); ok {
             defer vorbisfile.clear(&vf)
 
             tags := vorbisfile.comment(&vf, -1)
@@ -132,8 +132,10 @@ cover :: proc(path: string) -> []byte {
         }
     }
 
-    of := opusfile.open_file(c_str, nil)
-    if of == nil do return nil
+    of := opusfile.open_file(path)
+    if of == nil {
+        return nil
+    }
     defer opusfile.free(of)
 
     tags := opusfile.tags(of, -1)
@@ -142,8 +144,8 @@ cover :: proc(path: string) -> []byte {
     cover_base64 := opusfile.tags_query(tags, "METADATA_BLOCK_PICTURE", 0)
     if cover_base64 == nil do return nil
 
-    decoded_buf, err := base64.decode(string(cover_base64), allocator = context.temp_allocator)
-    if err != nil do return nil
+    decoded_buf, base64_err := base64.decode(string(cover_base64), allocator = context.temp_allocator)
+    if base64_err != nil do return nil
 
     buf := decoded_buf[4:]
     mime_len := endian.unchecked_get_u32be(buf)

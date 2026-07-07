@@ -338,13 +338,15 @@ ui_detail_panel :: proc() {
 				dot_size := song.artist != "" && song.album != "" ? f32(2) : 0
 				album_size := fx.measure_text(font, song.album, 16).x
 
-				if layout({artist_size, dot_size, album_size}, .Row, gap = 8) {
-					if ui_label(song.artist, 16) {
-						search_open(artist = song.artist)
-					}
-					fx.draw_circle(fx.rect_center(layout_next()), dot_size, TEXT_SECONDARY)
-					if ui_label(song.album, 16) {
-						search_open(album = song.album)
+				if song.artist != "" || song.album != "" {
+					if layout({artist_size, dot_size, album_size}, .Row, gap = 8) {
+						if ui_label(song.artist, 16) {
+							search_open(artist = song.artist)
+						}
+						fx.draw_circle(fx.rect_center(layout_next()), dot_size, TEXT_SECONDARY)
+						if ui_label(song.album, 16) {
+							search_open(album = song.album)
+						}
 					}
 				}
 

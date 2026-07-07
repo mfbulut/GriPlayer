@@ -1,5 +1,7 @@
 package audio
 
+import "core:os"
+import "core:io"
 import "core:slice"
 import "core:strings"
 
@@ -17,11 +19,11 @@ state: struct {
     device: ^wasapi.IMMDevice,
     client: ^wasapi.IAudioClient,
     render_client: ^wasapi.IAudioRenderClient,
-    buffer_size: windows.UINT32,
     decoder: Decoder,
+    buffer_size: u32,
     sample_rate: u32,
-    channels: u32,
     total_pcm: i64,
+    channels: u32,
 }
 
 volume := f32(0.5)
@@ -82,13 +84,12 @@ open :: proc(path: string, gapless := false) -> bool {
     }
     state.decoder = nil
 
-    c_str := strings.clone_to_cstring(path, context.temp_allocator)
-    old_sample_rate := state.sample_rate
+    prev_sample_rate := state.sample_rate
 
     opened := false
     if strings.has_suffix(path, ".ogg") {
         vf := new(vorbisfile.File)
-        if vorbisfile.fopen(c_str, vf) == 0 {
+        if ok := vorbisfile.open_file(path, vf); ok {
             state.decoder = vf
             info := vorbisfile.info(vf, -1)
             state.sample_rate = u32(info.rate)
@@ -101,7 +102,7 @@ open :: proc(path: string, gapless := false) -> bool {
     }
 
     if !opened {
-        of := opusfile.open_file(c_str, nil)
+        of := opusfile.open_file(path)
         if of != nil {
             opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
             state.decoder = of
@@ -114,7 +115,7 @@ open :: proc(path: string, gapless := false) -> bool {
         }
     }
 
-    if state.sample_rate != old_sample_rate {
+    if state.sample_rate != prev_sample_rate {
         init_wasapi(state.sample_rate)
     } else if gapless == false {
         state.client->Reset()
@@ -140,23 +141,21 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     case ^opusfile.File:
         frames_read = opusfile.read_float_stereo(d, cast([^]f32)buffer, cast(i32)(available_frames * 2))
     case ^vorbisfile.File:
-        channels_ptr: ^^f32
-        bitstream: i32
-        frames_read = vorbisfile.read_float(d, &channels_ptr, cast(i32)available_frames, &bitstream)
+        channels: [^][^]f32
+        frames_read = vorbisfile.read_float(d, &channels, cast(i32)available_frames, nil)
 
         if frames_read > 0 {
             out := cast([^][2]f32)buffer
-            ch := cast([^][^]f32)channels_ptr
 
             if state.channels >= 2 {
-                left := ch[0]
-                right := ch[1]
+                left := channels[0]
+                right := channels[1]
                 for i in 0..<frames_read {
                     out[i][0] = left[i]
                     out[i][1] = right[i]
                 }
             } else if state.channels == 1 {
-                mono := ch[0]
+                mono := channels[0]
                 for i in 0..<frames_read {
                     out[i][0] = mono[i]
                     out[i][1] = mono[i]
