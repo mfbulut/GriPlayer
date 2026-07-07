@@ -3,7 +3,6 @@ package fx
 import win "core:sys/windows"
 
 import D3D11 "vendor:directx/d3d11"
-import D3D_COMPILER "vendor:directx/d3d_compiler"
 import DXGI "vendor:directx/dxgi"
 
 import "core:mem"

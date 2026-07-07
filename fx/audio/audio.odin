@@ -1,7 +1,5 @@
 package audio
 
-import "core:os"
-import "core:io"
 import "core:slice"
 import "core:strings"
 

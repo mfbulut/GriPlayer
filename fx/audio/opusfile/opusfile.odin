@@ -14,8 +14,6 @@ TRACK_GAIN :: 3008
 @(link_prefix = "op_", default_calling_convention = "c")
 foreign lib {
     open_callbacks :: proc(stream: rawptr, cb: ^Callbacks, initial_data: [^]u8, initial_bytes: uint, error: ^i32) -> ^File ---
-    @(link_name = "op_open_file")
-    open_file_c       :: proc(path: cstring, error: ^i32) -> ^File  ---
     free              :: proc(file: ^File ) ---
     read_float_stereo :: proc(file: ^File , samples: [^]f32, sample_count: i32) -> i32 ---
     set_gain_offset   :: proc(file: ^File , gain_type: i32, gain_offset_q8: i32) -> i32 ---

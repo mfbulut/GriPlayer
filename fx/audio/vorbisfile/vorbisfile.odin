@@ -31,8 +31,6 @@ Comment :: struct {
 @(link_prefix = "ov_", default_calling_convention = "c")
 foreign lib {
     open_callbacks :: proc(datasource: rawptr, vf: ^File, initial: cstring, ibytes: i32, callbacks: Callbacks) -> i32 ---
-    @(link_name = "ov_fopen")
-    open_file_c    :: proc(path: cstring, vf: ^File) -> i32 ---
     clear          :: proc(vf: ^File) -> i32 ---
     read_float     :: proc(vf: ^File, pcm_channels: ^[^][^]f32, samples: i32, bitstream: ^i32) -> i32 ---
     pcm_total      :: proc(vf: ^File, i: i32) -> i64 ---

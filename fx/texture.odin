@@ -1,7 +1,5 @@
 package fx
 
-import "core:os"
-
 import win "core:sys/windows"
 import D3D11 "vendor:directx/d3d11"
 import "vendor:stb/image"

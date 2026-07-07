@@ -5,8 +5,6 @@ import "core:strings"
 import "core:strconv"
 import "core:encoding/base64"
 import "core:encoding/endian"
-import "core:os"
-import "core:io"
 
 import "opusfile"
 import "vorbisfile"
