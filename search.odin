@@ -302,10 +302,13 @@ ui_search_bar :: proc() {
 	text_area := fx.Rect{text_start, bar.y, bar.x + bar.w - text_start, bar.h}
 	visible_w := max(text_area.w - 33, 0)
 
-	update_search_scroll(query, visible_w)
-	handle_search_drag(query, {text_area.x, text_area.y, visible_w, text_area.h})
+	visible_area := fx.Rect{text_area.x, text_area.y, visible_w, text_area.h}
+	if mouse_hover(visible_area) do fx.set_cursor(.IBeam)
 
-	fx.set_scissor({text_area.x, text_area.y, visible_w, text_area.h})
+	update_search_scroll(query, visible_w)
+	handle_search_drag(query, visible_area)
+
+	fx.set_scissor(visible_area)
 	draw_search_cursor(query, text_area)
 
 	scrolled := fx.Rect{text_area.x - search.scroll, text_area.y, text_area.w + search.scroll, text_area.h}
