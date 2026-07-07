@@ -420,6 +420,7 @@ ui_progress :: proc() {
 			fx.set_cursor(.Hand)
 			if fx.key_is_pressed(.Mouse_Left) {
 				audio.muted = !audio.muted
+				audio.reset()
 			}
 		}
 

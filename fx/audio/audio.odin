@@ -116,7 +116,7 @@ open :: proc(path: string, gapless := false) -> bool {
     if state.sample_rate != prev_sample_rate {
         init_wasapi(state.sample_rate)
     } else if gapless == false {
-        state.client->Reset()
+        reset()
     }
 
     return true
@@ -197,7 +197,7 @@ seek :: proc(position: f32) {
         vorbisfile.pcm_seek(d, target_pcm)
     case:
     }
-    state.client->Reset()
+    reset()
 }
 
 position :: proc() -> f32 {
@@ -224,4 +224,8 @@ pause :: proc() {
 
 resume :: proc() {
     state.client->Start()
+}
+
+reset :: proc() {
+    state.client->Reset()
 }
