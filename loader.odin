@@ -116,7 +116,7 @@ load_music :: proc(fullpath: string) -> ^Music {
 	music := new(Music)
 	music.fullpath = strings.clone(fullpath)
 
-	if cached, ok := cache.songs[music.fullpath]; ok {
+	if cached, found := cache.songs[music.fullpath]; found {
 		music^ = cached
 	} else {
 		if meta, ok := audio.metadata(music.fullpath); ok {
