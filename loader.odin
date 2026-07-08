@@ -139,6 +139,8 @@ load_music :: proc(fullpath: string) -> ^Music {
 		music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
 	}
 
+	free_all(context.temp_allocator)
+
 	return music
 }
 
