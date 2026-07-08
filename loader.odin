@@ -11,6 +11,9 @@ import "core:strconv"
 import "core:strings"
 import "core:unicode"
 
+import "core:thread"
+import "core:sync"
+
 import "fx"
 import "fx/audio"
 import "vendor:stb/image"
@@ -43,71 +46,53 @@ Playlist :: struct {
 
 playlists: [dynamic]Playlist
 
-load_music :: proc() {
+loading_mutex: sync.Mutex
+loaded_songs_queue: [dynamic]^Music
+
+loader_start :: proc() {
 	append(&playlists, Playlist{ name = "Liked" })
-	music_dir := os.user_music_dir(context.allocator) or_else panic("Failed to find music dir")
 
-	state: State
-	cache_map := make(map[string]Music, 1024, context.temp_allocator)
+	thread.create_and_start(proc() {
+		music_dir := os.user_music_dir(context.temp_allocator) or_else panic("Failed to find music dir")
 
-	dir, dir_err := os.user_data_dir(context.temp_allocator)
-	if dir_err == nil {
-		save_path := strings.concatenate({dir, "\\fmusic\\save.cbor"}, context.temp_allocator)
-		if data, read_err := os.read_entire_file(save_path, context.temp_allocator); read_err == nil {
-			unmarshal_err := cbor.unmarshal(data, &state, {.Trusted_Input})
-			if unmarshal_err == nil {
-				audio.volume = state.volume
-				for &m in state.songs {
-					cache_map[m.fullpath] = m
-				}
-			}
-		}
-	}
+		cache_load()
 
-	w := os.walker_create(music_dir)
-	defer os.walker_destroy(&w)
+		w := os.walker_create(music_dir)
+		defer os.walker_destroy(&w)
 
-	next: for info in os.walker_walk(&w) {
-		if strings.starts_with(info.fullpath, ".") {
-			os.walker_skip_dir(&w)
-			continue
-		}
-
-    	ext := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
-		if ext != ".opus" && ext != ".ogg" && ext != ".mp3" && ext != ".flac" && ext != ".wav" {
-			continue
-		}
-
-		fullpath := strings.clone(info.fullpath)
-		music := new(Music)
-
-		if cached, ok := cache_map[fullpath]; ok {
-			music^ = cached
-			music.fullpath = fullpath
-		} else {
-			music.fullpath = fullpath
-
-			if meta, ok := audio.metadata(music.fullpath); ok {
-				music.title = meta.title
-				music.artist = meta.artist
-				music.album = meta.album
-				music.track = meta.track
-				music.duration = meta.duration
+		for info in os.walker_walk(&w) {
+			if strings.starts_with(info.fullpath, ".") {
+				os.walker_skip_dir(&w)
+				continue
 			}
 
-			if music.title == "" {
-				music.title = os.stem(music.fullpath)
+			ext := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
+			if ext != ".opus" && ext != ".ogg" && ext != ".mp3" && ext != ".flac" && ext != ".wav" {
+				continue
 			}
 
-			load_lrc(music)
-			load_thumbnail(music)
-		}
+			music := load_music(info.fullpath)
 
-		if len(music.thumbnail_pixels) > 0 {
-			music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
+			sync.guard(&loading_mutex)
+			append(&loaded_songs_queue, music)
 		}
+	})
+}
 
-		playlist_name := os.base(os.dir(fullpath))
+loader_poll :: proc() {
+	sync.lock(&loading_mutex)
+	queue := slice.clone(loaded_songs_queue[:])
+	clear(&loaded_songs_queue)
+	sync.unlock(&loading_mutex)
+
+	if len(queue) == 0 do return
+
+	next: for music in queue {
+		playlist_name := os.base(os.dir(music.fullpath))
+
+		if music.liked {
+			append(&playlists[0].songs, music)
+		}
 
 		for &playlist in playlists[1:] {
 			if playlist.name == playlist_name {
@@ -120,35 +105,41 @@ load_music :: proc() {
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
 
-	for &playlist in playlists[1:] {
-		for song in playlist.songs {
-			if song.liked {
-				append(&playlists[0].songs, song)
-			}
-		}
-	}
-
 	slice.sort_by(playlists[0].songs[:], proc(i, j: ^Music) -> bool {
 		return time.diff(j.liked_timestamp, i.liked_timestamp) > 0
 	})
+
+	delete(queue)
 }
 
-toggle_like :: proc(song: ^Music) {
-	liked_playlist := &playlists[0]
+load_music :: proc(fullpath: string) -> ^Music {
+	music := new(Music)
+	music.fullpath = strings.clone(fullpath)
 
-	if !song.liked {
-		song.liked = true
-		song.liked_timestamp = time.now()
-		inject_at(&liked_playlist.songs, 0, song)
+	if cached, ok := cache.songs[music.fullpath]; ok {
+		music^ = cached
 	} else {
-		song.liked = false
-		for unliked_song, i in liked_playlist.songs {
-			if unliked_song == song {
-				ordered_remove(&liked_playlist.songs, i)
-				break
-			}
+		if meta, ok := audio.metadata(music.fullpath); ok {
+			music.title = meta.title
+			music.artist = meta.artist
+			music.album = meta.album
+			music.track = meta.track
+			music.duration = meta.duration
 		}
+
+		if music.title == "" {
+			music.title = os.stem(music.fullpath)
+		}
+
+		load_lrc(music)
+		load_thumbnail(music)
 	}
+
+	if len(music.thumbnail_pixels) > 0 {
+		music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
+	}
+
+	return music
 }
 
 load_lrc :: proc(music: ^Music) {
@@ -222,28 +213,62 @@ load_thumbnail :: proc(music: ^Music) {
 	}
 }
 
-State :: struct {
-	volume: f32,
-	songs: [dynamic]Music,
+toggle_like :: proc(song: ^Music) {
+	liked_playlist := &playlists[0]
+
+	if !song.liked {
+		song.liked = true
+		song.liked_timestamp = time.now()
+		inject_at(&liked_playlist.songs, 0, song)
+	} else {
+		song.liked = false
+		for unliked_song, i in liked_playlist.songs {
+			if unliked_song == song {
+				ordered_remove(&liked_playlist.songs, i)
+				break
+			}
+		}
+	}
 }
 
-save_cache :: proc() {
+cache : struct {
+	volume: f32,
+	songs: map[string]Music,
+}
+
+cache_load :: proc() {
+	dir, err := os.user_data_dir(context.temp_allocator)
+	if err != nil do return
+
+	save_path := strings.concatenate({dir, "\\fmusic\\cache.cbor"}, context.temp_allocator)
+
+	data, read_err := os.read_entire_file(save_path, context.temp_allocator);
+	if read_err != nil do return
+
+	unmarshal_err := cbor.unmarshal(data, &cache, {.Trusted_Input})
+	if unmarshal_err != nil do return
+
+	audio.volume = cache.volume
+}
+
+cache_save :: proc() {
 	dir, err := os.user_data_dir(context.temp_allocator)
 	if err != nil do return
 
 	fmusic_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
 	os.make_directory(fmusic_dir)
-	save_path := strings.concatenate({fmusic_dir, "\\save.cbor"}, context.temp_allocator)
+	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"}, context.temp_allocator)
 
-	state: State
-	state.volume = audio.volume
+	cache.volume = audio.volume
+	cache.songs = make(map[string]Music, 1024, context.temp_allocator)
+
 	for playlist in playlists[1:] {
 		for m in playlist.songs {
-			append(&state.songs, m^)
+			cache.songs[m.fullpath] = m^
 		}
 	}
 
-	bytes, marshal_err := cbor.marshal(state)
+	bytes, marshal_err := cbor.marshal(cache)
 	if marshal_err == nil {
 		_ = os.write_entire_file(save_path, bytes)
 	}

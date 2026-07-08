@@ -47,18 +47,19 @@ main :: proc() {
 	icons[.Album] = fx.texture_load(#load("assets/album.png"))
 	icons[.Artist] = fx.texture_load(#load("assets/artist.png"))
 
-	load_music()
+	loader_start()
 
 	fx.set_frame_callback(frame)
 	for fx.update() {
 		frame()
 	}
 
-	save_cache()
+	cache_save()
 }
 
 frame :: proc() {
 	free_all(context.temp_allocator)
+	loader_poll()
 	handle_input()
 	player_update()
 
