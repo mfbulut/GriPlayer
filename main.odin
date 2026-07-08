@@ -115,6 +115,15 @@ frame :: proc() {
 }
 
 handle_input :: proc() {
+	if context_menu.selection != nil {
+		if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
+			if !fx.point_in_rect(fx.mouse_pos(), context_menu.rect) {
+				context_menu.selection = nil
+				context_menu.rect = {}
+			}
+		}
+	}
+
 	if search.focused do return
 
 	if fx.key_is_pressed(.Esc) && search.active {
@@ -175,13 +184,6 @@ ui_context_menu :: proc() {
 	song := context_menu.selection
 	if song == nil do return
 
-	if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
-		if !mouse_hover(rect, true) {
-			context_menu.selection = nil
-			return
-		}
-	}
-
 	fx.draw_rect(fx.rect_expand(rect, 4, 4), PRIMARY_BRIGHT, 8)
 	fx.draw_rect(fx.rect_expand(rect, 2, 2), PRIMARY_DARK, 6)
 
@@ -190,21 +192,25 @@ ui_context_menu :: proc() {
 			if ui_button(int(UI_ID.Context_Menu) + 1, layout_next(), "Add to Queue", false, .Add_Last) {
 				append(&player.queue, song)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 2, layout_next(), "Play Next", false, .Add_Next) {
 				inject_at(&player.queue, 0, song)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 3, layout_next(), "Show Artist", false, .Artist) {
 				search_open(artist = song.artist)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 4, layout_next(), "Show Album", false, .Album) {
 				search_open(album = song.album)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 		}
 	}
@@ -355,11 +361,6 @@ ui_detail_panel :: proc() {
 					play_count_str := fmt.tprintf("%d plays", play_count)
 					fx.draw_text(font, play_count_str, layout_next(), 14, TEXT_SECONDARY)
 				}
-
-				if len(player.queue) > 0 {
-					queue_str := fmt.tprintf("Next: %s", player.queue[0].title)
-					fx.draw_text(font, queue_str, layout_next(), 14, ACCENT_BRIGHT)
-				}
 			}
 		}
 
@@ -379,6 +380,7 @@ ui_detail_panel :: proc() {
 		ui_lyrics()
 	}
 }
+
 
 ui_progress :: proc() {
 	mouse := fx.mouse_pos()
