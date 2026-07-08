@@ -542,25 +542,35 @@ ui_queue :: proc() {
 			handle_rect := fx.Rect{visual_rect.x, visual_rect.y, 48, visual_rect.h}
 			handle_hovered := mouse_hover(handle_rect)
 
-			if hovered && fx.key_is_pressed(.Mouse_Left) && drag_id == 0 {
-				if handle_hovered {
-					drag_id = item_id
-					queue_drag_idx = i
-					queue_drag_offset_y = mouse.y - item_rect.y
-				} else {
+			if hovered && drag_id == 0 {
+				if fx.key_is_pressed(.Mouse_Right) {
 					if i < playlist_start {
-						player_play_music(song, false)
 						ordered_remove(&player.queue, i)
-						break
 					} else {
-						for s, idx in player.songs {
-							if s == song {
-								player.cursor = idx
-								break
+						original_playlist_idx := player.cursor + 1 + (i - playlist_start)
+						ordered_remove(&player.songs, original_playlist_idx)
+					}
+					break
+				} else if fx.key_is_pressed(.Mouse_Left) {
+					if handle_hovered {
+						drag_id = item_id
+						queue_drag_idx = i
+						queue_drag_offset_y = mouse.y - item_rect.y
+					} else {
+						if i < playlist_start {
+							player_play_music(song, false)
+							ordered_remove(&player.queue, i)
+							break
+						} else {
+							for s, idx in player.songs {
+								if s == song {
+									player.cursor = idx
+									break
+								}
 							}
+							player_play_music(song, false)
+							break
 						}
-						player_play_music(song, false)
-						break
 					}
 				}
 			}
