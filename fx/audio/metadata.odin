@@ -19,11 +19,10 @@ Metadata :: struct {
 
 metadata :: proc(path: string) -> (meta: Metadata) {
     if strings.has_suffix(path, ".ogg") {
-        vf: vorbisfile.File
-        if ok := vorbisfile.open_file(path, &vf); ok {
-            defer vorbisfile.clear(&vf)
+        if vf := vorbisfile.open_file(path); vf != nil {
+            defer { vorbisfile.clear(vf); free(vf) }
 
-            tags := vorbisfile.comment(&vf, -1)
+            tags := vorbisfile.comment(vf, -1)
             if tags != nil {
                 comments_arr := cast([^]cstring)tags.user_comments
                 lengths_arr := cast([^]i32)tags.comment_lengths
@@ -53,7 +52,7 @@ metadata :: proc(path: string) -> (meta: Metadata) {
                 }
             }
 
-            if pcm_tot := vorbisfile.pcm_total(&vf, -1); pcm_tot > 0 {
+            if pcm_tot := vorbisfile.pcm_total(vf, -1); pcm_tot > 0 {
                 meta.duration = f32(pcm_tot) / 48000.0
             }
             return
@@ -96,11 +95,10 @@ metadata :: proc(path: string) -> (meta: Metadata) {
 
 cover :: proc(path: string) -> []byte {
     if strings.has_suffix(path, ".ogg") {
-        vf: vorbisfile.File
-        if ok := vorbisfile.open_file(path, &vf); ok {
-            defer vorbisfile.clear(&vf)
+        if vf := vorbisfile.open_file(path); vf != nil {
+            defer { vorbisfile.clear(vf); free(vf) }
 
-            tags := vorbisfile.comment(&vf, -1)
+            tags := vorbisfile.comment(vf, -1)
             if tags != nil {
                 comments_arr := cast([^]cstring)tags.user_comments
                 lengths_arr := cast([^]i32)tags.comment_lengths

@@ -86,16 +86,13 @@ open :: proc(path: string, gapless := false) -> bool {
 
     opened := false
     if strings.has_suffix(path, ".ogg") {
-        vf := new(vorbisfile.File)
-        if ok := vorbisfile.open_file(path, vf); ok {
+        if vf := vorbisfile.open_file(path); vf != nil {
             state.decoder = vf
             info := vorbisfile.info(vf, -1)
             state.sample_rate = u32(info.rate)
             state.channels = u32(info.channels)
             state.total_pcm = vorbisfile.pcm_total(vf, -1)
             opened = true
-        } else {
-            free(vf)
         }
     }
 
