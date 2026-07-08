@@ -20,9 +20,9 @@ Info :: struct {
 }
 
 Comment :: struct {
-    user_comments: ^cstring,
-    comment_lengths: ^i32,
-    comments: i32,
+    comments: [^][^]u8,
+    comment_lengths: [^]i32,
+    comments_count: i32,
     vendor: cstring,
 }
 
