@@ -1,8 +1,5 @@
 # GriPlayer
 
-> [!WARNING]
-> GriPlayer is in early development and currently only supports `.opus, .ogg` audio files.
-
 GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 ### [Download Latest Release](https://github.com/mfbulut/GriPlayer/releases/latest)
 
@@ -13,7 +10,7 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **Lyrics:** Search View synchronized lyrics using `.lrc` files.
 - **SMTC:** Full Windows System Media Transport Controls integration.
 - **DirectX 11 & WASAPI:** Built from scratch, low latency, fast performance.
-- **Supported Formats:** Opus, Ogg (Opus), Ogg (vorbis)
+- **Supported Formats:** mp3, flac, wav, opus, ogg
 
 ## Screenshots
 
@@ -24,8 +21,8 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 
 - [x] Cache songs
 - [x] Fast lyrics search
+- [x] Support for mp3 and flac
 - [ ] Playlist management
-- [ ] Support for mp3 and flac
 
 ## Building
 

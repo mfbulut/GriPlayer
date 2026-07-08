@@ -73,8 +73,8 @@ load_music :: proc() {
 			continue
 		}
 
-		ext := os.ext(info.fullpath)
-		if ext != ".opus" && ext != ".ogg" {
+    	ext := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
+		if ext != ".opus" && ext != ".ogg" && ext != ".mp3" && ext != ".flac" && ext != ".wav" {
 			continue
 		}
 
