@@ -71,17 +71,14 @@ Layout_Container :: struct {
 	dir: Layout_Direction,
 	padding: f32,
 	gap: f32,
-
 	grow_size: f32,
 	current_pos: f32,
-
 	scroll_state: ^Scroll_State,
 }
 
 font: fx.Font
 layout_stack: [dynamic]Layout_Container
 animation_state: map[int]f32
-y_animation_state: map[u64]f32
 
 @(deferred_out=layout_end)
 layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 = 0, gap: f32 = 0, dir: Layout_Direction = .Col) -> bool {
@@ -227,15 +224,4 @@ mouse_hover :: proc(rect: fx.Rect, is_overlay: bool = false) -> bool {
 	return fx.point_in_rect(fx.mouse_pos(), rect)
 }
 
-animate_y :: proc(id: u64, target: f32, speed: f32 = 12.0) -> f32 {
-	dt := fx.frame_time()
-	if id not_in y_animation_state {
-		y_animation_state[id] = target
-		return target
-	}
-	
-	current := y_animation_state[id]
-	current = math.lerp(current, target, ease.cubic_out(speed * dt))
-	y_animation_state[id] = current
-	return current
-}
+

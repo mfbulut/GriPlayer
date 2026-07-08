@@ -1,12 +1,44 @@
 package main
 
 import "fx"
+import "core:math"
+import "core:math/ease"
 
 show_queue := false
 queue_scroll: Scroll_State
 
 queue_drag_idx := -1
 queue_drag_offset_y: f32
+
+y_animation_state: map[u64]f32
+
+animate_y :: proc(id: u64, target: f32, speed: f32 = 12.0) -> f32 {
+	dt := fx.frame_time()
+	if id not_in y_animation_state {
+		y_animation_state[id] = target
+		return target
+	}
+
+	current := y_animation_state[id]
+	current = math.lerp(current, target, ease.cubic_out(speed * dt))
+	y_animation_state[id] = current
+	return current
+}
+
+Queue_Item :: struct {
+	is_queue: bool,
+	index:    int,
+	song:     ^Music,
+}
+
+get_queue_item :: proc(combined_index: int, playlist_start: int) -> Queue_Item {
+	if combined_index < playlist_start {
+		return {true, combined_index, player.queue[combined_index]}
+	} else {
+		actual_idx := player.cursor + 1 + (combined_index - playlist_start)
+		return {false, actual_idx, player.songs[actual_idx]}
+	}
+}
 
 ui_queue :: proc() {
 	rect := layout_next()
@@ -22,17 +54,21 @@ ui_queue :: proc() {
 
 		drop_idx := -1
 		drop_is_queue := false
+
 		if queue_drag_idx >= 0 {
-			closest_dist := f32(1000000.0)
-			cur_y := rect.y + 16 - queue_scroll.current
-			gray_line_y: f32 = rect.y + 16 - queue_scroll.current
+			closest_dist: f32 = 1000000.0
+			cur_y: f32 = rect.y + 16 - queue_scroll.current
+			gray_line_y: f32 = cur_y
+
+			dragged_visual_y := mouse.y - queue_drag_offset_y
+
 			for i := 0; i < combined_len; i += 1 {
 				if i == playlist_start && playlist_start > 0 {
 					gray_line_y = cur_y + 8
 					cur_y += 16
 				}
 
-				dist := abs(mouse.y - queue_drag_offset_y - cur_y)
+				dist := abs(dragged_visual_y - cur_y)
 				if dist < closest_dist {
 					closest_dist = dist
 					drop_idx = i
@@ -44,41 +80,36 @@ ui_queue :: proc() {
 				gray_line_y = cur_y + 8
 			}
 
-			drag_center_y := mouse.y - queue_drag_offset_y + 24
+			drag_center_y := dragged_visual_y + 24
 			drop_is_queue = drag_center_y < gray_line_y
 		}
 
-		if drag_id >= int(UI_ID.Queue_Item) && drag_id < int(UI_ID.Queue_Item) + 100000 && !fx.key_is_down(.Mouse_Left) {
+		is_dragging_item := drag_id >= int(UI_ID.Queue_Item) && drag_id < int(UI_ID.Queue_Item) + 100000
+		if is_dragging_item && !fx.key_is_down(.Mouse_Left) {
 			if queue_drag_idx >= 0 {
-				source_is_queue := queue_drag_idx < playlist_start
+				source := get_queue_item(queue_drag_idx, playlist_start)
 
-				if source_is_queue == drop_is_queue && drop_idx == queue_drag_idx {
+				if source.is_queue == drop_is_queue && drop_idx == queue_drag_idx {
+					// Dropped in same position, nothing to do
 				} else if drop_idx >= 0 {
-					song_to_move: ^Music
-					if source_is_queue {
-						song_to_move = player.queue[queue_drag_idx]
+					if source.is_queue {
+						ordered_remove(&player.queue, source.index)
 					} else {
-						song_to_move = player.songs[player.cursor + 1 + (queue_drag_idx - playlist_start)]
-					}
-
-					if source_is_queue {
-						ordered_remove(&player.queue, queue_drag_idx)
-					} else {
-						original_playlist_idx := player.cursor + 1 + (queue_drag_idx - playlist_start)
-						ordered_remove(&player.songs, original_playlist_idx)
+						ordered_remove(&player.songs, source.index)
 					}
 
 					if drop_is_queue {
 						target_idx := clamp(drop_idx, 0, len(player.queue))
-						inject_at(&player.queue, target_idx, song_to_move)
+						inject_at(&player.queue, target_idx, source.song)
 					} else {
 						new_playlist_start := len(player.queue)
 						target_idx := clamp(drop_idx - new_playlist_start, 0, len(player.songs) - (player.cursor + 1))
+
 						actual_playlist_idx := player.cursor + 1 + target_idx
 						if actual_playlist_idx > len(player.songs) {
 							actual_playlist_idx = len(player.songs)
 						}
-						inject_at(&player.songs, actual_playlist_idx, song_to_move)
+						inject_at(&player.songs, actual_playlist_idx, source.song)
 					}
 				}
 			}
@@ -101,23 +132,15 @@ ui_queue :: proc() {
 
 		dragged_rect: fx.Rect
 		dragged_song: ^Music = nil
-		dragged_i: int = -1
 
-		queue_remove_idx := -1
-		queue_remove_is_queue := false
-		queue_play_idx := -1
-		queue_play_is_queue := false
-		queue_play_song: ^Music = nil
+		action_remove: Queue_Item = {false, -1, nil}
+		action_play: Queue_Item = {false, -1, nil}
 
 		used_ids := make([dynamic]u64, context.temp_allocator)
 
 		for i := 0; i < combined_len; i += 1 {
-			song: ^Music
-			if i < playlist_start {
-				song = player.queue[i]
-			} else {
-				song = player.songs[player.cursor + 1 + (i - playlist_start)]
-			}
+			loc := get_queue_item(i, playlist_start)
+			song := loc.song
 
 			stable_id := cast(u64)cast(uintptr)song
 			for true {
@@ -139,9 +162,8 @@ ui_queue :: proc() {
 				div_shift_down_t := animate(int(UI_ID.Queue_Item) + 300000, is_divider_shift_down, 15.0)
 				div_shift_up_t := animate(int(UI_ID.Queue_Item) + 400000, is_divider_shift_up, 15.0)
 
-				div_y := header_rect.y + 48 * div_shift_down_t - 48 * div_shift_up_t
-
-				fx.draw_rect(fx.Rect{rect.x + 14, div_y + 7, rect.w - 28, 2}, PRIMARY_BRIGHT, 1)
+				div_y := header_rect.y + (48 * div_shift_down_t) - (48 * div_shift_up_t)
+				fx.draw_rect({rect.x + 14, div_y + 7, rect.w - 28, 2}, PRIMARY_BRIGHT, 1)
 			}
 
 			item_id := int(UI_ID.Queue_Item) + i
@@ -150,7 +172,6 @@ ui_queue :: proc() {
 			if drag_id == item_id {
 				dragged_rect = item_rect
 				dragged_song = song
-				dragged_i = i
 				y_animation_state[stable_id] = mouse.y - queue_drag_offset_y
 				continue
 			}
@@ -176,17 +197,14 @@ ui_queue :: proc() {
 
 			if hovered && drag_id == 0 {
 				if fx.key_is_pressed(.Mouse_Right) {
-					queue_remove_idx = i
-					queue_remove_is_queue = i < playlist_start
+					action_remove = loc
 				} else if fx.key_is_pressed(.Mouse_Left) {
 					if handle_hovered {
 						drag_id = item_id
 						queue_drag_idx = i
 						queue_drag_offset_y = mouse.y - item_rect.y
 					} else {
-						queue_play_idx = i
-						queue_play_is_queue = i < playlist_start
-						queue_play_song = song
+						action_play = loc
 					}
 				}
 			}
@@ -203,15 +221,18 @@ ui_queue :: proc() {
 			if layout_start({rect.x + 14, visual_rect.y, visual_rect.w - 28, visual_rect.h}) {
 				if layout({48, 36, GROW, 36}, .Row, gap = 12) {
 					layout_next()
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 18, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 23, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 28, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
+
+					handle_color := handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 18, 16, 2}, handle_color, 1)
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 23, 16, 2}, handle_color, 1)
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 28, 16, 2}, handle_color, 1)
 					if handle_hovered do fx.set_cursor(.Hand)
 
 					if layout({GROW, 36, GROW}, .Col) {
 						layout_next()
 						ui_cover(song.thumbnail, 4)
 					}
+
 					if layout({GROW, 20, 20, GROW}, .Col) {
 						layout_next()
 						title_rect := layout_next()
@@ -219,6 +240,7 @@ ui_queue :: proc() {
 						fx.draw_text_faded(font, song.title, title_rect, 16, c1, true)
 						fx.draw_text_faded(font, song.artist, artist_rect, 13, c2, true)
 					}
+
 					if layout({GROW, 38, GROW}, .Col) {
 						layout_next()
 						time_rect := layout_next()
@@ -229,27 +251,26 @@ ui_queue :: proc() {
 			}
 		}
 
-		if queue_remove_idx >= 0 {
-			if queue_remove_is_queue {
-				ordered_remove(&player.queue, queue_remove_idx)
+		if action_remove.song != nil {
+			if action_remove.is_queue {
+				ordered_remove(&player.queue, action_remove.index)
 			} else {
-				original_playlist_idx := player.cursor + 1 + (queue_remove_idx - playlist_start)
-				ordered_remove(&player.songs, original_playlist_idx)
+				ordered_remove(&player.songs, action_remove.index)
 			}
 		}
 
-		if queue_play_idx >= 0 {
-			if queue_play_is_queue {
-				player_play_music(queue_play_song, false)
-				ordered_remove(&player.queue, queue_play_idx)
+		if action_play.song != nil {
+			if action_play.is_queue {
+				player_play_music(action_play.song, false)
+				ordered_remove(&player.queue, action_play.index)
 			} else {
 				for s, idx in player.songs {
-					if s == queue_play_song {
+					if s == action_play.song {
 						player.cursor = idx
 						break
 					}
 				}
-				player_play_music(queue_play_song, false)
+				player_play_music(action_play.song, false)
 			}
 		}
 
@@ -261,12 +282,10 @@ ui_queue :: proc() {
 			fx.draw_rect(dragged_rect, PRIMARY_BRIGHT, 8)
 			fx.draw_rect(fx.rect_expand(dragged_rect, -1, -1), PRIMARY_DARK, 7)
 
-			c1 := TEXT_PRIMARY
-			c2 := TEXT_SECONDARY
-
 			if layout_start({rect.x + 14, dragged_rect.y, dragged_rect.w - 28, dragged_rect.h}) {
 				if layout({48, 36, GROW, 36}, .Row, gap = 12) {
 					layout_next()
+
 					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 18, 16, 2}, TEXT_PRIMARY, 1)
 					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 23, 16, 2}, TEXT_PRIMARY, 1)
 					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 28, 16, 2}, TEXT_PRIMARY, 1)
@@ -275,18 +294,20 @@ ui_queue :: proc() {
 						layout_next()
 						ui_cover(dragged_song.thumbnail, 4)
 					}
+
 					if layout({GROW, 20, 20, GROW}, .Col) {
 						layout_next()
 						title_rect := layout_next()
 						artist_rect := layout_next()
-						fx.draw_text_faded(font, dragged_song.title, title_rect, 16, c1, true)
-						fx.draw_text_faded(font, dragged_song.artist, artist_rect, 13, c2, true)
+						fx.draw_text_faded(font, dragged_song.title, title_rect, 16, TEXT_PRIMARY, true)
+						fx.draw_text_faded(font, dragged_song.artist, artist_rect, 13, TEXT_SECONDARY, true)
 					}
+
 					if layout({GROW, 38, GROW}, .Col) {
 						layout_next()
 						time_rect := layout_next()
 						time_str := format_time(dragged_song.duration)
-						fx.draw_text(font, time_str, time_rect, 13, c2, false, true)
+						fx.draw_text(font, time_str, time_rect, 13, TEXT_SECONDARY, false, true)
 					}
 				}
 			}
