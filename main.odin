@@ -652,6 +652,7 @@ ui_queue :: proc() {
 	}
 }
 
+
 ui_progress :: proc() {
 	mouse := fx.mouse_pos()
 
