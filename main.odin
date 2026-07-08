@@ -17,6 +17,13 @@ scrub_time := f32(-1)
 lyrics_scroll: Scroll_State
 playlist_scroll: Scroll_State
 songs_scroll: Scroll_State
+queue_scroll: Scroll_State
+
+Detail_Tab :: enum { Lyrics, Queue }
+current_detail_tab := Detail_Tab.Lyrics
+
+queue_drag_idx := -1
+queue_drag_offset_y: f32
 
 context_menu : struct {
 	selection: ^Music,
@@ -115,6 +122,15 @@ frame :: proc() {
 }
 
 handle_input :: proc() {
+	if context_menu.selection != nil {
+		if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
+			if !fx.point_in_rect(fx.mouse_pos(), context_menu.rect) {
+				context_menu.selection = nil
+				context_menu.rect = {}
+			}
+		}
+	}
+
 	if search.focused do return
 
 	if fx.key_is_pressed(.Esc) && search.active {
@@ -175,13 +191,6 @@ ui_context_menu :: proc() {
 	song := context_menu.selection
 	if song == nil do return
 
-	if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
-		if !mouse_hover(rect, true) {
-			context_menu.selection = nil
-			return
-		}
-	}
-
 	fx.draw_rect(fx.rect_expand(rect, 4, 4), PRIMARY_BRIGHT, 8)
 	fx.draw_rect(fx.rect_expand(rect, 2, 2), PRIMARY_DARK, 6)
 
@@ -190,21 +199,25 @@ ui_context_menu :: proc() {
 			if ui_button(int(UI_ID.Context_Menu) + 1, layout_next(), "Add to Queue", false, .Add_Last) {
 				append(&player.queue, song)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 2, layout_next(), "Play Next", false, .Add_Next) {
 				inject_at(&player.queue, 0, song)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 3, layout_next(), "Show Artist", false, .Artist) {
 				search_open(artist = song.artist)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 
 			if ui_button(int(UI_ID.Context_Menu) + 4, layout_next(), "Show Album", false, .Album) {
 				search_open(album = song.album)
 				context_menu.selection = nil
+				context_menu.rect = {}
 			}
 		}
 	}
@@ -328,7 +341,7 @@ ui_detail_panel :: proc() {
 		return
 	}
 
-	if layout({128, 8, 56, 24, 36, 8, GROW}, .Col, padding = 8, gap = 8) {
+	if layout({128, 8, 56, 24, 36, 8, 24, 8, GROW}, .Col, padding = 8, gap = 8) {
 		if layout({128, GROW}, .Row, gap = 8) {
 			ui_cover(player.cover, 6)
 
@@ -355,11 +368,6 @@ ui_detail_panel :: proc() {
 					play_count_str := fmt.tprintf("%d plays", play_count)
 					fx.draw_text(font, play_count_str, layout_next(), 14, TEXT_SECONDARY)
 				}
-
-				if len(player.queue) > 0 {
-					queue_str := fmt.tprintf("Next: %s", player.queue[0].title)
-					fx.draw_text(font, queue_str, layout_next(), 14, ACCENT_BRIGHT)
-				}
 			}
 		}
 
@@ -376,7 +384,271 @@ ui_detail_panel :: proc() {
 			layout_next()
 		}
 		layout_next()
-		ui_lyrics()
+		if layout({GROW, 100, 100, GROW}, .Row, gap = 8) {
+			layout_next()
+			if ui_button(int(UI_ID.Lyrics_Tab), layout_next(), "Lyrics", active = current_detail_tab == .Lyrics) {
+				current_detail_tab = .Lyrics
+			}
+			if ui_button(int(UI_ID.Queue_Tab), layout_next(), "Queue", active = current_detail_tab == .Queue) {
+				current_detail_tab = .Queue
+			}
+			layout_next()
+		}
+
+		layout_next()
+		if current_detail_tab == .Lyrics {
+			ui_lyrics()
+		} else {
+			ui_queue()
+		}
+	}
+}
+
+ui_queue :: proc() {
+	rect := layout_next()
+
+	playlist_start := len(player.queue)
+	combined_len := playlist_start
+	if player.music != nil && len(player.songs) > 0 {
+		combined_len += max(0, len(player.songs) - (player.cursor + 1))
+	}
+
+	if layout_start(rect, &queue_scroll, padding = 16) {
+		mouse_y := fx.mouse_pos().y
+		mouse_x := fx.mouse_pos().x
+
+		drop_idx := -1
+		drop_is_queue := false
+		if queue_drag_idx >= 0 {
+			closest_dist := f32(1000000.0)
+			cur_y := rect.y + 16 - queue_scroll.current
+			gray_line_y: f32 = rect.y + 16 - queue_scroll.current
+			for i := 0; i < combined_len; i += 1 {
+				if i == playlist_start && playlist_start > 0 {
+					gray_line_y = cur_y + 8
+					cur_y += 16
+				}
+
+				dist := abs(mouse_y - queue_drag_offset_y - cur_y)
+				if dist < closest_dist {
+					closest_dist = dist
+					drop_idx = i
+				}
+				cur_y += 48
+			}
+
+			if playlist_start == combined_len && playlist_start > 0 {
+				gray_line_y = cur_y + 8
+			}
+
+			drag_center_y := mouse_y - queue_drag_offset_y + 24
+			drop_is_queue = drag_center_y < gray_line_y
+		}
+
+		if drag_id >= int(UI_ID.Queue_Item) && drag_id < int(UI_ID.Queue_Item) + 100000 && !fx.key_is_down(.Mouse_Left) {
+			if queue_drag_idx >= 0 {
+				source_is_queue := queue_drag_idx < playlist_start
+
+				if source_is_queue == drop_is_queue && drop_idx == queue_drag_idx {
+				} else if drop_idx >= 0 {
+					song_to_move: ^Music
+					if source_is_queue {
+						song_to_move = player.queue[queue_drag_idx]
+					} else {
+						song_to_move = player.songs[player.cursor + 1 + (queue_drag_idx - playlist_start)]
+					}
+
+					if source_is_queue {
+						ordered_remove(&player.queue, queue_drag_idx)
+					} else {
+						original_playlist_idx := player.cursor + 1 + (queue_drag_idx - playlist_start)
+						ordered_remove(&player.songs, original_playlist_idx)
+					}
+
+					if drop_is_queue {
+						target_idx := clamp(drop_idx, 0, len(player.queue))
+						inject_at(&player.queue, target_idx, song_to_move)
+					} else {
+						new_playlist_start := len(player.queue)
+						target_idx := clamp(drop_idx - new_playlist_start, 0, len(player.songs) - (player.cursor + 1))
+						actual_playlist_idx := player.cursor + 1 + target_idx
+						if actual_playlist_idx > len(player.songs) {
+							actual_playlist_idx = len(player.songs)
+						}
+						inject_at(&player.songs, actual_playlist_idx, song_to_move)
+					}
+				}
+			}
+
+			drag_id = 0
+			queue_drag_idx = -1
+
+			for k in animation_state {
+				if k >= int(UI_ID.Queue_Item) {
+					delete_key(&animation_state, k)
+				}
+			}
+
+			playlist_start = len(player.queue)
+			combined_len = playlist_start
+			if player.music != nil && len(player.songs) > 0 {
+				combined_len += max(0, len(player.songs) - (player.cursor + 1))
+			}
+		}
+
+		dragged_rect: fx.Rect
+		dragged_song: ^Music = nil
+		dragged_i: int = -1
+
+		for i := 0; i < combined_len; i += 1 {
+			song: ^Music
+			if i < playlist_start {
+				song = player.queue[i]
+			} else {
+				song = player.songs[player.cursor + 1 + (i - playlist_start)]
+			}
+
+			if i == playlist_start && playlist_start > 0 {
+				header_rect := layout_next(16)
+
+				is_divider_shift_down := queue_drag_idx >= 0 && queue_drag_idx >= playlist_start && drop_is_queue
+				is_divider_shift_up := queue_drag_idx >= 0 && queue_drag_idx < playlist_start && !drop_is_queue
+
+				div_shift_down_t := animate(int(UI_ID.Queue_Item) + 300000, is_divider_shift_down, 15.0)
+				div_shift_up_t := animate(int(UI_ID.Queue_Item) + 400000, is_divider_shift_up, 15.0)
+
+				div_y := header_rect.y + 48 * div_shift_down_t - 48 * div_shift_up_t
+
+				fx.draw_rect(fx.Rect{rect.x + 14, div_y + 7, rect.w - 28, 2}, PRIMARY_BRIGHT, 1)
+			}
+
+			item_id := int(UI_ID.Queue_Item) + i
+			item_rect := layout_next(48)
+
+			if !fx.rect_overlapping(rect, item_rect) && drag_id != item_id {
+				continue
+			}
+
+			if drag_id == item_id {
+				dragged_rect = item_rect
+				dragged_song = song
+				dragged_i = i
+				continue
+			}
+
+			visual_rect := item_rect
+			should_shift_down := queue_drag_idx >= 0 && i != queue_drag_idx && i >= drop_idx && i < queue_drag_idx
+			should_shift_up := queue_drag_idx >= 0 && i != queue_drag_idx && i <= drop_idx && i > queue_drag_idx
+
+			shift_down_t := animate(item_id + 100000, should_shift_down, 15.0)
+			shift_up_t := animate(item_id + 200000, should_shift_up, 15.0)
+
+			visual_rect.y += 48 * shift_down_t
+			visual_rect.y -= 48 * shift_up_t
+
+			hovered := mouse_hover(visual_rect)
+			handle_rect := fx.Rect{visual_rect.x, visual_rect.y, 48, visual_rect.h}
+			handle_hovered := mouse_hover(handle_rect)
+
+			if hovered && fx.key_is_pressed(.Mouse_Left) && drag_id == 0 {
+				if handle_hovered {
+					drag_id = item_id
+					queue_drag_idx = i
+					queue_drag_offset_y = mouse_y - item_rect.y
+				} else {
+					if i < playlist_start {
+						player_play_music(song, false)
+						ordered_remove(&player.queue, i)
+						break
+					} else {
+						for s, idx in player.songs {
+							if s == song {
+								player.cursor = idx
+								break
+							}
+						}
+						player_play_music(song, false)
+						break
+					}
+				}
+			}
+
+			anim_t := animate(item_id, hovered)
+			if anim_t > 0 {
+				bg_color := fx.color_lerp(BACKGROUND_COLOR, HOVER_COLOR, anim_t)
+				fx.draw_rect(visual_rect, bg_color, 6)
+			}
+
+			c1 := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
+			c2 := hovered ? TEXT_SECONDARY : fx.color_brightness(TEXT_SECONDARY, 0.6)
+
+			if layout_start({rect.x + 14, visual_rect.y, visual_rect.w - 28, visual_rect.h}) {
+				if layout({48, 36, GROW, 36}, .Row, gap = 12) {
+					layout_next()
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 18, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 23, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
+					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 28, 16, 2}, handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY, 1)
+					if handle_hovered do fx.set_cursor(.Hand)
+
+					if layout({GROW, 36, GROW}, .Col) {
+						layout_next()
+						ui_cover(song.thumbnail, 4)
+					}
+					if layout({GROW, 20, 20, GROW}, .Col) {
+						layout_next()
+						title_rect := layout_next()
+						artist_rect := layout_next()
+						fx.draw_text_faded(font, song.title, title_rect, 16, c1, true)
+						fx.draw_text_faded(font, song.artist, artist_rect, 13, c2, true)
+					}
+					if layout({GROW, 38, GROW}, .Col) {
+						layout_next()
+						time_rect := layout_next()
+						time_str := format_time(song.duration)
+						fx.draw_text(font, time_str, time_rect, 13, c2, false, true)
+					}
+				}
+			}
+		}
+
+		ui_gradients(rect, queue_scroll.current, queue_scroll.content_size, 60, BACKGROUND_COLOR)
+
+		if dragged_song != nil {
+			dragged_rect.y = mouse_y - queue_drag_offset_y
+
+			fx.draw_rect(dragged_rect, PRIMARY_BRIGHT, 8)
+			fx.draw_rect(fx.rect_expand(dragged_rect, -1, -1), PRIMARY_DARK, 7)
+
+			c1 := TEXT_PRIMARY
+			c2 := TEXT_SECONDARY
+
+			if layout_start({rect.x + 14, dragged_rect.y, dragged_rect.w - 28, dragged_rect.h}) {
+				if layout({48, 36, GROW, 36}, .Row, gap = 12) {
+					layout_next()
+					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 18, 16, 2}, TEXT_PRIMARY, 1)
+					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 23, 16, 2}, TEXT_PRIMARY, 1)
+					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 28, 16, 2}, TEXT_PRIMARY, 1)
+
+					if layout({GROW, 36, GROW}, .Col) {
+						layout_next()
+						ui_cover(dragged_song.thumbnail, 4)
+					}
+					if layout({GROW, 20, 20, GROW}, .Col) {
+						layout_next()
+						title_rect := layout_next()
+						artist_rect := layout_next()
+						fx.draw_text_faded(font, dragged_song.title, title_rect, 16, c1, true)
+						fx.draw_text_faded(font, dragged_song.artist, artist_rect, 13, c2, true)
+					}
+					if layout({GROW, 38, GROW}, .Col) {
+						layout_next()
+						time_rect := layout_next()
+						time_str := format_time(dragged_song.duration)
+						fx.draw_text(font, time_str, time_rect, 13, c2, false, true)
+					}
+				}
+			}
+		}
 	}
 }
 

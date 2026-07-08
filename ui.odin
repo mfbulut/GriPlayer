@@ -47,6 +47,9 @@ UI_ID :: enum {
 	Playlist = 10000,
 	Lyric_Hover = 20000,
 	Lyric_Active = 30000,
+	Queue_Tab = 40000,
+	Lyrics_Tab = 40001,
+	Queue_Item = 50000,
 }
 
 icons: [Icon]fx.Texture
