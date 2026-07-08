@@ -99,7 +99,6 @@ open :: proc(path: string, gapless := false) -> bool {
     state.decoder = nil
     prev_sample_rate := state.sample_rate
 
-    opened := false
     ext := strings.to_lower(os.ext(path), context.temp_allocator)
 
     switch ext {
@@ -113,7 +112,7 @@ open :: proc(path: string, gapless := false) -> bool {
         } else {
             return false
         }
-        
+
     case ".ogg":
         if vf := vorbisfile.open_file(path); vf != nil {
             state.decoder = vf

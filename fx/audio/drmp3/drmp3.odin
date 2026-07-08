@@ -1,7 +1,5 @@
 package drmp3
 
-import "core:c"
-
 foreign import dr_libs "../libs/dr_libs.lib"
 
 File :: struct {

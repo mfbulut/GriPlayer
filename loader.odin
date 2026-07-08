@@ -86,15 +86,19 @@ load_music :: proc() {
 			music.fullpath = fullpath
 		} else {
 			music.fullpath = fullpath
-			meta := audio.metadata(music.fullpath)
-			music.title = meta.title
-			music.artist = meta.artist
-			music.album = meta.album
-			music.track = meta.track
-			music.duration = meta.duration
+
+			if meta, ok := audio.metadata(music.fullpath); ok {
+				music.title = meta.title
+				music.artist = meta.artist
+				music.album = meta.album
+				music.track = meta.track
+				music.duration = meta.duration
+			}
+
 			if music.title == "" {
 				music.title = os.stem(music.fullpath)
 			}
+
 			load_lrc(music)
 			load_thumbnail(music)
 		}

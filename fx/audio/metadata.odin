@@ -1,8 +1,6 @@
 package audio
 
-import "base:runtime"
 import "core:os"
-import "core:sys/windows"
 import "core:slice"
 import "core:strings"
 import "core:strconv"
@@ -23,29 +21,25 @@ Metadata :: struct {
     duration: f32,
 }
 
-metadata :: proc(path: string) -> Metadata {
+metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     ext := strings.to_lower(os.ext(path), context.temp_allocator)
 
     switch ext {
     case ".ogg":
-        meta, ok := parse_vorbis_metadata(path)
-        if ok do return meta
+        meta, ok = parse_vorbis_metadata(path)
+        if ok do return
         meta, ok = parse_opus_metadata(path)
-        if ok do return meta
     case ".opus":
-        meta, ok := parse_opus_metadata(path)
+        meta, ok = parse_opus_metadata(path)
     case ".mp3":
-        meta, ok := parse_mp3_metadata(path)
-        if ok do return meta
+        meta, ok = parse_mp3_metadata(path)
     case ".flac":
-        meta, ok := parse_flac_metadata(path)
-        if ok do return meta
+        meta, ok = parse_flac_metadata(path)
     case ".wav":
-        meta, ok := parse_wav_metadata(path)
-        if ok do return meta
+        meta, ok = parse_wav_metadata(path)
     }
 
-    return {}
+    return
 }
 
 cover :: proc(path: string) -> (cover: []byte) {
