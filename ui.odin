@@ -30,7 +30,8 @@ Icon :: enum{
 	Add_Last,
 	Add_Next,
 	Album,
-	Artist
+	Artist,
+	Queue
 }
 
 UI_ID :: enum {

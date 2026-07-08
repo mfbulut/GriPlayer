@@ -11,6 +11,7 @@ import "fx/smtc"
 
 drag_id: int
 playlist_id: int
+show_queue := false
 lyrics_synced := true
 scrub_time := f32(-1)
 
@@ -19,8 +20,6 @@ playlist_scroll: Scroll_State
 songs_scroll: Scroll_State
 queue_scroll: Scroll_State
 
-Detail_Tab :: enum { Lyrics, Queue }
-current_detail_tab := Detail_Tab.Lyrics
 
 queue_drag_idx := -1
 queue_drag_offset_y: f32
@@ -53,6 +52,7 @@ main :: proc() {
 	icons[.Add_Next] = fx.texture_load(#load("assets/add_next.png"))
 	icons[.Album] = fx.texture_load(#load("assets/album.png"))
 	icons[.Artist] = fx.texture_load(#load("assets/artist.png"))
+	icons[.Queue] = fx.texture_load(#load("assets/queue.png"))
 
 	loader_start()
 
@@ -341,7 +341,7 @@ ui_detail_panel :: proc() {
 		return
 	}
 
-	if layout({128, 8, 56, 24, 36, 8, 24, 8, GROW}, .Col, padding = 8, gap = 8) {
+	if layout({128, 8, 56, 24, 36, 8, GROW}, .Col, padding = 8, gap = 8) {
 		if layout({128, GROW}, .Row, gap = 8) {
 			ui_cover(player.cover, 6)
 
@@ -374,7 +374,8 @@ ui_detail_panel :: proc() {
 		layout_next()
 		ui_visualizer()
 		ui_progress()
-		if layout({GROW, 40, 40, 40, 40, 40, GROW}, .Row, gap = 8) {
+		if layout({40, GROW, 40, 40, 40, 40, 40, GROW, 40}, .Row, gap = 8) {
+			layout_next()
 			layout_next()
 			if ui_icon(int(UI_ID.Shuffle), .Shuffle, player.shuffle) do player_toggle_shuffle()
 			if ui_icon(int(UI_ID.Previous), .Previous) do player_prev()
@@ -382,24 +383,16 @@ ui_detail_panel :: proc() {
 			if ui_icon(int(UI_ID.Next), .Next) do player_next()
 			if ui_icon(int(UI_ID.Heart), .Heart, song.liked) do toggle_like(song)
 			layout_next()
-		}
-		layout_next()
-		if layout({GROW, 100, 100, GROW}, .Row, gap = 8) {
-			layout_next()
-			if ui_button(int(UI_ID.Lyrics_Tab), layout_next(), "Lyrics", active = current_detail_tab == .Lyrics) {
-				current_detail_tab = .Lyrics
+			if ui_icon(int(UI_ID.Queue_Tab), .Queue, show_queue) {
+				show_queue = !show_queue
 			}
-			if ui_button(int(UI_ID.Queue_Tab), layout_next(), "Queue", active = current_detail_tab == .Queue) {
-				current_detail_tab = .Queue
-			}
-			layout_next()
 		}
 
 		layout_next()
-		if current_detail_tab == .Lyrics {
-			ui_lyrics()
-		} else {
+		if show_queue {
 			ui_queue()
+		} else {
+			ui_lyrics()
 		}
 	}
 }
@@ -413,7 +406,7 @@ ui_queue :: proc() {
 		combined_len += max(0, len(player.songs) - (player.cursor + 1))
 	}
 
-	if layout_start(rect, &queue_scroll, padding = 16) {
+	if layout_start(rect, &queue_scroll, padding = 8) {
 		mouse := fx.mouse_pos()
 
 		drop_idx := -1
