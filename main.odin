@@ -414,8 +414,7 @@ ui_queue :: proc() {
 	}
 
 	if layout_start(rect, &queue_scroll, padding = 16) {
-		mouse_y := fx.mouse_pos().y
-		mouse_x := fx.mouse_pos().x
+		mouse := fx.mouse_pos()
 
 		drop_idx := -1
 		drop_is_queue := false
@@ -429,7 +428,7 @@ ui_queue :: proc() {
 					cur_y += 16
 				}
 
-				dist := abs(mouse_y - queue_drag_offset_y - cur_y)
+				dist := abs(mouse.y - queue_drag_offset_y - cur_y)
 				if dist < closest_dist {
 					closest_dist = dist
 					drop_idx = i
@@ -441,7 +440,7 @@ ui_queue :: proc() {
 				gray_line_y = cur_y + 8
 			}
 
-			drag_center_y := mouse_y - queue_drag_offset_y + 24
+			drag_center_y := mouse.y - queue_drag_offset_y + 24
 			drop_is_queue = drag_center_y < gray_line_y
 		}
 
@@ -554,7 +553,7 @@ ui_queue :: proc() {
 				if handle_hovered {
 					drag_id = item_id
 					queue_drag_idx = i
-					queue_drag_offset_y = mouse_y - item_rect.y
+					queue_drag_offset_y = mouse.y - item_rect.y
 				} else {
 					if i < playlist_start {
 						player_play_music(song, false)
@@ -614,7 +613,7 @@ ui_queue :: proc() {
 		ui_gradients(rect, queue_scroll.current, queue_scroll.content_size, 60, BACKGROUND_COLOR)
 
 		if dragged_song != nil {
-			dragged_rect.y = mouse_y - queue_drag_offset_y
+			dragged_rect.y = mouse.y - queue_drag_offset_y
 
 			fx.draw_rect(dragged_rect, PRIMARY_BRIGHT, 8)
 			fx.draw_rect(fx.rect_expand(dragged_rect, -1, -1), PRIMARY_DARK, 7)

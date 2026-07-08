@@ -89,7 +89,7 @@ layout_start :: proc(bounds: fx.Rect, scroll: ^Scroll_State = nil, padding: f32 
 		container_size := dir == .Row ? bounds.w : bounds.h
 		max_scroll := max(scroll.content_size + padding * 2 - container_size, 0)
 
-		if mouse_hover(bounds) && mouse_scroll.y != 0 {
+		if fx.point_in_rect(fx.mouse_pos(), bounds) && mouse_scroll.y != 0 {
 			scroll.target = max(scroll.target - mouse_scroll.y * 60, 0)
 		}
 
