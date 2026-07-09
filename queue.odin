@@ -53,7 +53,8 @@ ui_queue :: proc() {
 			separator_rect := queue_visual_separator_rect(layout_next(QUEUE_SEPARATOR_H), rect)
 			queue_draw_separator(separator_rect)
 
-			for song, i in player.songs {
+			for i := queue_songs_start(); i < len(player.songs); i += 1 {
+				song := player.songs[i]
 				item_rect := layout_next(QUEUE_ITEM_H)
 				if queue_draw_item(.Songs, i, song, item_rect, rect) {
 					action_taken = true
@@ -107,6 +108,7 @@ queue_target_from_mouse :: proc(rect: fx.Rect) -> (Queue_List, int) {
 
 	queue_count := queue_list_len_after_remove(.Queue)
 	songs_count := queue_list_len_after_remove(.Songs)
+	songs_start := queue_songs_start()
 
 	best_list := Queue_List.Queue
 	best_index := 0
@@ -126,7 +128,7 @@ queue_target_from_mouse :: proc(rect: fx.Rect) -> (Queue_List, int) {
 		if dist := abs(content_y - slot_center); dist < best_dist {
 			best_dist = dist
 			best_list = .Songs
-			best_index = i
+			best_index = songs_start + i
 		}
 	}
 
@@ -226,6 +228,11 @@ queue_draw_item :: proc(list: Queue_List, index: int, song: ^Music, target_rect,
 			queue_delete_item(list, index, rect)
 			return true
 		}
+	}
+
+	if hovered && !handle_hover && !delete_hover && fx.key_is_pressed(.Mouse_Left) {
+		queue_activate_item(list, index, song)
+		return true
 	}
 
 	cover_rect := fx.Rect{rect.x + 42, rect.y + 6, 34, 34}
@@ -339,19 +346,19 @@ queue_visual_separator_rect :: proc(target_rect, panel_rect: fx.Rect) -> fx.Rect
 
 queue_placeholder_rect :: proc(panel_rect, template: fx.Rect) -> fx.Rect {
 	target := template
-	content_y := queue_content_y(queue_drag.target, queue_adjusted_target_index(), queue_virtual_queue_len())
+	content_y := queue_content_y(queue_drag.target, queue_visible_slot(queue_drag.target, queue_adjusted_target_index()), queue_virtual_queue_len())
 	target.y = panel_rect.y + QUEUE_PADDING - queue_scroll.current + content_y
 	return queue_animated_rect(int(UI_ID.Queue_Item) + 710000, target)
 }
 
 queue_virtual_item_position :: proc(list: Queue_List, index: int) -> (Queue_List, int) {
-	visual_index := index
+	visual_index := queue_visible_slot(list, index)
 
 	if queue_drag.source == list && index > queue_drag.source_index {
 		visual_index -= 1
 	}
 
-	if queue_drag.target == list && visual_index >= queue_adjusted_target_index() {
+	if queue_drag.target == list && visual_index >= queue_visible_slot(list, queue_adjusted_target_index()) {
 		visual_index += 1
 	}
 
@@ -368,11 +375,32 @@ queue_virtual_queue_len :: proc() -> int {
 }
 
 queue_list_len_after_remove :: proc(list: Queue_List) -> int {
-	count := queue_list_len(list)
-	if queue_drag.active && queue_drag.source == list {
+	count := queue_visible_len(list)
+	source_visible := list == .Queue || queue_drag.source_index >= queue_songs_start()
+	if queue_drag.active && queue_drag.source == list && source_visible {
 		count -= 1
 	}
 	return max(count, 0)
+}
+
+queue_songs_start :: proc() -> int {
+	return clamp(player.cursor + 1, 0, len(player.songs))
+}
+
+queue_visible_len :: proc(list: Queue_List) -> int {
+	switch list {
+	case .Queue:
+		return len(player.queue)
+	case .Songs:
+		return max(len(player.songs) - queue_songs_start(), 0)
+	}
+
+	return 0
+}
+
+queue_visible_slot :: proc(list: Queue_List, index: int) -> int {
+	if list == .Queue do return index
+	return index - queue_songs_start()
 }
 
 queue_adjusted_target_index :: proc() -> int {
@@ -385,7 +413,9 @@ queue_adjusted_target_index_for :: proc(source: Queue_List, source_index: int, t
 	if source == target {
 		max_index -= 1
 	}
-	return clamp(index, 0, max_index)
+
+	min_index := target == .Songs ? queue_songs_start() : 0
+	return clamp(index, min_index, max_index)
 }
 
 queue_delete_item :: proc(list: Queue_List, index: int, rect: fx.Rect) {
@@ -398,6 +428,19 @@ queue_delete_item :: proc(list: Queue_List, index: int, rect: fx.Rect) {
 
 	queue_remove_at(list, index)
 	queue_sync_cursor()
+}
+
+queue_activate_item :: proc(list: Queue_List, index: int, song: ^Music) {
+	switch list {
+	case .Queue:
+		player_play_music(song)
+		for i := 0; i <= index && len(player.queue) > 0; i += 1 {
+			ordered_remove(&player.queue, 0)
+		}
+	case .Songs:
+		player.cursor = index
+		player_play_music(song)
+	}
 }
 
 queue_animated_rect :: proc(key: int, target: fx.Rect) -> fx.Rect {
