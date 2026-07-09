@@ -180,6 +180,19 @@ handle_input :: proc() {
 	}
 }
 
+open_context_menu :: proc(song: ^Music) {
+	if (context_menu.selection != nil || drag_id != 0) || !mouse_hover(context_menu.rect, true) {
+		window_size := fx.window_size()
+		menu_w := f32(160)
+		menu_h := 4 * f32(32)
+		pos := fx.mouse_pos()
+		if pos.x + menu_w + 2 > window_size.x do pos.x = window_size.x - menu_w - 2
+		if pos.y + menu_h + 2 > window_size.y do pos.y = window_size.y - menu_h - 2
+		context_menu.rect = {pos.x, pos.y, menu_w, menu_h}
+		context_menu.selection = song
+	}
+}
+
 ui_context_menu :: proc() {
 	rect := context_menu.rect
 	song := context_menu.selection
@@ -280,16 +293,7 @@ ui_songs_panel :: proc(songs: []^Music) {
 			item_rect.w = max(item_rect.w, 0)
 
 			if mouse_hover(item_rect) && fx.key_is_pressed(.Mouse_Right) {
-				if (context_menu.selection != nil || drag_id != 0) || !mouse_hover(context_menu.rect, true) {
-					window_size := fx.window_size()
-					menu_w := f32(160)
-					menu_h := 4 * f32(32)
-					pos := fx.mouse_pos()
-					if pos.x + menu_w + 2 > window_size.x do pos.x = window_size.x - menu_w - 2
-					if pos.y + menu_h + 2 > window_size.y do pos.y = window_size.y - menu_h - 2
-					context_menu.rect = {pos.x, pos.y, menu_w, menu_h}
-					context_menu.selection = song
-				}
+				open_context_menu(song)
 			}
 
 			hovered := mouse_hover(item_rect)
