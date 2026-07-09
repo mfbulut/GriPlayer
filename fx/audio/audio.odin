@@ -98,7 +98,6 @@ open :: proc(path: string, gapless := false) -> bool {
 
     state.decoder = nil
     prev_sample_rate := state.sample_rate
-
     ext := strings.to_lower(os.ext(path), context.temp_allocator)
 
     switch ext {
@@ -130,23 +129,16 @@ open :: proc(path: string, gapless := false) -> bool {
             return false
         }
     case ".mp3":
-        mp3 := new(drmp3.File)
-        cpath := strings.clone_to_cstring(path)
-        defer delete(cpath)
-        if drmp3.init_file(mp3, cpath, nil) {
+        if mp3 := drmp3.open_file(path); mp3 != nil {
             state.decoder = mp3
             state.sample_rate = u32(drmp3.get_sampleRate(mp3))
             state.channels = u32(drmp3.get_channels(mp3))
             state.total_pcm = i64(drmp3.get_pcm_frame_count(mp3))
         } else {
-            free(mp3)
             return false
         }
     case ".flac":
-        cpath := strings.clone_to_cstring(path)
-        defer delete(cpath)
-        flac := drflac.open_file(cpath, nil)
-        if flac != nil {
+        if flac := drflac.open_file(path); flac != nil {
             state.decoder = flac
             state.sample_rate = u32(drflac.get_sampleRate(flac))
             state.channels = u32(drflac.get_channels(flac))
@@ -155,16 +147,12 @@ open :: proc(path: string, gapless := false) -> bool {
             return false
         }
     case ".wav":
-        wav := new(drwav.File)
-        cpath := strings.clone_to_cstring(path)
-        defer delete(cpath)
-        if drwav.init_file(wav, cpath, nil) {
+        if wav := drwav.open_file(path); wav != nil {
             state.decoder = wav
             state.sample_rate = u32(drwav.get_sampleRate(wav))
             state.channels = u32(drwav.get_channels(wav))
             state.total_pcm = i64(drwav.get_totalPCMFrameCount(wav))
         } else {
-            free(wav)
             return false
         }
     }

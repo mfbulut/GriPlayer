@@ -1,6 +1,7 @@
 package vorbisfile
 
 import "core:strings"
+import "core:sys/windows"
 
 foreign import lib { "../libs/vorbisfile.lib", "../libs/vorbis.lib", "../libs/ogg.lib" }
 
@@ -40,10 +41,22 @@ foreign lib {
 
 open_file :: proc(path: string) -> ^File {
     c_path := strings.clone_to_cstring(path, context.temp_allocator)
+
+    // vorbisfile doesnt support UTF-8 for filepath
+    wpath := windows.utf8_to_wstring(path, context.temp_allocator)
+    short_path_len := windows.GetShortPathNameW(wpath, nil, 0)
+    if short_path_len > 0 {
+        short_path_buf := make([]u16, short_path_len, context.temp_allocator)
+        windows.GetShortPathNameW(wpath, cast(windows.wstring)raw_data(short_path_buf), short_path_len)
+        short_path_utf8, _ := windows.wstring_to_utf8(cast(windows.wstring)raw_data(short_path_buf), int(short_path_len), context.temp_allocator)
+        c_path = strings.clone_to_cstring(short_path_utf8, context.temp_allocator)
+    }
+
     vf := new(File)
     if fopen(c_path, vf) != 0 {
         free(vf)
         return nil
     }
+
     return vf
 }

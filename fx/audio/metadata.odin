@@ -6,6 +6,7 @@ import "core:strings"
 import "core:strconv"
 import "core:encoding/base64"
 import "core:encoding/endian"
+import "core:sys/windows"
 
 import "opusfile"
 import "vorbisfile"
@@ -201,13 +202,12 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     if len(data) < 10 || string(data[:3]) != "ID3" do return
     ok = true
 
-    mp3 := new(drmp3.File)
-    cpath := strings.clone_to_cstring(path, context.temp_allocator)
-    if drmp3.init_file(mp3, cpath, nil) {
+    mp3 := drmp3.open_file(path)
+    if mp3 != nil {
         meta.duration = f32(drmp3.get_pcm_frame_count(mp3)) / f32(drmp3.get_sampleRate(mp3))
         drmp3.uninit(mp3)
+        free(mp3)
     }
-    free(mp3)
 
     flags := data[5]
     size := (int(data[6]) << 21) | (int(data[7]) << 14) | (int(data[8]) << 7) | int(data[9])
@@ -331,8 +331,7 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     if len(data) < 4 || string(data[:4]) != "fLaC" do return
     ok = true
 
-    cpath := strings.clone_to_cstring(path, context.temp_allocator)
-    flac := drflac.open_file(cpath, nil)
+    flac := drflac.open_file(path)
     if flac != nil {
         meta.duration = f32(drflac.get_totalPCMFrameCount(flac)) / f32(drflac.get_sampleRate(flac))
         drflac.close(flac)
@@ -429,14 +428,13 @@ parse_flac_cover :: proc(path: string) -> []byte {
 }
 
 parse_wav_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-    wav := new(drwav.File)
-    cpath := strings.clone_to_cstring(path, context.temp_allocator)
-    if drwav.init_file(wav, cpath, nil) {
+    wav := drwav.open_file(path)
+    if wav != nil {
         meta.duration = f32(drwav.get_totalPCMFrameCount(wav)) / f32(drwav.get_sampleRate(wav))
         ok = true
         drwav.uninit(wav)
+        free(wav)
     }
-    free(wav)
 
     return
 }
