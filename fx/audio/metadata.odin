@@ -175,26 +175,7 @@ parse_opus_cover :: proc(path: string) -> []byte {
     return parse_flac_picture(decoded_buf)
 }
 
-parse_flac_picture :: proc(block_data: []byte) -> []byte {
-    if len(block_data) < 32 do return nil
-
-    buf := block_data[4:]
-    mime_len := endian.unchecked_get_u32be(buf)
-    if len(buf) < int(4 + mime_len) do return nil
-    buf = buf[4+mime_len:]
-
-    if len(buf) < 4 do return nil
-    desc_len := endian.unchecked_get_u32be(buf)
-    if len(buf) < int(4 + desc_len + 16) do return nil
-    buf = buf[4+desc_len+16:]
-
-    if len(buf) < 4 do return nil
-    pic_len := endian.unchecked_get_u32be(buf)
-
-    if len(buf) < int(4 + pic_len) do return nil
-
-    return slice.clone(buf[4 : 4+pic_len])
-}
+// MP3
 
 parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     data, err := os.read_entire_file(path, context.temp_allocator)
@@ -209,49 +190,65 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
         free(mp3)
     }
 
+    version := data[3]
     flags := data[5]
     size := (int(data[6]) << 21) | (int(data[7]) << 14) | (int(data[8]) << 7) | int(data[9])
 
     idx := 10
     if (flags & 0x40) != 0 {
         if idx + 4 > len(data) do return
-        ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
-        idx += ext_size
+        if version == 3 {
+            ext_size := int(data[idx])<<24 | int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
+            idx += 4 + ext_size
+        } else {
+            ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
+            idx += ext_size
+        }
     }
 
     end := 10 + size
     if end > len(data) do end = len(data)
 
-    for idx + 10 <= end {
-        frame_id := string(data[idx:idx+4])
-        if frame_id[0] == 0 do break
-
-        version := data[3]
+    for idx < end {
+        frame_id := ""
         frame_size := 0
-        if version >= 4 {
-            frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
+
+        if version == 2 {
+            if idx + 6 > end do break
+            frame_id = string(data[idx:idx+3])
+            if frame_id[0] == 0 do break
+            frame_size = int(data[idx+3])<<16 | int(data[idx+4])<<8 | int(data[idx+5])
+            idx += 6
         } else {
-            frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+            if idx + 10 > end do break
+            frame_id = string(data[idx:idx+4])
+            if frame_id[0] == 0 do break
+            if version >= 4 {
+                frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
+            } else {
+                frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+            }
+            idx += 10
         }
 
-        idx += 10
         if idx + frame_size > end do break
-
         frame_data := data[idx:idx+frame_size]
 
-        if frame_id == "TIT2" && meta.title == "" {
-            meta.title = parse_id3v2_text(frame_data)
-        } else if frame_id == "TPE1" && meta.artist == "" {
-            meta.artist = parse_id3v2_text(frame_data)
-        } else if frame_id == "TALB" && meta.album == "" {
-            meta.album = parse_id3v2_text(frame_data)
-        } else if frame_id == "TRCK" && meta.track == 0 {
-            trck := parse_id3v2_text(frame_data)
-            slash_idx := strings.index_byte(trck, '/')
-            if slash_idx > 0 {
-                trck = trck[:slash_idx]
+        if frame_id == "TIT2" || frame_id == "TT2" {
+            if meta.title == "" do meta.title = parse_id3v2_text(frame_data)
+        } else if frame_id == "TPE1" || frame_id == "TP1" {
+            if meta.artist == "" do meta.artist = parse_id3v2_text(frame_data)
+        } else if frame_id == "TALB" || frame_id == "TAL" {
+            if meta.album == "" do meta.album = parse_id3v2_text(frame_data)
+        } else if frame_id == "TRCK" || frame_id == "TRK" {
+            if meta.track == 0 {
+                trck := parse_id3v2_text(frame_data)
+                slash_idx := strings.index_byte(trck, '/')
+                if slash_idx > 0 {
+                    trck = trck[:slash_idx]
+                }
+                if val, parsed := strconv.parse_int(trck); parsed do meta.track = val
             }
-            if val, parsed := strconv.parse_int(trck); parsed do meta.track = val
         }
 
         idx += frame_size
@@ -265,43 +262,72 @@ parse_mp3_cover :: proc(path: string) -> []byte {
     if err != nil do return nil
     if len(data) < 10 || string(data[:3]) != "ID3" do return nil
 
+    version := data[3]
     flags := data[5]
     size := (int(data[6]) << 21) | (int(data[7]) << 14) | (int(data[8]) << 7) | int(data[9])
 
     idx := 10
     if (flags & 0x40) != 0 {
         if idx + 4 > len(data) do return nil
-        ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
-        idx += ext_size
+        if version == 3 {
+            ext_size := int(data[idx])<<24 | int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
+            idx += 4 + ext_size
+        } else {
+            ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
+            idx += ext_size
+        }
     }
 
     end := 10 + size
     if end > len(data) do end = len(data)
 
-    for idx + 10 <= end {
-        frame_id := string(data[idx:idx+4])
-        if frame_id[0] == 0 do break
-
-        version := data[3]
+    for idx < end {
+        frame_id := ""
         frame_size := 0
-        if version >= 4 {
-            frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
+        frame_unsync := false
+
+        if version == 2 {
+            if idx + 6 > end do break
+            frame_id = string(data[idx:idx+3])
+            if frame_id[0] == 0 do break
+            frame_size = int(data[idx+3])<<16 | int(data[idx+4])<<8 | int(data[idx+5])
+            idx += 6
         } else {
-            frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+            if idx + 10 > end do break
+            frame_id = string(data[idx:idx+4])
+            if frame_id[0] == 0 do break
+            if version >= 4 {
+                frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
+                if (data[idx+9] & 0x02) != 0 do frame_unsync = true
+            } else {
+                frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+            }
+            idx += 10
         }
 
-        idx += 10
         if idx + frame_size > end do break
-
         frame_data := data[idx:idx+frame_size]
 
-        if frame_id == "APIC" {
+        if frame_id == "APIC" || frame_id == "PIC" {
             for i in 0..<len(frame_data)-3 {
-                if frame_data[i] == 0xFF && frame_data[i+1] == 0xD8 && frame_data[i+2] == 0xFF {
-                    return slice.clone(frame_data[i:])
-                }
-                if frame_data[i] == 0x89 && frame_data[i+1] == 0x50 && frame_data[i+2] == 0x4E && frame_data[i+3] == 0x47 {
-                    return slice.clone(frame_data[i:])
+                if (frame_data[i] == 0xFF && frame_data[i+1] == 0xD8 && frame_data[i+2] == 0xFF) ||
+                   (frame_data[i] == 0x89 && frame_data[i+1] == 0x50 && frame_data[i+2] == 0x4E && frame_data[i+3] == 0x47) {
+
+                    img_data := frame_data[i:]
+                    if (flags & 0x80) != 0 || frame_unsync {
+                        decoded := make([]byte, len(img_data))
+                        dest_idx := 0
+                        for j := 0; j < len(img_data); j += 1 {
+                            decoded[dest_idx] = img_data[j]
+                            dest_idx += 1
+                            if img_data[j] == 0xFF && j+1 < len(img_data) && img_data[j+1] == 0x00 {
+                                j += 1
+                            }
+                        }
+                        return decoded[:dest_idx]
+                    } else {
+                        return slice.clone(img_data)
+                    }
                 }
             }
         }
@@ -324,6 +350,9 @@ parse_id3v2_text :: proc(data: []byte) -> string {
     }
     return strings.clone(string(res[:]))
 }
+
+
+// Flac
 
 parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     data, err := os.read_entire_file(path, context.temp_allocator)
@@ -427,6 +456,29 @@ parse_flac_cover :: proc(path: string) -> []byte {
     return nil
 }
 
+parse_flac_picture :: proc(block_data: []byte) -> []byte {
+    if len(block_data) < 32 do return nil
+
+    buf := block_data[4:]
+    mime_len := endian.unchecked_get_u32be(buf)
+    if len(buf) < int(4 + mime_len) do return nil
+    buf = buf[4+mime_len:]
+
+    if len(buf) < 4 do return nil
+    desc_len := endian.unchecked_get_u32be(buf)
+    if len(buf) < int(4 + desc_len + 16) do return nil
+    buf = buf[4+desc_len+16:]
+
+    if len(buf) < 4 do return nil
+    pic_len := endian.unchecked_get_u32be(buf)
+
+    if len(buf) < int(4 + pic_len) do return nil
+
+    return slice.clone(buf[4 : 4+pic_len])
+}
+
+// WAV
+
 parse_wav_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
     wav := drwav.open_file(path)
     if wav != nil {
@@ -435,6 +487,5 @@ parse_wav_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
         drwav.uninit(wav)
         free(wav)
     }
-
     return
 }
