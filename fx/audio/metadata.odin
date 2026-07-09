@@ -178,36 +178,41 @@ parse_opus_cover :: proc(path: string) -> []byte {
 // MP3
 
 parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-    data, err := os.read_entire_file(path, context.temp_allocator)
+    mp3 := drmp3.open_file(path)
+    if mp3 == nil do return
+    meta.duration = f32(drmp3.get_pcm_frame_count(mp3)) / f32(drmp3.get_sampleRate(mp3))
+    drmp3.uninit(mp3)
+    free(mp3)
+
+    f, err := os.open(path)
     if err != nil do return
-    if len(data) < 10 || string(data[:3]) != "ID3" do return
+    defer os.close(f)
     ok = true
 
-    mp3 := drmp3.open_file(path)
-    if mp3 != nil {
-        meta.duration = f32(drmp3.get_pcm_frame_count(mp3)) / f32(drmp3.get_sampleRate(mp3))
-        drmp3.uninit(mp3)
-        free(mp3)
-    }
+    header: [10]byte
+    if n, _ := os.read(f, header[:]); n < 10 do return
+    if string(header[:3]) != "ID3" do return
 
-    version := data[3]
-    flags := data[5]
-    size := (int(data[6]) << 21) | (int(data[7]) << 14) | (int(data[8]) << 7) | int(data[9])
+    version := header[3]
+    flags := header[5]
+    size := (int(header[6]) << 21) | (int(header[7]) << 14) | (int(header[8]) << 7) | int(header[9])
 
     idx := 10
     if (flags & 0x40) != 0 {
-        if idx + 4 > len(data) do return
+        ext_header: [4]byte
+        if n, _ := os.read(f, ext_header[:]); n < 4 do return
         if version == 3 {
-            ext_size := int(data[idx])<<24 | int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
+            ext_size := int(ext_header[0])<<24 | int(ext_header[1])<<16 | int(ext_header[2])<<8 | int(ext_header[3])
+            os.seek(f, i64(ext_size), .Current)
             idx += 4 + ext_size
         } else {
-            ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
+            ext_size := (int(ext_header[0]) << 21) | (int(ext_header[1]) << 14) | (int(ext_header[2]) << 7) | int(ext_header[3])
+            os.seek(f, i64(ext_size - 4), .Current)
             idx += ext_size
         }
     }
 
     end := 10 + size
-    if end > len(data) do end = len(data)
 
     for idx < end {
         frame_id := ""
@@ -215,40 +220,54 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 
         if version == 2 {
             if idx + 6 > end do break
-            frame_id = string(data[idx:idx+3])
+            fh: [6]byte
+            if n, _ := os.read(f, fh[:]); n < 6 do break
+            frame_id = string(fh[:3])
             if frame_id[0] == 0 do break
-            frame_size = int(data[idx+3])<<16 | int(data[idx+4])<<8 | int(data[idx+5])
+            frame_size = int(fh[3])<<16 | int(fh[4])<<8 | int(fh[5])
             idx += 6
         } else {
             if idx + 10 > end do break
-            frame_id = string(data[idx:idx+4])
+            fh: [10]byte
+            if n, _ := os.read(f, fh[:]); n < 10 do break
+            frame_id = string(fh[:4])
             if frame_id[0] == 0 do break
             if version >= 4 {
-                frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
+                frame_size = (int(fh[4]) << 21) | (int(fh[5]) << 14) | (int(fh[6]) << 7) | int(fh[7])
             } else {
-                frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+                frame_size = int(fh[4])<<24 | int(fh[5])<<16 | int(fh[6])<<8 | int(fh[7])
             }
             idx += 10
         }
 
         if idx + frame_size > end do break
-        frame_data := data[idx:idx+frame_size]
 
-        if frame_id == "TIT2" || frame_id == "TT2" {
-            if meta.title == "" do meta.title = parse_id3v2_text(frame_data)
-        } else if frame_id == "TPE1" || frame_id == "TP1" {
-            if meta.artist == "" do meta.artist = parse_id3v2_text(frame_data)
-        } else if frame_id == "TALB" || frame_id == "TAL" {
-            if meta.album == "" do meta.album = parse_id3v2_text(frame_data)
-        } else if frame_id == "TRCK" || frame_id == "TRK" {
-            if meta.track == 0 {
-                trck := parse_id3v2_text(frame_data)
-                slash_idx := strings.index_byte(trck, '/')
-                if slash_idx > 0 {
-                    trck = trck[:slash_idx]
+        if frame_id == "TIT2" || frame_id == "TT2" ||
+           frame_id == "TPE1" || frame_id == "TP1" ||
+           frame_id == "TALB" || frame_id == "TAL" ||
+           frame_id == "TRCK" || frame_id == "TRK" {
+
+            frame_data := make([]byte, frame_size, context.temp_allocator)
+            if n, _ := os.read(f, frame_data); n < frame_size do break
+
+            if frame_id == "TIT2" || frame_id == "TT2" {
+                if meta.title == "" do meta.title = parse_id3v2_text(frame_data)
+            } else if frame_id == "TPE1" || frame_id == "TP1" {
+                if meta.artist == "" do meta.artist = parse_id3v2_text(frame_data)
+            } else if frame_id == "TALB" || frame_id == "TAL" {
+                if meta.album == "" do meta.album = parse_id3v2_text(frame_data)
+            } else if frame_id == "TRCK" || frame_id == "TRK" {
+                if meta.track == 0 {
+                    trck := parse_id3v2_text(frame_data)
+                    slash_idx := strings.index_byte(trck, '/')
+                    if slash_idx > 0 {
+                        trck = trck[:slash_idx]
+                    }
+                    if val, parsed := strconv.parse_int(trck); parsed do meta.track = val
                 }
-                if val, parsed := strconv.parse_int(trck); parsed do meta.track = val
             }
+        } else {
+            os.seek(f, i64(frame_size), .Current)
         }
 
         idx += frame_size
@@ -258,28 +277,34 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 }
 
 parse_mp3_cover :: proc(path: string) -> []byte {
-    data, err := os.read_entire_file(path, context.temp_allocator)
+    f, err := os.open(path)
     if err != nil do return nil
-    if len(data) < 10 || string(data[:3]) != "ID3" do return nil
+    defer os.close(f)
 
-    version := data[3]
-    flags := data[5]
-    size := (int(data[6]) << 21) | (int(data[7]) << 14) | (int(data[8]) << 7) | int(data[9])
+    header: [10]byte
+    if n, _ := os.read(f, header[:]); n < 10 do return nil
+    if string(header[:3]) != "ID3" do return nil
+
+    version := header[3]
+    flags := header[5]
+    size := (int(header[6]) << 21) | (int(header[7]) << 14) | (int(header[8]) << 7) | int(header[9])
 
     idx := 10
     if (flags & 0x40) != 0 {
-        if idx + 4 > len(data) do return nil
+        ext_header: [4]byte
+        if n, _ := os.read(f, ext_header[:]); n < 4 do return nil
         if version == 3 {
-            ext_size := int(data[idx])<<24 | int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
+            ext_size := int(ext_header[0])<<24 | int(ext_header[1])<<16 | int(ext_header[2])<<8 | int(ext_header[3])
+            os.seek(f, i64(ext_size), .Current)
             idx += 4 + ext_size
         } else {
-            ext_size := (int(data[idx]) << 21) | (int(data[idx+1]) << 14) | (int(data[idx+2]) << 7) | int(data[idx+3])
+            ext_size := (int(ext_header[0]) << 21) | (int(ext_header[1]) << 14) | (int(ext_header[2]) << 7) | int(ext_header[3])
+            os.seek(f, i64(ext_size - 4), .Current)
             idx += ext_size
         }
     }
 
     end := 10 + size
-    if end > len(data) do end = len(data)
 
     for idx < end {
         frame_id := ""
@@ -288,27 +313,33 @@ parse_mp3_cover :: proc(path: string) -> []byte {
 
         if version == 2 {
             if idx + 6 > end do break
-            frame_id = string(data[idx:idx+3])
+            fh: [6]byte
+            if n, _ := os.read(f, fh[:]); n < 6 do break
+            frame_id = string(fh[:3])
             if frame_id[0] == 0 do break
-            frame_size = int(data[idx+3])<<16 | int(data[idx+4])<<8 | int(data[idx+5])
+            frame_size = int(fh[3])<<16 | int(fh[4])<<8 | int(fh[5])
             idx += 6
         } else {
             if idx + 10 > end do break
-            frame_id = string(data[idx:idx+4])
+            fh: [10]byte
+            if n, _ := os.read(f, fh[:]); n < 10 do break
+            frame_id = string(fh[:4])
             if frame_id[0] == 0 do break
             if version >= 4 {
-                frame_size = (int(data[idx+4]) << 21) | (int(data[idx+5]) << 14) | (int(data[idx+6]) << 7) | int(data[idx+7])
-                if (data[idx+9] & 0x02) != 0 do frame_unsync = true
+                frame_size = (int(fh[4]) << 21) | (int(fh[5]) << 14) | (int(fh[6]) << 7) | int(fh[7])
+                if (fh[9] & 0x02) != 0 do frame_unsync = true
             } else {
-                frame_size = int(data[idx+4])<<24 | int(data[idx+5])<<16 | int(data[idx+6])<<8 | int(data[idx+7])
+                frame_size = int(fh[4])<<24 | int(fh[5])<<16 | int(fh[6])<<8 | int(fh[7])
             }
             idx += 10
         }
 
         if idx + frame_size > end do break
-        frame_data := data[idx:idx+frame_size]
 
         if frame_id == "APIC" || frame_id == "PIC" {
+            frame_data := make([]byte, frame_size, context.temp_allocator)
+            if n, _ := os.read(f, frame_data); n < frame_size do break
+
             for i in 0..<len(frame_data)-3 {
                 if (frame_data[i] == 0xFF && frame_data[i+1] == 0xD8 && frame_data[i+2] == 0xFF) ||
                    (frame_data[i] == 0x89 && frame_data[i+1] == 0x50 && frame_data[i+2] == 0x4E && frame_data[i+3] == 0x47) {
@@ -330,6 +361,8 @@ parse_mp3_cover :: proc(path: string) -> []byte {
                     }
                 }
             }
+        } else {
+            os.seek(f, i64(frame_size), .Current)
         }
 
         idx += frame_size
@@ -355,32 +388,32 @@ parse_id3v2_text :: proc(data: []byte) -> string {
 // Flac
 
 parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-    data, err := os.read_entire_file(path, context.temp_allocator)
+    flac := drflac.open_file(path)
+    if flac == nil do return
+    meta.duration = f32(drflac.get_totalPCMFrameCount(flac)) / f32(drflac.get_sampleRate(flac))
+    drflac.close(flac)
+
+    f, err := os.open(path)
     if err != nil do return
-    if len(data) < 4 || string(data[:4]) != "fLaC" do return
+    defer os.close(f)
     ok = true
 
-    flac := drflac.open_file(path)
-    if flac != nil {
-        meta.duration = f32(drflac.get_totalPCMFrameCount(flac)) / f32(drflac.get_sampleRate(flac))
-        drflac.close(flac)
-    }
+    header: [4]byte
+    if n, _ := os.read(f, header[:]); n < 4 do return
+    if string(header[:4]) != "fLaC" do return
 
-    idx := 4
-    for idx < len(data) {
-        header := data[idx]
-        is_last := (header & 0x80) != 0
-        block_type := header & 0x7F
+    for {
+        fh: [4]byte
+        if n, _ := os.read(f, fh[:]); n < 4 do break
 
-        if idx + 4 > len(data) do break
-        length := int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
-        idx += 4
+        is_last := (fh[0] & 0x80) != 0
+        block_type := fh[0] & 0x7F
+        length := int(fh[1])<<16 | int(fh[2])<<8 | int(fh[3])
 
-        if idx + length > len(data) do break
+        if block_type == 4 {
+            block_data := make([]byte, length, context.temp_allocator)
+            if n, _ := os.read(f, block_data); n < length do break
 
-        block_data := data[idx : idx+length]
-
-        if block_type == 4 { // VORBIS_COMMENT
             if len(block_data) >= 4 {
                 vendor_len := int(endian.unchecked_get_u32le(block_data[0:4]))
                 offset := 4 + vendor_len
@@ -417,40 +450,42 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
                     }
                 }
             }
+        } else {
+            os.seek(f, i64(length), .Current)
         }
 
         if is_last do break
-        idx += length
     }
 
     return
 }
 
 parse_flac_cover :: proc(path: string) -> []byte {
-    data, err := os.read_entire_file(path, context.temp_allocator)
+    f, err := os.open(path)
     if err != nil do return nil
-    if len(data) < 4 || string(data[:4]) != "fLaC" do return nil
+    defer os.close(f)
 
-    idx := 4
-    for idx < len(data) {
-        header := data[idx]
-        is_last := (header & 0x80) != 0
-        block_type := header & 0x7F
+    header: [4]byte
+    if n, _ := os.read(f, header[:]); n < 4 do return nil
+    if string(header[:4]) != "fLaC" do return nil
 
-        if idx + 4 > len(data) do break
-        length := int(data[idx+1])<<16 | int(data[idx+2])<<8 | int(data[idx+3])
-        idx += 4
+    for {
+        fh: [4]byte
+        if n, _ := os.read(f, fh[:]); n < 4 do break
 
-        if idx + length > len(data) do break
-
-        block_data := data[idx : idx+length]
+        is_last := (fh[0] & 0x80) != 0
+        block_type := fh[0] & 0x7F
+        length := int(fh[1])<<16 | int(fh[2])<<8 | int(fh[3])
 
         if block_type == 6 { // PICTURE
+            block_data := make([]byte, length, context.temp_allocator)
+            if n, _ := os.read(f, block_data); n < length do break
             return parse_flac_picture(block_data)
+        } else {
+            os.seek(f, i64(length), .Current)
         }
 
         if is_last do break
-        idx += length
     }
 
     return nil
