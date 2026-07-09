@@ -102,34 +102,35 @@ queue_auto_scroll :: proc(rect: fx.Rect) {
 }
 
 queue_target_from_mouse :: proc(rect: fx.Rect) -> (Queue_List, int) {
-	content_y := fx.mouse_pos().y - rect.y + queue_scroll.current - QUEUE_PADDING
-	queue_count := len(player.queue)
+	drag_center_y := fx.mouse_pos().y - queue_drag.grab_y + QUEUE_ITEM_H * 0.5
+	content_y := drag_center_y - rect.y + queue_scroll.current - QUEUE_PADDING
 
-	for i in 0..<queue_count {
-		row_y := f32(i) * (QUEUE_ITEM_H + QUEUE_GAP)
-		if content_y < row_y + QUEUE_ITEM_H * 0.5 {
-			return .Queue, i
+	queue_count := queue_list_len_after_remove(.Queue)
+	songs_count := queue_list_len_after_remove(.Songs)
+
+	best_list := Queue_List.Queue
+	best_index := 0
+	best_dist := f32(1.0e9)
+
+	for i in 0..=queue_count {
+		slot_center := queue_content_y(.Queue, i, queue_count) + QUEUE_ITEM_H * 0.5
+		if dist := abs(content_y - slot_center); dist < best_dist {
+			best_dist = dist
+			best_list = .Queue
+			best_index = i
 		}
 	}
 
-	separator_y := f32(queue_count) * (QUEUE_ITEM_H + QUEUE_GAP)
-	if content_y < separator_y + QUEUE_SEPARATOR_H * 0.5 {
-		return .Queue, queue_count
-	}
-
-	songs_y := separator_y + QUEUE_SEPARATOR_H + QUEUE_GAP
-	if content_y < songs_y {
-		return .Songs, 0
-	}
-
-	for i in 0..<len(player.songs) {
-		row_y := songs_y + f32(i) * (QUEUE_ITEM_H + QUEUE_GAP)
-		if content_y < row_y + QUEUE_ITEM_H * 0.5 {
-			return .Songs, i
+	for i in 0..=songs_count {
+		slot_center := queue_content_y(.Songs, i, queue_count) + QUEUE_ITEM_H * 0.5
+		if dist := abs(content_y - slot_center); dist < best_dist {
+			best_dist = dist
+			best_list = .Songs
+			best_index = i
 		}
 	}
 
-	return .Songs, len(player.songs)
+	return best_list, best_index
 }
 
 queue_finish_drag :: proc() {
@@ -147,7 +148,7 @@ queue_finish_drag :: proc() {
 	destination_index := queue_drag.target_index
 
 	if queue_drag.source == destination {
-		if destination_index == queue_drag.source_index || destination_index == queue_drag.source_index + 1 {
+		if destination_index == queue_drag.source_index {
 			return
 		}
 	}
@@ -366,16 +367,20 @@ queue_virtual_queue_len :: proc() -> int {
 	return count
 }
 
+queue_list_len_after_remove :: proc(list: Queue_List) -> int {
+	count := queue_list_len(list)
+	if queue_drag.active && queue_drag.source == list {
+		count -= 1
+	}
+	return max(count, 0)
+}
+
 queue_adjusted_target_index :: proc() -> int {
 	return queue_adjusted_target_index_for(queue_drag.source, queue_drag.source_index, queue_drag.target, queue_drag.target_index)
 }
 
 queue_adjusted_target_index_for :: proc(source: Queue_List, source_index: int, target: Queue_List, target_index: int) -> int {
 	index := target_index
-	if source == target && index > source_index {
-		index -= 1
-	}
-
 	max_index := queue_list_len(target)
 	if source == target {
 		max_index -= 1
