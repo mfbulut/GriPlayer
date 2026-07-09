@@ -40,6 +40,94 @@ get_queue_item :: proc(combined_index: int, playlist_start: int) -> Queue_Item {
 	}
 }
 
+ui_queue_item :: proc(loc: Queue_Item, item_rect, visual_rect: fx.Rect, item_id, index: int, is_dragged: bool, rect: fx.Rect) -> bool {
+	song := loc.song
+	hovered := !is_dragged && mouse_hover(visual_rect)
+
+	if anim_t := animate(item_id, hovered); anim_t > 0 {
+		fx.draw_rect(visual_rect, fx.color_lerp(BACKGROUND_COLOR, HOVER_COLOR, anim_t), 6)
+	}
+
+	c1 := hovered || is_dragged ? TEXT_PRIMARY : TEXT_SECONDARY
+	c2 := hovered || is_dragged ? TEXT_SECONDARY : fx.color_brightness(TEXT_SECONDARY, 0.6)
+
+	action_taken := false
+
+	if layout_start({rect.x + 14, visual_rect.y, visual_rect.w - 28, visual_rect.h}) {
+		if layout({36, 36, GROW, 36, 16}, .Row, gap = 12) {
+
+			h_rect := layout_next()
+			h_hover := !is_dragged && mouse_hover({h_rect.x, visual_rect.y, 48, visual_rect.h})
+			h_col := h_hover || is_dragged ? TEXT_PRIMARY : TEXT_SECONDARY
+			h_pos := fx.rect_center(h_rect)
+
+			for i in -1..=1 {
+				fx.draw_rect({h_pos.x - 8, h_pos.y + f32(i * 5), 16, 2}, h_col, 1)
+			}
+			if h_hover do fx.set_cursor(.Hand)
+
+			if layout({GROW, 36, GROW}, .Col) {
+				layout_next()
+				ui_cover(song.thumbnail, 4)
+			}
+
+			if layout({GROW, 20, 20, GROW}, .Col) {
+				layout_next()
+				title_rect := layout_next()
+				artist_rect := layout_next()
+				fx.draw_text_faded(font, song.title, title_rect, 16, c1, true)
+				fx.draw_text_faded(font, song.artist, artist_rect, 13, c2, true)
+			}
+
+			if layout({GROW, 38, GROW}, .Col) {
+				layout_next()
+				time_rect := layout_next()
+				fx.draw_text(font, format_time(song.duration), time_rect, 13, c2, false, true)
+			}
+
+			c_rect := layout_next()
+			c_hover := !is_dragged && mouse_hover({c_rect.x - 16, visual_rect.y, 48, visual_rect.h})
+			c_col := c_hover || is_dragged ? TEXT_PRIMARY : TEXT_SECONDARY
+			c_pos := fx.rect_center(c_rect)
+
+			fx.draw_texture(icons[.Cross], {c_pos.x - 7, c_pos.y - 7, 14, 14}, c_col)
+			if c_hover do fx.set_cursor(.Hand)
+
+			if hovered && !is_dragged {
+				if fx.key_is_pressed(.Mouse_Right) {
+					open_context_menu(song)
+				} else if fx.key_is_pressed(.Mouse_Left) {
+					if h_hover {
+						drag_id = item_id
+						queue_drag_idx = index
+						queue_drag_offset_y = fx.mouse_pos().y - item_rect.y
+					} else if c_hover {
+						if loc.is_queue do ordered_remove(&player.queue, loc.index)
+						else do ordered_remove(&player.songs, loc.index)
+						action_taken = true
+					} else {
+						if loc.is_queue {
+							player_play_music(song, false)
+							ordered_remove(&player.queue, loc.index)
+						} else {
+							for s, idx in player.songs {
+								if s == song {
+									player.cursor = idx
+									break
+								}
+							}
+							player_play_music(song, false)
+						}
+						action_taken = true
+					}
+				}
+			}
+		}
+	}
+
+	return action_taken
+}
+
 ui_queue :: proc() {
 	rect := layout_next()
 
@@ -90,7 +178,6 @@ ui_queue :: proc() {
 				source := get_queue_item(queue_drag_idx, playlist_start)
 
 				if source.is_queue == drop_is_queue && drop_idx == queue_drag_idx {
-					// Dropped in same position, nothing to do
 				} else if drop_idx >= 0 {
 					if source.is_queue {
 						ordered_remove(&player.queue, source.index)
@@ -132,9 +219,6 @@ ui_queue :: proc() {
 
 		dragged_rect: fx.Rect
 		dragged_song: ^Music = nil
-
-		action_remove: Queue_Item = {false, -1, nil}
-		action_play: Queue_Item = {false, -1, nil}
 
 		used_ids := make([dynamic]u64, context.temp_allocator)
 
@@ -191,100 +275,8 @@ ui_queue :: proc() {
 				continue
 			}
 
-			hovered := mouse_hover(visual_rect)
-			handle_rect := fx.Rect{visual_rect.x, visual_rect.y, 48, visual_rect.h}
-			handle_hovered := mouse_hover(handle_rect)
-			cross_rect := fx.Rect{(rect.x + 14) + (visual_rect.w - 28) - 36, visual_rect.y, 36, visual_rect.h}
-			cross_hovered := mouse_hover(cross_rect)
-
-			if hovered && drag_id == 0 {
-				if fx.key_is_pressed(.Mouse_Right) {
-					open_context_menu(song)
-				} else if fx.key_is_pressed(.Mouse_Left) {
-					if handle_hovered {
-						drag_id = item_id
-						queue_drag_idx = i
-						queue_drag_offset_y = mouse.y - item_rect.y
-					} else if cross_hovered {
-						action_remove = loc
-					} else {
-						action_play = loc
-					}
-				}
-			}
-
-			anim_t := animate(item_id, hovered)
-			if anim_t > 0 {
-				bg_color := fx.color_lerp(BACKGROUND_COLOR, HOVER_COLOR, anim_t)
-				fx.draw_rect(visual_rect, bg_color, 6)
-			}
-
-			c1 := hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-			c2 := hovered ? TEXT_SECONDARY : fx.color_brightness(TEXT_SECONDARY, 0.6)
-
-			if layout_start({rect.x + 14, visual_rect.y, visual_rect.w - 28, visual_rect.h}) {
-				if layout({48, 36, GROW, 36, 36}, .Row, gap = 12) {
-					layout_next()
-
-					handle_color := handle_hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 18, 16, 2}, handle_color, 1)
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 23, 16, 2}, handle_color, 1)
-					fx.draw_rect({handle_rect.x + 16, handle_rect.y + 28, 16, 2}, handle_color, 1)
-					if handle_hovered do fx.set_cursor(.Hand)
-
-					if layout({GROW, 36, GROW}, .Col) {
-						layout_next()
-						ui_cover(song.thumbnail, 4)
-					}
-
-					if layout({GROW, 20, 20, GROW}, .Col) {
-						layout_next()
-						title_rect := layout_next()
-						artist_rect := layout_next()
-						fx.draw_text_faded(font, song.title, title_rect, 16, c1, true)
-						fx.draw_text_faded(font, song.artist, artist_rect, 13, c2, true)
-					}
-
-					if layout({GROW, 38, GROW}, .Col) {
-						layout_next()
-						time_rect := layout_next()
-						time_str := format_time(song.duration)
-						fx.draw_text(font, time_str, time_rect, 13, c2, false, true)
-					}
-
-					if layout({GROW, 36, GROW}, .Col) {
-						layout_next() // skip top GROW
-						c_rect := layout_next()
-						icon_size: f32 = 14
-						pos := fx.rect_center(c_rect)
-						cross_color := cross_hovered ? TEXT_PRIMARY : TEXT_SECONDARY
-						fx.draw_texture(icons[.Cross], {pos.x - icon_size * 0.5, pos.y - icon_size * 0.5, icon_size, icon_size}, cross_color)
-						if cross_hovered do fx.set_cursor(.Hand)
-					}
-				}
-			}
-		}
-
-		if action_remove.song != nil {
-			if action_remove.is_queue {
-				ordered_remove(&player.queue, action_remove.index)
-			} else {
-				ordered_remove(&player.songs, action_remove.index)
-			}
-		}
-
-		if action_play.song != nil {
-			if action_play.is_queue {
-				player_play_music(action_play.song, false)
-				ordered_remove(&player.queue, action_play.index)
-			} else {
-				for s, idx in player.songs {
-					if s == action_play.song {
-						player.cursor = idx
-						break
-					}
-				}
-				player_play_music(action_play.song, false)
+			if ui_queue_item(loc, item_rect, visual_rect, item_id, i, false, rect) {
+				break
 			}
 		}
 
@@ -297,41 +289,7 @@ ui_queue :: proc() {
 			fx.draw_rect(fx.rect_expand(dragged_rect, -1, -1), PRIMARY_DARK, 7)
 
 			if layout_start({rect.x + 14, dragged_rect.y, dragged_rect.w - 28, dragged_rect.h}) {
-				if layout({48, 36, GROW, 36, 36}, .Row, gap = 12) {
-					layout_next()
-
-					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 18, 16, 2}, TEXT_PRIMARY, 1)
-					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 23, 16, 2}, TEXT_PRIMARY, 1)
-					fx.draw_rect({dragged_rect.x + 16, dragged_rect.y + 28, 16, 2}, TEXT_PRIMARY, 1)
-
-					if layout({GROW, 36, GROW}, .Col) {
-						layout_next()
-						ui_cover(dragged_song.thumbnail, 4)
-					}
-
-					if layout({GROW, 20, 20, GROW}, .Col) {
-						layout_next()
-						title_rect := layout_next()
-						artist_rect := layout_next()
-						fx.draw_text_faded(font, dragged_song.title, title_rect, 16, TEXT_PRIMARY, true)
-						fx.draw_text_faded(font, dragged_song.artist, artist_rect, 13, TEXT_SECONDARY, true)
-					}
-
-					if layout({GROW, 38, GROW}, .Col) {
-						layout_next()
-						time_rect := layout_next()
-						time_str := format_time(dragged_song.duration)
-						fx.draw_text(font, time_str, time_rect, 13, TEXT_SECONDARY, false, true)
-					}
-
-					if layout({GROW, 36, GROW}, .Col) {
-						layout_next() // skip top GROW
-						c_rect := layout_next()
-						icon_size: f32 = 14
-						pos := fx.rect_center(c_rect)
-						fx.draw_texture(icons[.Cross], {pos.x - icon_size * 0.5, pos.y - icon_size * 0.5, icon_size, icon_size}, TEXT_PRIMARY)
-					}
-				}
+				ui_queue_item(Queue_Item{false, -1, dragged_song}, dragged_rect, dragged_rect, 0, -1, true, rect)
 			}
 		}
 	}
