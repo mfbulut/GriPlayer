@@ -233,7 +233,7 @@ toggle_like :: proc(song: ^Music) {
 	}
 }
 
-cache : struct {
+cache: struct {
 	volume: f32,
 	theme: int,
 	songs: map[string]Music,
@@ -259,13 +259,13 @@ cache_save :: proc() {
 	dir, err := os.user_data_dir(context.temp_allocator)
 	if err != nil do return
 
-	fmusic_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
+	fmusic_dir := strings.concatenate({dir, "\\fmusic"})
 	os.make_directory(fmusic_dir)
-	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"}, context.temp_allocator)
+	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"})
 
 	cache.volume = audio.volume
 	cache.theme = current_theme
-	cache.songs = make(map[string]Music, 1024, context.temp_allocator)
+	cache.songs = make(map[string]Music, 1024)
 
 	for playlist in playlists[1:] {
 		for m in playlist.songs {
