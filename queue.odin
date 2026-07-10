@@ -487,12 +487,10 @@ queue_occurrence :: proc(list: Queue_List, index: int, song: ^Music) -> int {
 
 queue_draw_handle :: proc(rect: fx.Rect, color: fx.Color) {
 	x := rect.x + (rect.w - 12) * 0.5
-	y := rect.y + (rect.h - 12) * 0.5
+	y := rect.y + (rect.h - 8) * 0.5
 
-	for row in 0..<3 {
-		for col in 0..<2 {
-			fx.draw_circle({x + f32(col) * 8, y + f32(row) * 6}, 1.6, color)
-		}
+	for row in 0..<2 {
+		fx.draw_rect({x, y + f32(row) * 6, 12, 2}, color, 1)
 	}
 }
 

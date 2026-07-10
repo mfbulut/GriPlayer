@@ -62,6 +62,22 @@ d3d11_initialize :: proc() {
 		D3D11.CreateDevice(nil, .HARDWARE, nil, nil, &features[0], len(features), D3D11.SDK_VERSION, &state.device, nil, &state.device_ctx)
 	}
 
+	when ODIN_DEBUG {
+		debug: ^D3D11.IDebug
+		hr := state.device->QueryInterface(D3D11.IDebug_UUID, cast(^rawptr)&debug)
+		if win.SUCCEEDED(hr) {
+			info_queue: ^D3D11.IInfoQueue
+			hr = debug->QueryInterface(D3D11.IInfoQueue_UUID, cast(^rawptr)&info_queue)
+			if win.SUCCEEDED(hr) {
+				info_queue->SetBreakOnSeverity(.CORRUPTION, true)
+				info_queue->SetBreakOnSeverity(.ERROR, true)
+				// info_queue->SetBreakOnSeverity(.WARNING, true)
+				info_queue->Release()
+			}
+			debug->Release()
+		}
+	}
+
 	{
 		dxgi_device: ^DXGI.IDevice
 		dxgi_adapter: ^DXGI.IAdapter
