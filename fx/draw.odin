@@ -78,6 +78,7 @@ draw_texture_ex :: proc(
 	tint_rect := cast([4]Color)WHITE,
 	radius := f32(0),
 ) {
+	set_sampler(.AnisotropicClamp)
 	state.batch.binding.texture = tex.srv
 
 	tw := cast(f32)tex.size.x
@@ -160,8 +161,6 @@ draw_text_vec :: proc(font: Font, text: string, pos: Vec2, font_size: f32, color
 
 		x += glyph.advance * font_scale
 	}
-
-	set_sampler(.AnisotropicClamp)
 }
 
 draw_text_rect :: proc(font: Font, text: string, bounds: Rect, font_size: f32, color: [4]Color, center_x := false, center_y := false) {
@@ -269,8 +268,6 @@ draw_text_faded :: proc(font: Font, text: string, bounds: Rect, font_size: f32, 
 
 		x += glyph.advance * font_scale
 	}
-
-	set_sampler(.AnisotropicClamp)
 }
 
 measure_text :: proc(font: Font, text: string, font_size: f32) -> Vec2 {

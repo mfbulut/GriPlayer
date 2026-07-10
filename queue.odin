@@ -252,7 +252,7 @@ queue_draw_item :: proc(list: Queue_List, index: int, song: ^Music, target_rect,
 	fx.draw_text_faded(font, song.artist, artist_rect, 12, c2, true)
 
 	cross_color := delete_hover ? TEXT_PRIMARY : fx.color_brightness(TEXT_SECONDARY, 0.75)
-	fx.draw_texture(icons[.Cross], fx.rect_shrink(delete_rect, 8, 8), cross_color)
+	fx.draw_texture_ex(icons_texture, icons[.Cross], fx.rect_shrink(delete_rect, 5, 5), cross_color)
 
 	return false
 }

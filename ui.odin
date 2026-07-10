@@ -88,22 +88,22 @@ apply_theme :: proc(idx: int) {
 }
 
 Icon :: enum{
-	Shuffle,
-	Previous,
-	Pause,
-	Play,
-	Next,
-	Heart,
-	Volume,
-	Mute,
-	Note,
-	Search,
-	Cross,
-	Add_Last,
-	Add_Next,
 	Album,
 	Artist,
-	Queue
+	Heart,
+	Next,
+	Note,
+	Pause,
+	Play,
+	Previous,
+	Queue,
+	Add_Last,
+	Add_Next,
+	Search,
+	Shuffle,
+	Volume,
+	Mute,
+	Cross
 }
 
 UI_ID :: enum {
@@ -125,7 +125,8 @@ UI_ID :: enum {
 	Queue_Item = 50000,
 }
 
-icons: [Icon]fx.Texture
+icons_texture: fx.Texture
+icons: [Icon]fx.Rect
 
 GROW :: -1.0
 Layout_Direction :: enum { Col, Row }

@@ -286,15 +286,15 @@ ui_search_bar :: proc() {
 
 	anim_t := animate(int(UI_ID.Search), search.focused || hovered)
 	fx.draw_rect(bar, fx.color_lerp(PRIMARY_COLOR, HOVER_COLOR, anim_t), 18)
-	fx.draw_texture(icons[.Search], {bar.x + 14, bar.y + 10, 16, 16}, TEXT_SECONDARY)
+	fx.draw_texture_ex(icons_texture, icons[.Search], {bar.x + 12, bar.y + 8, 20, 20}, TEXT_SECONDARY)
 
 	text_start := bar.x + f32(38)
 	if filter != "" {
-		icon := search.filter_artist != "" ? icons[.Artist] : icons[.Album]
+		icon := search.filter_artist != "" ? Icon.Artist : Icon.Album
 		badge_w := fx.measure_text(font, filter, 12).x + 32
 		badge := fx.Rect{text_start, bar.y + 8, badge_w, 20}
 		fx.draw_rect(badge, ACCENT_BRIGHT, 4)
-		fx.draw_texture(icon, {badge.x + 6, badge.y + 2, 16, 16}, TEXT_PRIMARY)
+		fx.draw_texture_ex(icons_texture, icons[icon], {badge.x + 6, badge.y + 2, 16, 16}, TEXT_PRIMARY)
 		fx.draw_text(font, filter, {badge.x + 26, badge.y, badge_w - 26, 20}, 12, TEXT_PRIMARY, false, true)
 		text_start += badge_w + 8
 	}
@@ -320,7 +320,7 @@ ui_search_bar :: proc() {
 	fx.reset_scissor()
 
 	if len(query) > 0 || search.active {
-		icon_size := f32(12)
+		icon_size := f32(16)
 		icon_pos := fx.Vec2{text_area.x + text_area.w - 26, bar.y + (bar.h - icon_size) * 0.5}
 		hit := fx.Rect{icon_pos.x - 4, icon_pos.y - 4, icon_size + 8, icon_size + 8}
 		close_hover := mouse_hover(hit, true)
@@ -332,7 +332,7 @@ ui_search_bar :: proc() {
 			}
 		}
 
-		fx.draw_texture(icons[.Cross], {icon_pos.x, icon_pos.y, icon_size, icon_size}, close_hover ? TEXT_PRIMARY : TEXT_SECONDARY)
+		fx.draw_texture_ex(icons_texture, icons[.Cross], {icon_pos.x, icon_pos.y, icon_size, icon_size}, close_hover ? TEXT_PRIMARY : TEXT_SECONDARY)
 	}
 }
 

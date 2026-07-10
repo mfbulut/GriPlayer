@@ -31,22 +31,14 @@ main :: proc() {
 	search_init()
 
 	font = fx.load_font(#load("assets/Inter.json"), #load("assets/Inter.png"))
-	icons[.Shuffle] = fx.texture_load(#load("assets/shuffle.png"))
-	icons[.Previous] = fx.texture_load(#load("assets/previous.png"))
-	icons[.Pause] = fx.texture_load(#load("assets/pause.png"))
-	icons[.Play] = fx.texture_load(#load("assets/play.png"))
-	icons[.Next] = fx.texture_load(#load("assets/next.png"))
-	icons[.Heart] = fx.texture_load(#load("assets/heart.png"))
-	icons[.Volume] = fx.texture_load(#load("assets/volume.png"))
-	icons[.Mute] = fx.texture_load(#load("assets/mute.png"))
-	icons[.Note] = fx.texture_load(#load("assets/note.png"))
-	icons[.Search] = fx.texture_load(#load("assets/search.png"))
-	icons[.Cross] = fx.texture_load(#load("assets/cross.png"))
-	icons[.Add_Last] = fx.texture_load(#load("assets/add_last.png"))
-	icons[.Add_Next] = fx.texture_load(#load("assets/add_next.png"))
-	icons[.Album] = fx.texture_load(#load("assets/album.png"))
-	icons[.Artist] = fx.texture_load(#load("assets/artist.png"))
-	icons[.Queue] = fx.texture_load(#load("assets/queue.png"))
+	icons_texture = fx.texture_load(#load("assets/icons.png"))
+
+	for row in 0..<4 {
+		for col in 0..<4 {
+			idx := row * 4 + col
+			icons[Icon(idx)] = fx.Rect{f32(col * 100 + 2), f32(row * 100 + 2), 96, 96}
+		}
+	}
 
 	loader_start()
 
@@ -338,8 +330,6 @@ ui_detail_panel :: proc() {
 	song := player.music
 	if song == nil {
 		rect := layout_next()
-		m := min(rect.w, rect.h)
-		fx.draw_texture(icons[.Note], fx.Rect{rect.x + rect.w / 2 - m / 4, rect.y + rect.h / 2 - m / 4, m / 2, m / 2}, PRIMARY_BRIGHT)
 		return
 	}
 
@@ -399,8 +389,6 @@ ui_detail_panel :: proc() {
 	}
 }
 
-
-
 ui_progress :: proc() {
 	mouse := fx.mouse_pos()
 
@@ -446,8 +434,8 @@ ui_progress :: proc() {
 			}
 		}
 
-		vol_tex := audio.muted ? icons[.Mute] : icons[.Volume]
-		fx.draw_texture(vol_tex, vol_icon_rect)
+		vol_icon := audio.muted ? Icon.Mute : Icon.Volume
+		fx.draw_texture_ex(icons_texture, icons[vol_icon], vol_icon_rect)
 
 		vol_rect := layout_next()
 		vol_color := audio.muted ? TEXT_SECONDARY : ACCENT_BRIGHT
@@ -500,7 +488,7 @@ ui_lyrics :: proc() {
 			color := fx.color_lerp(fx.color_lerp(TEXT_SECONDARY, TEXT_PRIMARY, anim_hover), fx.WHITE, anim_act)
 
 			if strings.trim_space(lyric.text) == "" {
-				fx.draw_texture(icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 18) * 0.5, 18, 18}, color)
+				fx.draw_texture_ex(icons_texture, icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 32) * 0.5, 32, 32}, color)
 			} else {
 				fx.draw_text_faded(font, lyric.text, item_rect, math.lerp(f32(18), f32(22), anim_act), color, true)
 			}
@@ -552,7 +540,7 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false, icon: May
 
 		start_x: f32 = is_context_menu ? rect.x + 12 : rect.x + (rect.w - (icon_size + gap + text_w)) / 2.0
 
-		fx.draw_texture(icons[ic], {start_x, rect.y + (rect.h - icon_size) / 2.0, icon_size, icon_size}, text_color)
+		fx.draw_texture_ex(icons_texture, icons[ic], {start_x, rect.y + (rect.h - icon_size) / 2.0, icon_size, icon_size}, text_color)
 
 		if text != "" {
 			text_rect := fx.Rect{start_x + icon_size + gap, rect.y, text_w, rect.h}
@@ -580,7 +568,6 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 
 	pos := fx.rect_center(rect)
 	radius := min(rect.w, rect.h) * 0.5
-	icon_size := radius * 0.88
 	hovered := mouse_hover({pos.x - radius, pos.y - radius, radius * 2, radius * 2})
 	anim := animate(id, hovered)
 
@@ -590,7 +577,7 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 	}
 
 	fx.draw_circle(pos, radius, fx.color_lerp(base_color, hover_color, anim))
-	fx.draw_texture(icons[icon], {pos.x - icon_size * 0.5, pos.y - icon_size * 0.5, icon_size, icon_size}, TEXT_PRIMARY)
+	fx.draw_texture_ex(icons_texture, icons[icon], {pos.x - radius * 0.5, pos.y - radius * 0.5, radius, radius}, TEXT_PRIMARY)
 
 	if hovered {
 		fx.set_cursor(.Hand)
@@ -621,8 +608,8 @@ ui_cover :: proc(cover: fx.Texture, radius: f32 = 6) {
 
 	if cover.srv == nil {
 		fx.draw_rect(rect, PRIMARY_BRIGHT, radius)
-		shrink := min(rect.w, rect.h) * 0.25
-		fx.draw_texture(icons[.Note], fx.rect_shrink(rect, shrink, shrink), TEXT_SECONDARY)
+		shrink := min(rect.w, rect.h) * 0.15
+		fx.draw_texture_ex(icons_texture, icons[.Note], fx.rect_shrink(rect, shrink, shrink), TEXT_SECONDARY)
 		return
 	}
 
