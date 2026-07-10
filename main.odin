@@ -26,7 +26,7 @@ context_menu : struct {
 main :: proc() {
 	fx.init("GriPlayer")
 	audio.initialize()
-	smtc.init(fx.window.hwnd)
+	// smtc.init(fx.window.hwnd)
 	fft_init()
 	search_init()
 
@@ -488,7 +488,7 @@ ui_lyrics :: proc() {
 			color := fx.color_lerp(fx.color_lerp(TEXT_SECONDARY, TEXT_PRIMARY, anim_hover), fx.WHITE, anim_act)
 
 			if strings.trim_space(lyric.text) == "" {
-				fx.draw_texture_ex(icons_texture, icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 32) * 0.5, 32, 32}, color)
+				fx.draw_texture_ex(icons_texture, icons[.Note], {item_rect.x + 4, item_rect.y + (item_rect.h - 24) * 0.5, 24, 24}, color)
 			} else {
 				fx.draw_text_faded(font, lyric.text, item_rect, math.lerp(f32(18), f32(22), anim_act), color, true)
 			}
