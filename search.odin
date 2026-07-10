@@ -320,7 +320,7 @@ ui_search_bar :: proc() {
 	fx.reset_scissor()
 
 	if len(query) > 0 || search.active {
-		icon_size := f32(16)
+		icon_size := f32(14)
 		icon_pos := fx.Vec2{text_area.x + text_area.w - 26, bar.y + (bar.h - icon_size) * 0.5}
 		hit := fx.Rect{icon_pos.x - 4, icon_pos.y - 4, icon_size + 8, icon_size + 8}
 		close_hover := mouse_hover(hit, true)
