@@ -21,18 +21,18 @@ Swapchain :: struct {
 }
 
 state: struct {
-	device:           ^D3D11.IDevice,
-	device_ctx:       ^D3D11.IDeviceContext,
-	rasterizer:       ^D3D11.IRasterizerState,
-	blend_state:      ^D3D11.IBlendState,
-	samplers:         [Sampler_Kind]^D3D11.ISamplerState,
-	swapchain:        Swapchain,
+	device:      ^D3D11.IDevice,
+	device_ctx:  ^D3D11.IDeviceContext,
+	rasterizer:  ^D3D11.IRasterizerState,
+	blend_state: ^D3D11.IBlendState,
+	samplers:    [Sampler_Kind]^D3D11.ISamplerState,
+	swapchain:   Swapchain,
+	shader:      Shader,
 
 	// Renderer
 	instanced_buffer: ^D3D11.IBuffer,
-	uniforms_buffer:  ^D3D11.IBuffer,
-	default_shader:   Shader,
-	batch:            Batch,
+	uniforms_buffer: ^D3D11.IBuffer,
+	batch: Batch,
 }
 
 d3d11_resize_swapchain :: proc() {
@@ -202,7 +202,7 @@ d3d11_initialize :: proc() {
 
 		state.device->CreateBuffer(&desc, nil, &state.instanced_buffer)
 
-		state.default_shader = load_shader(shader, "shader.hlsl")
+		state.shader = load_shader(shader)
 	}
 
 	{
@@ -226,11 +226,16 @@ d3d11_initialize :: proc() {
 		state.device_ctx->IASetPrimitiveTopology(.TRIANGLESTRIP)
 
 		state.device_ctx->VSSetConstantBuffers(0, 1, &state.uniforms_buffer)
-
-		state.device_ctx->PSSetConstantBuffers(0, 1, &state.uniforms_buffer)
+		// state.device_ctx->PSSetConstantBuffers(0, 1, &state.uniforms_buffer)
 
 		state.device_ctx->RSSetState(state.rasterizer)
 		state.device_ctx->OMSetBlendState(state.blend_state, nil, 0xffffffff)
+	}
+
+	{
+		state.device_ctx->VSSetShader(state.shader.vshader, nil, 0)
+		state.device_ctx->PSSetShader(state.shader.pshader, nil, 0)
+		state.device_ctx->IASetInputLayout(state.shader.ilayout)
 	}
 }
 
@@ -270,7 +275,6 @@ Batch :: struct {
 
 begin_frame :: proc() {
 	state.batch.binding.scissor = {0, 0, window.size.x, window.size.y}
-	set_shader(state.default_shader)
 
 	if window.is_resized {
 		d3d11_resize_swapchain()

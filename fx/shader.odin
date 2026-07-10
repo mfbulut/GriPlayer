@@ -10,7 +10,7 @@ Shader :: struct {
 	ilayout: ^D3D11.IInputLayout,
 }
 
-load_shader :: proc(src: string, dbg_name: cstring) -> Shader {
+load_shader :: proc(src: string) -> Shader {
 	shader: Shader
 
 	vshader_blob: ^D3D11.IBlob
@@ -18,7 +18,7 @@ load_shader :: proc(src: string, dbg_name: cstring) -> Shader {
 	hr := D3D_COMPILER.Compile(
 		raw_data(src),
 		len(src),
-		dbg_name,
+		"shader.hlsl",
 		nil,
 		nil,
 		"vs_main",
@@ -56,14 +56,13 @@ load_shader :: proc(src: string, dbg_name: cstring) -> Shader {
 		vshader_blob->Release()
 	}
 
-
 	// Pixel Shader
 	pshader_blob: ^D3D11.IBlob
 	pshader_error: ^D3D11.IBlob
 	hr = D3D_COMPILER.Compile(
 		raw_data(src),
 		len(src),
-		dbg_name,
+		"shader.hlsl",
 		nil,
 		nil,
 		"ps_main",
@@ -91,12 +90,4 @@ load_shader :: proc(src: string, dbg_name: cstring) -> Shader {
 	}
 
 	return shader
-}
-
-set_shader :: proc(shader: Shader) {
-	state.device_ctx->VSSetShader(shader.vshader, nil, 0)
-	state.device_ctx->PSSetShader(shader.pshader, nil, 0)
-	if shader.ilayout != nil {
-		state.device_ctx->IASetInputLayout(shader.ilayout)
-	}
 }

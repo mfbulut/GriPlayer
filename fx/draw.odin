@@ -5,10 +5,6 @@ clear_window :: proc(color: Color) {
 	state.device_ctx->ClearRenderTargetView(state.swapchain.default_rtv, &tmp_color)
 }
 
-set_sampler :: proc(kind: Sampler_Kind) {
-	state.batch.binding.sampler_kind = kind
-}
-
 set_scissor :: proc(rect: Rect) {
 	scale := dpi_scale()
 	state.batch.binding.scissor = {
@@ -78,7 +74,7 @@ draw_texture_ex :: proc(
 	tint_rect := cast([4]Color)WHITE,
 	radius := f32(0),
 ) {
-	set_sampler(.AnisotropicClamp)
+	state.batch.binding.sampler_kind = .AnisotropicClamp
 	state.batch.binding.texture = tex.srv
 
 	tw := cast(f32)tex.size.x
@@ -114,7 +110,7 @@ draw_text :: proc {
 draw_text_vec :: proc(font: Font, text: string, pos: Vec2, font_size: f32, color: [4]Color) {
 	if text == "" do return
 
-	set_sampler(.BilinearClamp)
+	state.batch.binding.sampler_kind = .BilinearClamp
 
 	state.batch.binding.texture = font.atlas.srv
 
@@ -186,8 +182,8 @@ draw_text_rect :: proc(font: Font, text: string, bounds: Rect, font_size: f32, c
 
 draw_text_faded :: proc(font: Font, text: string, bounds: Rect, font_size: f32, color: Color, center_y := false) {
 	if text == "" do return
-	set_sampler(.BilinearClamp)
 
+	state.batch.binding.sampler_kind = .BilinearClamp
 	state.batch.binding.texture = font.atlas.srv
 
 	font_scale := font_size / font.metrics.emSize
