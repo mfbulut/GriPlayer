@@ -4,16 +4,88 @@ import "core:math"
 import "core:math/ease"
 import "fx"
 
-BACKGROUND_COLOR := fx.Color{ 10,  15,  22, 255}
-PRIMARY_COLOR    := fx.Color{ 21,  26,  34, 255}
-PRIMARY_BRIGHT   := fx.Color{ 43,  48,  55, 255}
-PRIMARY_DARK     := fx.Color{ 16,  21,  29, 255}
-HOVER_COLOR      := fx.Color{ 28,  33,  41, 255}
-ACCENT_COLOR     := fx.Color{ 10,  45,  72, 255}
-ACCENT_BRIGHT    := fx.Color{ 38,  97, 162, 255}
-ACCENT_DARK      := fx.Color{ 0,   38,  69, 255}
-TEXT_PRIMARY     := fx.Color{245, 245, 245, 255}
-TEXT_SECONDARY   := fx.Color{165, 165, 165, 255}
+BACKGROUND_COLOR : fx.Color = { 10,  15,  22, 255}
+PRIMARY_COLOR    : fx.Color = { 21,  26,  34, 255}
+PRIMARY_BRIGHT   : fx.Color = { 43,  48,  55, 255}
+PRIMARY_DARK     : fx.Color = { 16,  21,  29, 255}
+HOVER_COLOR      : fx.Color = { 28,  33,  41, 255}
+ACCENT_COLOR     : fx.Color = { 10,  45,  72, 255}
+ACCENT_BRIGHT    : fx.Color = { 38,  97, 162, 255}
+ACCENT_DARK      : fx.Color = { 0,   38,  69, 255}
+TEXT_PRIMARY     : fx.Color = {245, 245, 245, 255}
+TEXT_SECONDARY   : fx.Color = {165, 165, 165, 255}
+
+Theme :: struct {
+	background:     fx.Color,
+	primary:        fx.Color,
+	primary_bright: fx.Color,
+	primary_dark:   fx.Color,
+	hover:          fx.Color,
+	accent:         fx.Color,
+	accent_bright:  fx.Color,
+	accent_dark:    fx.Color,
+	text_primary:   fx.Color,
+	text_secondary: fx.Color,
+}
+
+themes := [?]Theme{
+	// 0: Default Dark
+	{
+		background     = { 10,  15,  22, 255 },
+		primary        = { 21,  26,  34, 255 },
+		primary_bright = { 43,  48,  55, 255 },
+		primary_dark   = { 16,  21,  29, 255 },
+		hover          = { 28,  33,  41, 255 },
+		accent         = { 10,  45,  72, 255 },
+		accent_bright  = { 38,  97, 162, 255 },
+		accent_dark    = { 0,   38,  69, 255 },
+		text_primary   = {245, 245, 245, 255 },
+		text_secondary = {165, 165, 165, 255 },
+	},
+	// 2: Nord
+	{
+		background     = { 46, 52, 64, 255 },
+		primary        = { 59, 66, 82, 255 },
+		primary_bright = { 76, 86, 106, 255 },
+		primary_dark   = { 36, 41, 51, 255 },
+		hover          = { 67, 76, 94, 255 },
+		accent         = { 94, 133, 144, 255 },
+		accent_bright  = { 115, 162, 176, 255 },
+		accent_dark    = { 65, 89, 119, 255 },
+		text_primary   = { 236, 239, 244, 255 },
+		text_secondary = { 216, 222, 233, 255 },
+	},
+	// 3: Gruvbox
+	{
+		background     = { 40, 40, 40, 255 },
+		primary        = { 60, 56, 54, 255 },
+		primary_bright = { 80, 73, 69, 255 },
+		primary_dark   = { 29, 32, 33, 255 },
+		hover          = { 75, 70, 66, 255 },
+		accent         = { 135, 80, 10, 255 },
+		accent_bright  = { 175, 110, 15, 255 },
+		accent_dark    = { 95, 50, 5, 255 },
+		text_primary   = { 255, 253, 248, 255 },
+		text_secondary = { 210, 200, 190, 255 },
+	},
+}
+
+current_theme := 0
+
+apply_theme :: proc(idx: int) {
+	current_theme = idx % len(themes)
+	t := themes[current_theme]
+	BACKGROUND_COLOR = t.background
+	PRIMARY_COLOR    = t.primary
+	PRIMARY_BRIGHT   = t.primary_bright
+	PRIMARY_DARK     = t.primary_dark
+	HOVER_COLOR      = t.hover
+	ACCENT_COLOR     = t.accent
+	ACCENT_BRIGHT    = t.accent_bright
+	ACCENT_DARK      = t.accent_dark
+	TEXT_PRIMARY     = t.text_primary
+	TEXT_SECONDARY   = t.text_secondary
+}
 
 Icon :: enum{
 	Shuffle,

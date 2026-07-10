@@ -235,6 +235,7 @@ toggle_like :: proc(song: ^Music) {
 
 cache : struct {
 	volume: f32,
+	theme: int,
 	songs: map[string]Music,
 }
 
@@ -251,6 +252,7 @@ cache_load :: proc() {
 	if unmarshal_err != nil do return
 
 	audio.volume = cache.volume
+	apply_theme(cache.theme)
 }
 
 cache_save :: proc() {
@@ -262,6 +264,7 @@ cache_save :: proc() {
 	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"}, context.temp_allocator)
 
 	cache.volume = audio.volume
+	cache.theme = current_theme
 	cache.songs = make(map[string]Music, 1024, context.temp_allocator)
 
 	for playlist in playlists[1:] {

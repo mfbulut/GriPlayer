@@ -136,6 +136,10 @@ handle_input :: proc() {
 		search.active = true
 	}
 
+	if fx.key_is_pressed(.F4) {
+		apply_theme(current_theme + 1)
+	}
+
 	if fx.key_is_pressed_repeat(.Up) {
 		audio.volume = clamp(audio.volume + 0.05, 0, 1)
 	}
