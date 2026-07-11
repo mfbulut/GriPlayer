@@ -46,11 +46,11 @@ color_lerp :: proc(a, b: Color, t: f32) -> Color {
 	return vec4_to_color(linalg.lerp(color_to_vec4(a), color_to_vec4(b), t))
 }
 
-color_brightness :: proc "contextless" (c: Color, factor: f32) -> Color {
+color_brightness :: proc(c: Color, factor: f32) -> Color {
 	return vec4_to_color(color_to_vec4(c) * factor)
 }
 
-color_opacity :: proc "contextless" (c: Color, alpha: f32) -> Color {
+color_opacity :: proc(c: Color, alpha: f32) -> Color {
 	return {c.r, c.g, c.b, u8(clamp(alpha, 0, 1) * 255)}
 }
 
