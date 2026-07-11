@@ -29,6 +29,7 @@ main :: proc() {
 	// smtc.init(fx.window.hwnd)
 	fft_init()
 	search_init()
+	apply_theme(current_theme)
 
 	font = fx.load_font(#load("assets/Inter.json"), #load("assets/Inter.png"))
 	icons_texture = fx.texture_load(#load("assets/icons.png"))
@@ -521,7 +522,7 @@ ui_button :: proc(id: int, rect: fx.Rect, text := "", active := false, icon: May
 	hovered := mouse_hover(rect, is_context_menu)
 
 	anim_t := animate(id, hovered)
-	color := fx.color_lerp(PRIMARY_DARK, HOVER_COLOR, anim_t)
+	color := fx.color_opacity(HOVER_COLOR, anim_t)
 
 	if active {
 		color = fx.color_lerp(ACCENT_DARK, ACCENT_COLOR, anim_t)
@@ -571,7 +572,7 @@ ui_icon :: proc(id: int, icon: Icon, active: bool = false) -> bool {
 	hovered := mouse_hover({pos.x - radius, pos.y - radius, radius * 2, radius * 2})
 	anim := animate(id, hovered)
 
-	base_color, hover_color := HOVER_COLOR, PRIMARY_BRIGHT
+	base_color, hover_color := PRIMARY_COLOR, PRIMARY_BRIGHT
 	if active {
 		base_color, hover_color = ACCENT_BRIGHT, ACCENT_BRIGHT
 	}
