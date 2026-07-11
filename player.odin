@@ -43,6 +43,7 @@ player_play_music :: proc(song: ^Music, gapless := false) {
 	audio.resume()
 	player.music = song
 	player.playing = true
+	visualizer_create_palette(song.thumbnail_pixels)
 
 	//-----------------------------------
 	fx.texture_free(&player.cover)

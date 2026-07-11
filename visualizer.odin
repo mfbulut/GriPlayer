@@ -1,7 +1,9 @@
 package main
 
 import "base:intrinsics"
+
 import "core:math"
+import "core:slice"
 
 import "fx"
 
@@ -112,15 +114,124 @@ visualizer_update :: proc() {
 
 ui_visualizer :: proc() {
 	bounds := layout_next()
-
 	bar_w := max((bounds.w - SPECTRUM_BAR_GAP * f32(SPECTRUM_BANDS - 1)) / f32(SPECTRUM_BANDS), 1)
 
 	for level, i in spectrum {
 		bar_h := max(bounds.h * level, 2)
 		x := bounds.x + f32(i) * (bar_w + SPECTRUM_BAR_GAP)
 		y := bounds.y + bounds.h - bar_h
-		fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{ACCENT_BRIGHT, ACCENT_BRIGHT, ACCENT_DARK, ACCENT_DARK})
 		peak_y := bounds.y + bounds.h - bounds.h * spectrum_peak[i]
-		fx.draw_rect({x, peak_y - 2, bar_w, 2}, TEXT_SECONDARY, 1)
+
+		if len(visualizer_palette) > 0 {
+			t := f32(i) / f32(SPECTRUM_BANDS - 1)
+			color := visualizer_color_at(t)
+			top_color := fx.color_lerp(color, fx.WHITE, 0.08)
+			bottom_color := fx.color_brightness(color, 0.42)
+			peak_color := fx.color_lerp(TEXT_SECONDARY, color, 0.45)
+
+			fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{top_color, top_color, bottom_color, bottom_color})
+			fx.draw_rect({x, peak_y - 2, bar_w, 2}, peak_color, 1)
+		} else {
+			fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{ACCENT_BRIGHT, ACCENT_BRIGHT, ACCENT_DARK, ACCENT_DARK})
+			fx.draw_rect({x, peak_y - 2, bar_w, 2}, TEXT_SECONDARY, 1)
+		}
 	}
+}
+
+
+Palette_Bucket :: struct {
+	sum: [4]int,
+	count: int,
+	score: f32,
+}
+
+visualizer_palette: [dynamic; 8]fx.Color
+
+PALETTE_NEUTRAL_CHROMA        :: f32(0.045)
+PALETTE_NEUTRAL_MAX           :: 2
+PALETTE_NEUTRAL_LIGHTNESS_GAP :: f32(0.25)
+
+PALETTE_HUE_GAP               :: f32(0.42)
+PALETTE_LIGHTNESS_GAP         :: f32(0.34)
+PALETTE_CHROMA_GAP            :: f32(0.10)
+
+hue_distance :: proc(a, b: f32) -> f32 {
+	diff := abs(a - b)
+	return min(diff, 2.0 * math.PI - diff)
+}
+
+visualizer_palette_accepts :: proc(color: fx.Color) -> bool {
+	l, c, h := fx.color_to_oklch(color)
+	is_neutral := c < PALETTE_NEUTRAL_CHROMA
+	neutral_count := 0
+
+	for existing in visualizer_palette {
+		existing_l, existing_c, existing_h := fx.color_to_oklch(existing)
+		existing_is_neutral := existing_c < PALETTE_NEUTRAL_CHROMA
+
+		if existing_is_neutral {
+			neutral_count += 1
+		}
+
+		if is_neutral && existing_is_neutral {
+			if neutral_count >= PALETTE_NEUTRAL_MAX || abs(l - existing_l) < PALETTE_NEUTRAL_LIGHTNESS_GAP {
+				return false
+			}
+		} else if !is_neutral && !existing_is_neutral {
+			same_hue := hue_distance(h, existing_h) < PALETTE_HUE_GAP
+			same_tone := abs(l - existing_l) < PALETTE_LIGHTNESS_GAP && abs(c - existing_c) < PALETTE_CHROMA_GAP
+			if same_hue && same_tone {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+visualizer_create_palette :: proc(pixels: []fx.Color) {
+	clear(&visualizer_palette)
+	if len(pixels) == 0 do return
+
+	buckets: [512]Palette_Bucket
+
+	for color in pixels {
+		l, c, h := fx.color_to_oklch(color)
+		if l < 0.2 {
+			continue
+		}
+
+		idx := (int(color.r) >> 5) << 6 | (int(color.g) >> 5) << 3 | (int(color.b) >> 5)
+		bucket := &buckets[idx]
+		bucket.sum += cast([4]int)color
+		bucket.count += 1
+		bucket.score += l * 0.45 + c * 0.8
+	}
+
+	slice.sort_by(buckets[:], proc(a, b: Palette_Bucket) -> bool {
+		return a.score > b.score
+	})
+
+	for bucket in buckets {
+		if bucket.count == 0 do break
+		color := cast(fx.Color)(bucket.sum / bucket.count)
+		if visualizer_palette_accepts(color) {
+			append(&visualizer_palette, color)
+			if len(visualizer_palette) >= cap(visualizer_palette) {
+				break
+			}
+		}
+	}
+}
+
+visualizer_color_at :: proc(t: f32) -> fx.Color {
+	count := len(visualizer_palette)
+	scaled := clamp(t, 0, 1) * f32(count - 1)
+
+	idx := int(scaled)
+	if idx >= count - 1 {
+		return visualizer_palette[count - 1]
+	}
+
+	return fx.color_lerp(visualizer_palette[idx], visualizer_palette[idx + 1], scaled - f32(idx))
 }

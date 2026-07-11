@@ -15,9 +15,9 @@ Sampler_Kind :: enum {
 }
 
 Swapchain :: struct {
-	swapchain1:      ^DXGI.ISwapChain1,
+	swapchain1: ^DXGI.ISwapChain1,
 	waitable_handle: win.HANDLE,
-	default_rtv:     ^D3D11.IRenderTargetView,
+	default_rtv: ^D3D11.IRenderTargetView,
 }
 
 state: struct {
@@ -36,22 +36,36 @@ state: struct {
 }
 
 d3d11_resize_swapchain :: proc() {
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		return
+	}
+
 	state.device_ctx->OMSetRenderTargets(0, nil, nil)
 	if state.swapchain.default_rtv != nil {
 		state.swapchain.default_rtv->Release()
 		state.swapchain.default_rtv = nil
 	}
 
-	state.swapchain.swapchain1->ResizeBuffers(
+	hr := state.swapchain.swapchain1->ResizeBuffers(
 		2,0,0,
 		.R8G8B8A8_UNORM,
 		{.FRAME_LATENCY_WAITABLE_OBJECT},
 	)
+	if win.FAILED(hr) {
+		return
+	}
 
 	rt: ^D3D11.ITexture2D
-	state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
-	state.device->CreateRenderTargetView(rt, nil, &state.swapchain.default_rtv)
+	hr = state.swapchain.swapchain1->GetBuffer(0, D3D11.ITexture2D_UUID, cast(^rawptr)&rt)
+	if win.FAILED(hr) || rt == nil {
+		return
+	}
+
+	hr = state.device->CreateRenderTargetView(rt, nil, &state.swapchain.default_rtv)
 	rt->Release()
+	if win.FAILED(hr) {
+		return
+	}
 
 	state.device_ctx->OMSetRenderTargets(1, &state.swapchain.default_rtv, nil)
 }
@@ -276,6 +290,10 @@ Batch :: struct {
 begin_frame :: proc() {
 	state.batch.binding.scissor = {0, 0, window.size.x, window.size.y}
 
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		return
+	}
+
 	if window.is_resized {
 		d3d11_resize_swapchain()
 		upload_uniforms()
@@ -299,13 +317,18 @@ flush_batch :: proc() -> bool {
 
 	{
 		sub_rsrc: D3D11.MAPPED_SUBRESOURCE
-		state.device_ctx->Map(
+		hr := state.device_ctx->Map(
 			state.instanced_buffer,
 			0,
 			.WRITE_DISCARD,
 			{},
 			&sub_rsrc,
 		)
+		if win.FAILED(hr) || sub_rsrc.pData == nil {
+			clear(&state.batch.instanced)
+			clear(&state.batch.runs)
+			return false
+		}
 
 		mem.copy(
 			sub_rsrc.pData,
@@ -336,21 +359,35 @@ flush_batch :: proc() -> bool {
 
 present :: proc(sync := u32(1)) {
 	flush_batch()
-	state.swapchain.swapchain1->Present(sync, nil)
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		return
+	}
+
+	hr := state.swapchain.swapchain1->Present(sync, nil)
+	if win.FAILED(hr) {
+		return
+	}
 }
 
 upload_uniforms :: proc() {
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		return
+	}
+
 	size := window_size()
 	uniforms.proj_matrix = linalg.matrix_ortho3d_f32(0, size.x, size.y, 0, 0, 1, true)
 
 	sub_rsrc: D3D11.MAPPED_SUBRESOURCE
-	state.device_ctx->Map(
+	hr := state.device_ctx->Map(
 		state.uniforms_buffer,
 		0,
 		.WRITE_DISCARD,
 		{},
 		&sub_rsrc,
 	)
+	if win.FAILED(hr) || sub_rsrc.pData == nil {
+		return
+	}
 
 	mem.copy(sub_rsrc.pData, &uniforms, size_of(uniforms))
 	state.device_ctx->Unmap(state.uniforms_buffer, 0)

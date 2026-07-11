@@ -1,6 +1,10 @@
 package fx
 
 clear_window :: proc(color: Color) {
+	if state.swapchain.default_rtv == nil || window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		return
+	}
+
 	tmp_color := color_to_vec4(color)
 	state.device_ctx->ClearRenderTargetView(state.swapchain.default_rtv, &tmp_color)
 }

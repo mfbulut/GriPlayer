@@ -1,5 +1,6 @@
 package fx
 
+import "core:math"
 import "core:math/linalg"
 
 Vec2 :: [2]f32
@@ -56,6 +57,24 @@ color_brightness :: proc "contextless" (c: Color, factor: f32) -> Color {
 
 color_opacity :: proc "contextless" (c: Color, alpha: f32) -> Color {
 	return {c.r, c.g, c.b, u8(clamp(alpha, 0, 1) * 255)}
+}
+
+color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
+	col := linalg.vector3_srgb_to_linear(linalg.Vector3f32 {
+		f32(color.r) / 255.0,
+		f32(color.g) / 255.0,
+		f32(color.b) / 255.0,
+	})
+
+	_l := math.pow(0.4122214708 * col.r + 0.5363325363 * col.g + 0.0514459929 * col.b, 1.0 / 3.0)
+	_m := math.pow(0.2119034982 * col.r + 0.6806995451 * col.g + 0.1073969566 * col.b, 1.0 / 3.0)
+	_s := math.pow(0.0883024619 * col.r + 0.2817188376 * col.g + 0.6299787005 * col.b, 1.0 / 3.0)
+
+	ok_l := 0.2104542553 * _l + 0.7936177850 * _m - 0.0040720468 * _s
+	ok_a := 1.9779984951 * _l - 2.4285922050 * _m + 0.4505937099 * _s
+	ok_b := 0.0259040371 * _l + 0.7827717662 * _m - 0.8086757660 * _s
+
+	return ok_l, math.sqrt(ok_a * ok_a + ok_b * ok_b), math.atan2(ok_b, ok_a),
 }
 
 Rect :: struct {

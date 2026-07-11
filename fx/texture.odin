@@ -2,6 +2,7 @@ package fx
 
 import win "core:sys/windows"
 import D3D11 "vendor:directx/d3d11"
+import "core:slice"
 import "vendor:stb/image"
 
 Texture :: struct {
@@ -9,7 +10,7 @@ Texture :: struct {
 	size: [2]int,
 }
 
-texture_load_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true) -> Texture {
+texture_load_raw :: proc(pixels: []Color, width: int, height: int, mipmaps := true) -> Texture {
 	tex := Texture {
 		size = {width, height}
 	}
@@ -30,7 +31,7 @@ texture_load_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 	}
 
 	init_data := D3D11.SUBRESOURCE_DATA {
-		pSysMem          = raw_data(bytes),
+		pSysMem          = raw_data(pixels),
 		SysMemPitch      = u32(width * 4),
 		SysMemSlicePitch = 0,
 	}
@@ -46,7 +47,7 @@ texture_load_raw :: proc(bytes: []byte, width: int, height: int, mipmaps := true
 			cast(^D3D11.IResource)d3d_tex,
 			0,
 			nil,
-			raw_data(bytes),
+			raw_data(pixels),
 			u32(width * 4),
 			0,
 		)
@@ -85,7 +86,7 @@ texture_load :: proc(bytes: []byte, mipmaps := true) -> Texture {
 	}
 	defer image.image_free(pixels)
 
-	return texture_load_raw(pixels[:w * h * 4], cast(int)w, cast(int)h, mipmaps)
+	return texture_load_raw(slice.reinterpret([]Color, pixels[:w * h * 4]), cast(int)w, cast(int)h, mipmaps)
 }
 
 texture_free :: proc(tex: ^Texture) {

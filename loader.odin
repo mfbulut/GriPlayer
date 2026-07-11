@@ -35,7 +35,7 @@ Music :: struct {
 	liked_timestamp:  time.Time,
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
-	thumbnail_pixels: []u8,
+	thumbnail_pixels: []fx.Color,
 	thumbnail:        fx.Texture `cbor:"-"`,
 }
 
@@ -88,6 +88,10 @@ loader_poll :: proc() {
 	if len(queue) == 0 do return
 
 	next: for music in queue {
+		if len(music.thumbnail_pixels) > 0 {
+			music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
+		}
+
 		playlist_name := os.base(os.dir(music.fullpath))
 
 		if music.liked {
@@ -133,10 +137,6 @@ load_music :: proc(fullpath: string) -> ^Music {
 
 		load_lrc(music)
 		load_thumbnail(music)
-	}
-
-	if len(music.thumbnail_pixels) > 0 {
-		music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
 	}
 
 	free_all(context.temp_allocator)
@@ -205,8 +205,8 @@ load_thumbnail :: proc(music: ^Music) {
 	if pixels == nil do return
 	defer image.image_free(pixels)
 
-	music.thumbnail_pixels = make([]u8, 64 * 64 * 4)
-	success := image.resize_uint8(pixels, w, h, 0, raw_data(music.thumbnail_pixels), 64, 64, 0, 4)
+	music.thumbnail_pixels = make([]fx.Color, 64 * 64)
+	success := image.resize_uint8(pixels, w, h, 0, cast([^]u8)raw_data(music.thumbnail_pixels), 64, 64, 0, 4)
 
 	if success == 0 {
 		delete(music.thumbnail_pixels)

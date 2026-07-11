@@ -26,7 +26,7 @@ context_menu : struct {
 main :: proc() {
 	fx.init("GriPlayer")
 	audio.initialize()
-	// smtc.init(fx.window.hwnd)
+	smtc.init(fx.window.hwnd)
 	fft_init()
 	search_init()
 	apply_theme(current_theme)
@@ -131,6 +131,9 @@ handle_input :: proc() {
 
 	if fx.key_is_pressed(.F4) {
 		apply_theme(current_theme + 1)
+		if player.music != nil {
+			visualizer_create_palette(player.music.thumbnail_pixels)
+		}
 	}
 
 	if fx.key_is_pressed_repeat(.Up) {
