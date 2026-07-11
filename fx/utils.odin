@@ -47,12 +47,7 @@ color_lerp :: proc(a, b: Color, t: f32) -> Color {
 }
 
 color_brightness :: proc "contextless" (c: Color, factor: f32) -> Color {
-	return {
-		u8(clamp(f32(c.r) * factor, 0, 255)),
-		u8(clamp(f32(c.g) * factor, 0, 255)),
-		u8(clamp(f32(c.b) * factor, 0, 255)),
-		c.a
-	}
+	return vec4_to_color(color_to_vec4(c) * factor)
 }
 
 color_opacity :: proc "contextless" (c: Color, alpha: f32) -> Color {
@@ -60,15 +55,12 @@ color_opacity :: proc "contextless" (c: Color, alpha: f32) -> Color {
 }
 
 color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
-	col := linalg.vector3_srgb_to_linear(linalg.Vector3f32 {
-		f32(color.r) / 255.0,
-		f32(color.g) / 255.0,
-		f32(color.b) / 255.0,
-	})
+	col_vec := color_to_vec4(color)
+	linear := linalg.vector4_srgb_to_linear(col_vec)
 
-	_l := math.pow(0.4122214708 * col.r + 0.5363325363 * col.g + 0.0514459929 * col.b, 1.0 / 3.0)
-	_m := math.pow(0.2119034982 * col.r + 0.6806995451 * col.g + 0.1073969566 * col.b, 1.0 / 3.0)
-	_s := math.pow(0.0883024619 * col.r + 0.2817188376 * col.g + 0.6299787005 * col.b, 1.0 / 3.0)
+	_l := math.pow(0.4122214708 * linear.r + 0.5363325363 * linear.g + 0.0514459929 * linear.b, 1.0 / 3.0)
+	_m := math.pow(0.2119034982 * linear.r + 0.6806995451 * linear.g + 0.1073969566 * linear.b, 1.0 / 3.0)
+	_s := math.pow(0.0883024619 * linear.r + 0.2817188376 * linear.g + 0.6299787005 * linear.b, 1.0 / 3.0)
 
 	ok_l := 0.2104542553 * _l + 0.7936177850 * _m - 0.0040720468 * _s
 	ok_a := 1.9779984951 * _l - 2.4285922050 * _m + 0.4505937099 * _s
