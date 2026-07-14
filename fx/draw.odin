@@ -111,8 +111,9 @@ draw_text :: proc {
 	draw_text_rect,
 }
 
-draw_text_vec :: proc(font: Font, text: string, pos: Vec2, font_size: f32, color: [4]Color) {
+draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) {
 	if text == "" do return
+	font := default_font
 
 	state.batch.binding.sampler_kind = .BilinearClamp
 
@@ -163,14 +164,15 @@ draw_text_vec :: proc(font: Font, text: string, pos: Vec2, font_size: f32, color
 	}
 }
 
-draw_text_rect :: proc(font: Font, text: string, bounds: Rect, font_size: f32, color: [4]Color, center_x := false, center_y := false) {
+draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color: [4]Color, center_x := false, center_y := true) {
 	if text == "" do return
+	font := default_font
 
 	x := bounds.x
 	y := bounds.y
 
 	if center_x || center_y {
-		size := measure_text(font, text, font_size)
+		size := measure_text(text, font_size)
 		if center_x {
 			x = bounds.x + (bounds.w - size.x) * 0.5
 		}
@@ -181,11 +183,17 @@ draw_text_rect :: proc(font: Font, text: string, bounds: Rect, font_size: f32, c
 		}
 	}
 
-	draw_text_vec(font, text, {x, y}, font_size, color)
+	draw_text_vec(text, {x, y}, font_size, color)
 }
 
-draw_text_faded :: proc(font: Font, text: string, bounds: Rect, font_size: f32, color: Color, center_y := false) {
-	if text == "" do return
+draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color, center_x := false, center_y := true) {
+	if text == "" || bounds.w <= 0 do return
+	font := default_font
+
+	if measure_text(text, font_size).x <= bounds.w {
+		draw_text_rect(text, bounds, font_size, color, center_x, center_y)
+		return
+	}
 
 	state.batch.binding.sampler_kind = .BilinearClamp
 	state.batch.binding.texture = font.atlas.srv
@@ -270,10 +278,11 @@ draw_text_faded :: proc(font: Font, text: string, bounds: Rect, font_size: f32, 
 	}
 }
 
-measure_text :: proc(font: Font, text: string, font_size: f32) -> Vec2 {
+measure_text :: proc(text: string, font_size: f32) -> Vec2 {
 	if text == "" {
 		return {0, 0}
 	}
+	font := default_font
 
 	cursor_x := f32(0)
 	max_x := f32(0)

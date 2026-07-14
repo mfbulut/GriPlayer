@@ -2,10 +2,7 @@ package fx
 
 import "base:runtime"
 
-import "core:mem"
 import "core:time"
-import "core:unicode"
-import "core:unicode/utf16"
 
 import win "core:sys/windows"
 
@@ -26,13 +23,26 @@ window: struct {
 	is_resized:     bool,
 	should_close:   bool,
 	key_state:      [256]Key_States,
-	text_input:     [dynamic]rune,
 	cursor:       	Cursor,
 	mouse_pos: 		Vec2,
 	mouse_scroll:   Vec2,
 	prev_time:      time.Time,
 	frame_time:     f32,
 	frame_callback: proc(),
+	text_box:       Native_Text_Box,
+}
+
+Native_Text_Box :: struct {
+	hwnd:              win.HWND,
+	font:              win.HFONT,
+	brush:             win.HBRUSH,
+	text_color:        win.COLORREF,
+	background_color:  win.COLORREF,
+	enter_pressed:     bool,
+	escape_pressed:    bool,
+	backspace_on_empty: bool,
+	rect:              [4]i32,
+	visible:           bool,
 }
 
 init :: proc(title: string, size := [2]i32{1280, 720}) {
@@ -56,7 +66,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 		bottom = size.y,
 	}
 
-	dw_style := win.WS_OVERLAPPEDWINDOW
+	dw_style := win.WS_OVERLAPPEDWINDOW | win.WS_CLIPCHILDREN
 	ex_style := win.WS_EX_APPWINDOW
 	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
 
@@ -95,6 +105,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	win.UpdateWindow(window.hwnd)
 
 	d3d11_initialize()
+	font_initialize()
 }
 
 mouse_pos :: proc() -> Vec2 {
@@ -125,10 +136,6 @@ frame_time :: proc() -> f32 {
 	return min(window.frame_time, 1.0 / 60.0)
 }
 
-text_input :: proc() -> []rune {
-	return window.text_input[:]
-}
-
 set_cursor :: proc(cursor: Cursor) {
 	window.cursor = cursor
 }
@@ -153,53 +160,6 @@ window_is_minimized :: proc() -> bool {
 	return cast(bool)win.IsIconic(window.hwnd)
 }
 
-get_clipboard :: proc(allocator := context.temp_allocator) -> (text: string, ok: bool) {
-	win.OpenClipboard(window.hwnd) or_return
-	defer win.CloseClipboard()
-
-	win.IsClipboardFormatAvailable(win.CF_UNICODETEXT) or_return
-
-	handle := win.GetClipboardData(win.CF_UNICODETEXT)
-	(handle != nil) or_return
-
-	global := win.HGLOBAL(handle)
-
-	ptr := win.GlobalLock(global)
-	(ptr != nil) or_return
-	defer win.GlobalUnlock(global)
-
-	str_utf8, allocator_err := win.wstring_to_utf8(win.wstring(ptr), -1, allocator)
-	(allocator_err == nil) or_return
-
-	return str_utf8, true
-}
-
-set_clipboard :: proc(text: string) -> (ok: bool) {
-	win.OpenClipboard(window.hwnd) or_return
-	defer win.CloseClipboard()
-
-	text := win.utf8_to_utf16(text, context.temp_allocator)
-	(text != nil) or_return
-
-	data := win.GlobalAlloc(win.GMEM_MOVEABLE, len(text) * size_of(win.WCHAR) + 2)
-	(data != nil) or_return
-	defer if !ok {win.GlobalFree(data)}
-
-	{
-		data := cast([^]byte)win.GlobalLock(win.HGLOBAL(data))
-		(data != nil) or_return
-		defer win.GlobalUnlock(win.HGLOBAL(data))
-		mem.copy_non_overlapping(data, raw_data(text), len(text) * size_of(win.WCHAR))
-		data[len(text) * size_of(win.WCHAR) + 0] = 0
-		data[len(text) * size_of(win.WCHAR) + 1] = 0
-	}
-
-	ret := win.SetClipboardData(win.CF_UNICODETEXT, win.HANDLE(data))
-	(ret != nil) or_return
-
-	return true
-}
-
 update :: proc(poll_msg := true) -> bool {
 	if poll_msg {
 		if !window_is_minimized() {
@@ -218,7 +178,9 @@ update :: proc(poll_msg := true) -> bool {
 
 	window.mouse_pos = {f32(p.x), f32(p.y)} / dpi_scale()
 	window.mouse_scroll = {0, 0}
-	clear(&window.text_input)
+	window.text_box.enter_pressed = false
+	window.text_box.escape_pressed = false
+	window.text_box.backspace_on_empty = false
 
 	cur_time := time.now()
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
@@ -230,6 +192,10 @@ update :: proc(poll_msg := true) -> bool {
 			win.TranslateMessage(&msg)
 			win.DispatchMessageW(&msg)
 		}
+	}
+
+	if window_is_minimized() {
+		time.sleep(10 * time.Millisecond)
 	}
 
 	window.cursor = .Arrow
@@ -305,6 +271,17 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		win.BeginPaint(hwnd, &ps)
 		win.EndPaint(hwnd, &ps)
 
+	case win.WM_CTLCOLOREDIT:
+		if cast(win.HWND)uintptr(lparam) == window.text_box.hwnd {
+			hdc := cast(win.HDC)wparam
+			win.SetTextColor(hdc, window.text_box.text_color)
+			win.SetBkColor(hdc, window.text_box.background_color)
+			win.SetBkMode(hdc, .OPAQUE)
+			result = cast(win.LRESULT)uintptr(window.text_box.brush)
+		} else {
+			result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
+		}
+
 	case win.WM_LBUTTONUP:
 		update_button(.Mouse_Left, false)
 		win.ReleaseCapture()
@@ -361,36 +338,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 
 	case win.WM_SYSCHAR:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
-	case win.WM_CHAR:
-		@(static) high_surrogate: rune
-		w := cast(rune)wparam
-
-		is_high_surrogate := (w >= 0xD800 && w <= 0xDBFF)
-		is_low_surrogate := (w >= 0xDC00 && w <= 0xDFFF)
-
-		codepoint := unicode.REPLACEMENT_CHAR
-		if is_high_surrogate {
-			high_surrogate = w
-			break
-		} else if is_low_surrogate {
-			if high_surrogate != 0 {
-				codepoint = utf16.decode_surrogate_pair(high_surrogate, w)
-				high_surrogate = 0
-			} else {
-				break
-			}
-		} else {
-			codepoint = w
-			high_surrogate = 0
-		}
-
-		if codepoint == unicode.REPLACEMENT_CHAR {
-			break
-		}
-
-		if unicode.is_graphic(codepoint) {
-			append(&window.text_input, codepoint)
-		}
 
 	case:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)

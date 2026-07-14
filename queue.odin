@@ -1,561 +1,423 @@
 package main
 
-import "core:math"
-import "core:math/ease"
-
 import "fx"
 
-show_queue := false
-queue_scroll: Scroll_State
+UI_QUEUE_DRAG :: UI_ID(3)
 
-QUEUE_ITEM_H :: f32(46)
-QUEUE_SEPARATOR_H :: f32(28)
-QUEUE_GAP :: f32(8)
-QUEUE_PADDING :: f32(8)
-
-Queue_List :: enum {
+Queue_Section :: enum {
+	None,
 	Queue,
-	Songs,
+	Playlist,
 }
 
 Queue_Drag :: struct {
-	active:       bool,
-	song:         ^Music,
-	source:       Queue_List,
-	source_index: int,
-	target:       Queue_List,
-	target_index: int,
-	grab_y:       f32,
-	last_y:       f32,
+	song:        ^Music,
+	section:     Queue_Section,
+	index:       int,
+	grab_offset: f32,
+	row_x:       f32,
+	row_w:       f32,
 }
 
+queue_active: bool
+queue_scroll: Scroll_State
 queue_drag: Queue_Drag
-queue_row_y: map[int]f32
+queue_row_positions: map[UI_ID]f32
+queue_view_bounds: fx.Rect
 
-ui_queue :: proc() {
-	rect := layout_next()
-
-	queue_update_drag(rect)
-
-	if layout_start(rect, &queue_scroll, padding = QUEUE_PADDING, gap = QUEUE_GAP) {
-		fx.draw_rect(rect, PRIMARY_DARK, 12)
-
-		action_taken := false
-		for song, i in player.queue {
-			item_rect := layout_next(QUEUE_ITEM_H)
-			if queue_draw_item(.Queue, i, song, item_rect, rect) {
-				action_taken = true
-				break
-			}
-		}
-
-		if !action_taken {
-			separator_rect := queue_visual_separator_rect(layout_next(QUEUE_SEPARATOR_H), rect)
-			queue_draw_separator(separator_rect)
-
-			for i := queue_songs_start(); i < len(player.songs); i += 1 {
-				song := player.songs[i]
-				item_rect := layout_next(QUEUE_ITEM_H)
-				if queue_draw_item(.Songs, i, song, item_rect, rect) {
-					action_taken = true
-					break
-				}
-			}
-		}
-
-		queue_draw_dragged_item(rect)
-
-		ui_gradients(rect, queue_scroll.current, queue_scroll.content_size, 40, PRIMARY_DARK, 6)
-	}
+queue_init :: proc() {
+	queue_row_positions = make(map[UI_ID]f32)
 }
 
-queue_update_drag :: proc(rect: fx.Rect) {
-	if !queue_drag.active do return
+QUEUE_ROW_HEIGHT   :: f32(56)
+QUEUE_ROW_GAP      :: f32(6)
+QUEUE_PADDING      :: f32(14)
+QUEUE_DIVIDER_HEIGHT :: f32(38)
+QUEUE_EMPTY_HEIGHT :: f32(42)
 
-	queue_auto_scroll(rect)
-	queue_drag.target, queue_drag.target_index = queue_target_from_mouse(rect)
-	queue_drag.last_y = fx.mouse_pos().y - queue_drag.grab_y
-
-	if fx.key_is_down(.Mouse_Left) {
-		fx.set_cursor(.SizeAll)
-		return
+queue_entry_id :: proc(songs: []^Music, index: int, section: Queue_Section) -> UI_ID {
+	song := songs[index]
+	occurrence := uint(0)
+	for i in 0..<index {
+		if songs[i] == song do occurrence += 1
 	}
-
-	queue_finish_drag()
+	value := uint(uintptr(song)) ~ (uint(section) * 0x9e3779b9) ~ (occurrence * 0x85ebca6b)
+	return ui_id(60, value)
 }
 
-queue_auto_scroll :: proc(rect: fx.Rect) {
-	mouse := fx.mouse_pos()
-	edge := min(f32(56), rect.h * 0.35)
-	dt := fx.frame_time()
-
-	speed: f32
-	if mouse.y < rect.y + edge {
-		speed = -math.pow((rect.y + edge - mouse.y) / edge, 2) * 620
-	} else if mouse.y > rect.y + rect.h - edge {
-		speed = math.pow((mouse.y - (rect.y + rect.h - edge)) / edge, 2) * 620
+queue_animate_row_y :: proc(id: UI_ID, target: f32) -> f32 {
+	value, found := queue_row_positions[id]
+	if !found {
+		value = target
+	} else {
+		value += (target - value) * min(fx.frame_time() * 18, 1)
 	}
-
-	if speed == 0 do return
-
-	max_scroll := max(queue_scroll.content_size + QUEUE_PADDING * 2 - rect.h, 0)
-	queue_scroll.target = clamp(queue_scroll.target + speed * dt, 0, max_scroll)
+	queue_row_positions[id] = value
+	return value
 }
 
-queue_target_from_mouse :: proc(rect: fx.Rect) -> (Queue_List, int) {
-	drag_center_y := fx.mouse_pos().y - queue_drag.grab_y + QUEUE_ITEM_H * 0.5
-	content_y := drag_center_y - rect.y + queue_scroll.current - QUEUE_PADDING
-
-	queue_count := queue_list_len_after_remove(.Queue)
-	songs_count := queue_list_len_after_remove(.Songs)
-	songs_start := queue_songs_start()
-
-	best_list := Queue_List.Queue
-	best_index := 0
-	best_dist := f32(1.0e9)
-
-	for i in 0..=queue_count {
-		slot_center := queue_content_y(.Queue, i, queue_count) + QUEUE_ITEM_H * 0.5
-		if dist := abs(content_y - slot_center); dist < best_dist {
-			best_dist = dist
-			best_list = .Queue
-			best_index = i
-		}
-	}
-
-	for i in 0..=songs_count {
-		slot_center := queue_content_y(.Songs, i, queue_count) + QUEUE_ITEM_H * 0.5
-		if dist := abs(content_y - slot_center); dist < best_dist {
-			best_dist = dist
-			best_list = .Songs
-			best_index = songs_start + i
-		}
-	}
-
-	return best_list, best_index
+queue_sync_playlist_order :: proc() {
+	clear(&player.playlist)
+	for song in player.songs do append(&player.playlist, song)
 }
 
-queue_finish_drag :: proc() {
-	defer {
-		queue_drag = {}
-		if drag_id == int(UI_ID.Queue_Item) {
-			drag_id = 0
-		}
-	}
-
-	if queue_drag.song == nil do return
-	if !queue_index_matches(queue_drag.source, queue_drag.source_index, queue_drag.song) do return
-
-	destination := queue_drag.target
-	destination_index := queue_drag.target_index
-
-	if queue_drag.source == destination {
-		if destination_index == queue_drag.source_index {
+queue_remove_canonical_song :: proc(song: ^Music) {
+	for item, index in player.playlist {
+		if item == song {
+			ordered_remove(&player.playlist, index)
 			return
 		}
 	}
+}
 
-	if queue_drag.source == .Songs && destination == .Queue && len(player.songs) <= 1 {
+queue_insert_canonical_song :: proc(song: ^Music, index: int) {
+	insert_index := clamp(index, 0, len(player.playlist))
+	inject_at(&player.playlist, insert_index, song)
+}
+
+queue_remove_playlist_song :: proc(index: int) {
+	if index < 0 || index >= len(player.songs) do return
+	song := player.songs[index]
+	if index == player.cursor {
+		player.cursor = index - 1
+	} else if index < player.cursor {
+		player.cursor -= 1
+	}
+	ordered_remove(&player.songs, index)
+	if len(player.songs) == 0 do player.cursor = -1
+
+	if player.shuffle {
+		queue_remove_canonical_song(song)
+	} else {
+		queue_sync_playlist_order()
+	}
+}
+
+queue_insert_playlist_song :: proc(song: ^Music, index: int) {
+	insert_index := clamp(index, 0, len(player.songs))
+	if len(player.songs) == 0 {
+		player.cursor = song == player.music ? insert_index : -1
+	} else {
+		cursor_has_current := player.cursor >= 0 && player.cursor < len(player.songs) && player.songs[player.cursor] == player.music
+		if song == player.music && !cursor_has_current {
+			player.cursor = insert_index
+		} else if player.cursor >= 0 && insert_index <= player.cursor {
+			player.cursor += 1
+		}
+	}
+	inject_at(&player.songs, insert_index, song)
+
+	if player.shuffle {
+		queue_insert_canonical_song(song, insert_index)
+	} else {
+		queue_sync_playlist_order()
+	}
+}
+
+queue_reorder_playlist_song :: proc(from, to: int) {
+	if from < 0 || from >= len(player.songs) do return
+	target := clamp(to, 0, len(player.songs) - 1)
+	if from == target do return
+
+	song := player.songs[from]
+	current_moved := from == player.cursor
+	if !current_moved && from < player.cursor do player.cursor -= 1
+	ordered_remove(&player.songs, from)
+	if current_moved {
+		player.cursor = target
+	} else if player.cursor >= 0 && target <= player.cursor {
+		player.cursor += 1
+	}
+	inject_at(&player.songs, target, song)
+	if !player.shuffle do queue_sync_playlist_order()
+}
+
+queue_move_dragged_song :: proc(section: Queue_Section, index: int) {
+	if queue_drag.song == nil do return
+	old_section := queue_drag.section
+	old_index := queue_drag.index
+	if old_section == section && old_index == index do return
+
+	song := queue_drag.song
+	switch old_section {
+	case .Queue:
+		if old_index < 0 || old_index >= len(player.queue) do return
+		ordered_remove(&player.queue, old_index)
+	case .Playlist:
+		if old_index < 0 || old_index >= len(player.songs) do return
+		if section == .Playlist {
+			queue_reorder_playlist_song(old_index, index)
+			queue_drag.index = clamp(index, 0, len(player.songs) - 1)
+			return
+		}
+		queue_remove_playlist_song(old_index)
+	case .None:
 		return
 	}
 
-	queue_move_song(queue_drag.source, queue_drag.source_index, destination, destination_index, queue_drag.last_y)
-}
-
-queue_move_song :: proc(source: Queue_List, source_index: int, destination: Queue_List, destination_index: int, seed_y: f32) {
-	song := queue_song_at(source, source_index)
-	if song == nil do return
-
-	insert_index := queue_adjusted_target_index_for(source, source_index, destination, destination_index)
-	queue_remove_at(source, source_index)
-	insert_index = clamp(insert_index, 0, queue_list_len(destination))
-	queue_insert_at(destination, insert_index, song)
-	queue_sync_cursor()
-
-	key := queue_item_key(destination, insert_index, song)
-	if queue_row_y == nil {
-		queue_row_y = make(map[int]f32)
-	}
-	queue_row_y[key] = seed_y
-}
-
-queue_draw_item :: proc(list: Queue_List, index: int, song: ^Music, target_rect, panel_rect: fx.Rect) -> (action_taken: bool) {
-	key := queue_item_key(list, index, song)
-	is_dragged := queue_drag.active && queue_drag.source == list && queue_drag.source_index == index && queue_drag.song == song
-	rect := is_dragged ? queue_placeholder_rect(panel_rect, target_rect) : queue_visual_item_rect(list, index, key, target_rect, panel_rect)
-
-	if is_dragged {
-		if fx.rect_overlapping(panel_rect, rect) {
-			ghost := fx.rect_shrink(rect, 1, 4)
-			fx.draw_rect(ghost, fx.color_opacity(PRIMARY_BRIGHT, 0.25), 6)
-		}
+	switch section {
+	case .Queue:
+		target := clamp(index, 0, len(player.queue))
+		inject_at(&player.queue, target, song)
+		queue_drag.index = target
+	case .Playlist:
+		target := clamp(index, 0, len(player.songs))
+		queue_insert_playlist_song(song, target)
+		queue_drag.index = target
+	case .None:
 		return
 	}
+	queue_drag.section = section
+}
 
-	if !fx.rect_overlapping(panel_rect, rect) do return false
-
-	hovered := mouse_hover(rect)
-	is_playing := player.music == song
-	hover_anim := animate(key, hovered || is_playing)
-
-	base := is_playing ? ACCENT_DARK : PRIMARY_DARK
-	hot := is_playing ? ACCENT_COLOR : HOVER_COLOR
-	if hover_anim > 0 || is_playing {
-		fx.draw_rect(rect, fx.color_lerp(base, hot, hover_anim), 6)
+queue_validate_drag :: proc() -> bool {
+	if queue_drag.song == nil do return false
+	songs := queue_drag.section == .Queue ? player.queue[:] : player.songs[:]
+	if queue_drag.index >= 0 && queue_drag.index < len(songs) && songs[queue_drag.index] == queue_drag.song {
+		return true
 	}
-
-	if hovered && fx.key_is_pressed(.Mouse_Right) {
-		open_context_menu(song)
-	}
-
-	handle_rect := fx.Rect{rect.x + 8, rect.y + 8, 24, rect.h - 16}
-	handle_hover := mouse_hover(handle_rect)
-	if handle_hover {
-		fx.set_cursor(.SizeAll)
-		if fx.key_is_pressed(.Mouse_Left) && drag_id == 0 {
-			queue_begin_drag(list, index, song, rect)
-		}
-	}
-
-	queue_draw_handle(handle_rect, handle_hover ? TEXT_PRIMARY : TEXT_SECONDARY)
-
-	delete_size := f32(28)
-	delete_rect := fx.Rect{rect.x + rect.w - 36, rect.y + (rect.h - delete_size) * 0.5, delete_size, delete_size}
-	delete_hover := mouse_hover(delete_rect)
-	if delete_hover {
-		fx.set_cursor(.Hand)
-		if fx.key_is_pressed(.Mouse_Left) {
-			queue_delete_item(list, index, rect)
+	for song, index in songs {
+		if song == queue_drag.song {
+			queue_drag.index = index
 			return true
 		}
 	}
-
-	if hovered && !handle_hover && !delete_hover && fx.key_is_pressed(.Mouse_Left) {
-		queue_activate_item(list, index, song)
-		return true
-	}
-
-	cover_rect := fx.Rect{rect.x + 42, rect.y + 6, 34, 34}
-	if layout_start(cover_rect) {
-		ui_cover(song.thumbnail, 4)
-	}
-
-	text_x := cover_rect.x + cover_rect.w + 12
-	text_w := max(delete_rect.x - text_x - 8, 0)
-	title_rect := fx.Rect{text_x, rect.y + 6, text_w, 20}
-	artist_rect := fx.Rect{text_x, rect.y + 25, text_w, 17}
-
-	c1 := (hovered || is_playing) ? TEXT_PRIMARY : TEXT_SECONDARY
-	c2 := (hovered || is_playing) ? TEXT_SECONDARY : fx.color_brightness(TEXT_SECONDARY, 0.6)
-
-	fx.draw_text_faded(font, song.title, title_rect, 15, c1, true)
-	fx.draw_text_faded(font, song.artist, artist_rect, 12, c2, true)
-
-	cross_color := delete_hover ? TEXT_PRIMARY : fx.color_brightness(TEXT_SECONDARY, 0.75)
-	fx.draw_texture_ex(icons_texture, icons[.Cross], fx.rect_shrink(delete_rect, 5, 5), cross_color)
-
+	queue_drag = {}
+	ui_active = UI_NONE
 	return false
 }
 
-queue_draw_separator :: proc(rect: fx.Rect) {
-	if rect.h <= 0 do return
+queue_update_drag_target :: proc(bounds: fx.Rect) {
+	if !queue_validate_drag() do return
 
-	line_y := rect.y + rect.h * 0.5
-	label_w := fx.measure_text(font, "Playlist", 11).x + 16
-	label_rect := fx.Rect{rect.x + (rect.w - label_w) * 0.5, rect.y + 4, label_w, rect.h - 8}
+	queue_count := len(player.queue)
+	playlist_count := len(player.songs)
+	if queue_drag.section == .Queue do queue_count -= 1
+	if queue_drag.section == .Playlist do playlist_count -= 1
 
-	fx.draw_rect({rect.x + 8, line_y - 1, max((rect.w - label_w) * 0.5 - 16, 0), 2}, PRIMARY_BRIGHT, 1)
-	fx.draw_rect({label_rect.x + label_rect.w + 8, line_y - 1, max(rect.x + rect.w - label_rect.x - label_rect.w - 16, 0), 2}, PRIMARY_BRIGHT, 1)
-	fx.draw_rect(label_rect, PRIMARY_COLOR, 5)
-	fx.draw_text(font, "Playlist", label_rect, 11, TEXT_SECONDARY, true, true)
+	content_top := bounds.y + QUEUE_PADDING - queue_scroll.current
+	drag_center := fx.mouse_pos().y - queue_drag.grab_offset + QUEUE_ROW_HEIGHT * .5
+	best_distance := f32(1e30)
+	best_section := Queue_Section.Queue
+	best_index := 0
+
+	for index := 0; index <= queue_count; index += 1 {
+		slot_center := content_top + QUEUE_ROW_HEIGHT * .5 + f32(index) * (QUEUE_ROW_HEIGHT + QUEUE_ROW_GAP)
+		distance := abs(drag_center - slot_center)
+		if distance < best_distance {
+			best_distance = distance
+			best_section = .Queue
+			best_index = index
+		}
+	}
+
+	queue_block_height := f32(queue_count) * (QUEUE_ROW_HEIGHT + QUEUE_ROW_GAP)
+	divider_y := content_top + queue_block_height
+	playlist_top := divider_y + QUEUE_DIVIDER_HEIGHT + QUEUE_ROW_GAP
+	for index := 0; index <= playlist_count; index += 1 {
+		slot_center := playlist_top + QUEUE_ROW_HEIGHT * .5 + f32(index) * (QUEUE_ROW_HEIGHT + QUEUE_ROW_GAP)
+		distance := abs(drag_center - slot_center)
+		if distance < best_distance {
+			best_distance = distance
+			best_section = .Playlist
+			best_index = index
+		}
+	}
+
+	queue_move_dragged_song(best_section, best_index)
 }
 
-queue_begin_drag :: proc(list: Queue_List, index: int, song: ^Music, rect: fx.Rect) {
-	drag_id = int(UI_ID.Queue_Item)
-	queue_drag = Queue_Drag {
-		active = true,
+queue_begin_drag :: proc(song: ^Music, section: Queue_Section, index: int, row: fx.Rect) {
+	queue_drag = {
 		song = song,
-		source = list,
-		source_index = index,
-		target = list,
-		target_index = index,
-		grab_y = fx.mouse_pos().y - rect.y,
-		last_y = rect.y,
+		section = section,
+		index = index,
+		grab_offset = fx.mouse_pos().y - row.y,
+		row_x = row.x,
+		row_w = row.w,
 	}
-	context_menu.selection = nil
-	context_menu.rect = {}
+	ui_active = UI_QUEUE_DRAG
 }
 
-queue_draw_dragged_item :: proc(panel_rect: fx.Rect) {
-	if !queue_drag.active || queue_drag.song == nil do return
-
-	mouse := fx.mouse_pos()
-	rect := fx.Rect{
-		panel_rect.x + QUEUE_PADDING,
-		mouse.y - queue_drag.grab_y,
-		max(panel_rect.w - QUEUE_PADDING * 2, 0),
-		QUEUE_ITEM_H,
+queue_finish_drag :: proc() {
+	if queue_drag.song == nil do return
+	songs := queue_drag.section == .Queue ? player.queue[:] : player.songs[:]
+	if queue_drag.index >= 0 && queue_drag.index < len(songs) {
+		id := queue_entry_id(songs, queue_drag.index, queue_drag.section)
+		queue_row_positions[id] = fx.mouse_pos().y - queue_drag.grab_offset
 	}
-	queue_drag.last_y = rect.y
-
-	fx.draw_rect(fx.rect_expand(rect, 2, 2), fx.color_opacity(PRIMARY_BRIGHT, 0.85), 8)
-	fx.draw_rect(rect, fx.color_opacity(HOVER_COLOR, 0.96), 6)
-
-	queue_draw_handle({rect.x + 8, rect.y + 8, 24, rect.h - 16}, TEXT_PRIMARY)
-	if layout_start({rect.x + 42, rect.y + 6, 34, 34}) {
-		ui_cover(queue_drag.song.thumbnail, 4)
-	}
-
-	text_x := rect.x + 88
-	text_w := max(rect.w - 132, 0)
-	fx.draw_text_faded(font, queue_drag.song.title, {text_x, rect.y + 6, text_w, 20}, 15, TEXT_PRIMARY, true)
-	fx.draw_text_faded(font, queue_drag.song.artist, {text_x, rect.y + 25, text_w, 17}, 12, TEXT_SECONDARY, true)
+	queue_drag = {}
+	ui_active = UI_NONE
 }
 
-queue_content_y :: proc(list: Queue_List, index, queue_count: int) -> f32 {
-	if list == .Queue {
-		return f32(index) * (QUEUE_ITEM_H + QUEUE_GAP)
-	}
-
-	songs_y := f32(queue_count) * (QUEUE_ITEM_H + QUEUE_GAP) + QUEUE_SEPARATOR_H + QUEUE_GAP
-	return songs_y + f32(index) * (QUEUE_ITEM_H + QUEUE_GAP)
-}
-
-queue_visual_item_rect :: proc(list: Queue_List, index, key: int, target_rect, panel_rect: fx.Rect) -> fx.Rect {
-	if !queue_drag.active {
-		return queue_animated_rect(key, target_rect)
-	}
-
-	visual_list, visual_index := queue_virtual_item_position(list, index)
-	content_y := queue_content_y(visual_list, visual_index, queue_virtual_queue_len())
-	target := target_rect
-	target.y = panel_rect.y + QUEUE_PADDING - queue_scroll.current + content_y
-	return queue_animated_rect(key, target)
-}
-
-queue_visual_separator_rect :: proc(target_rect, panel_rect: fx.Rect) -> fx.Rect {
-	if !queue_drag.active {
-		return queue_animated_rect(int(UI_ID.Queue_Item) + 700000, target_rect)
-	}
-
-	target := target_rect
-	content_y := f32(queue_virtual_queue_len()) * (QUEUE_ITEM_H + QUEUE_GAP)
-	target.y = panel_rect.y + QUEUE_PADDING - queue_scroll.current + content_y
-	return queue_animated_rect(int(UI_ID.Queue_Item) + 700000, target)
-}
-
-queue_placeholder_rect :: proc(panel_rect, template: fx.Rect) -> fx.Rect {
-	target := template
-	content_y := queue_content_y(queue_drag.target, queue_visible_slot(queue_drag.target, queue_adjusted_target_index()), queue_virtual_queue_len())
-	target.y = panel_rect.y + QUEUE_PADDING - queue_scroll.current + content_y
-	return queue_animated_rect(int(UI_ID.Queue_Item) + 710000, target)
-}
-
-queue_virtual_item_position :: proc(list: Queue_List, index: int) -> (Queue_List, int) {
-	visual_index := queue_visible_slot(list, index)
-
-	if queue_drag.source == list && index > queue_drag.source_index {
-		visual_index -= 1
-	}
-
-	if queue_drag.target == list && visual_index >= queue_visible_slot(list, queue_adjusted_target_index()) {
-		visual_index += 1
-	}
-
-	return list, visual_index
-}
-
-queue_virtual_queue_len :: proc() -> int {
-	count := len(player.queue)
-	if !queue_drag.active do return count
-
-	if queue_drag.source == .Queue do count -= 1
-	if queue_drag.target == .Queue do count += 1
-	return count
-}
-
-queue_list_len_after_remove :: proc(list: Queue_List) -> int {
-	count := queue_visible_len(list)
-	source_visible := list == .Queue || queue_drag.source_index >= queue_songs_start()
-	if queue_drag.active && queue_drag.source == list && source_visible {
-		count -= 1
-	}
-	return max(count, 0)
-}
-
-queue_songs_start :: proc() -> int {
-	return clamp(player.cursor + 1, 0, len(player.songs))
-}
-
-queue_visible_len :: proc(list: Queue_List) -> int {
-	switch list {
-	case .Queue:
-		return len(player.queue)
-	case .Songs:
-		return max(len(player.songs) - queue_songs_start(), 0)
-	}
-
-	return 0
-}
-
-queue_visible_slot :: proc(list: Queue_List, index: int) -> int {
-	if list == .Queue do return index
-	return index - queue_songs_start()
-}
-
-queue_adjusted_target_index :: proc() -> int {
-	return queue_adjusted_target_index_for(queue_drag.source, queue_drag.source_index, queue_drag.target, queue_drag.target_index)
-}
-
-queue_adjusted_target_index_for :: proc(source: Queue_List, source_index: int, target: Queue_List, target_index: int) -> int {
-	index := target_index
-	max_index := queue_list_len(target)
-	if source == target {
-		max_index -= 1
-	}
-
-	min_index := target == .Songs ? queue_songs_start() : 0
-	return clamp(index, min_index, max_index)
-}
-
-queue_delete_item :: proc(list: Queue_List, index: int, rect: fx.Rect) {
-	if list == .Songs && len(player.songs) <= 1 {
-		return
-	}
-
-	song := queue_song_at(list, index)
-	if song == nil do return
-
-	queue_remove_at(list, index)
-	queue_sync_cursor()
-}
-
-queue_activate_item :: proc(list: Queue_List, index: int, song: ^Music) {
-	switch list {
-	case .Queue:
-		player_play_music(song)
-		for i := 0; i <= index && len(player.queue) > 0; i += 1 {
-			ordered_remove(&player.queue, 0)
-		}
-	case .Songs:
-		player.cursor = index
-		player_play_music(song)
+draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
+	width := f32(15)
+	x := bounds.x + (bounds.w - width) * .5
+	y := bounds.y + bounds.h * .5 - 6.5
+	for i in 0..<3 {
+		fx.draw_rect({x, y + f32(i) * 5, width, 3}, color, 1.5)
 	}
 }
 
-queue_animated_rect :: proc(key: int, target: fx.Rect) -> fx.Rect {
-	if queue_row_y == nil {
-		queue_row_y = make(map[int]f32)
+draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, overlay := false) -> bool {
+	visible_hover := !overlay && ui_hover(queue_view_bounds) && ui_hover(row)
+	id_value := uint(uintptr(song)) ~ uint(section) * 0x27d4eb2d ~ uint(index)
+	hover_anim := ui_animate(ui_id(61, id_value), visible_hover, UI_HOVER_SPEED)
+	playing := player.music == song
+
+	background := fx.color_opacity(COLOR_ITEM_HOVER, hover_anim)
+	if overlay {
+		fx.draw_rect({row.x + 2, row.y + 5, row.w, row.h}, fx.color_opacity(COLOR_BACKGROUND, .55), 8)
+		fx.draw_rect(fx.rect_expand(row, 1, 1), fx.color_opacity(COLOR_ACCENT_BRIGHT, .72), 8)
+		background = COLOR_ITEM_HOVER
 	}
+	if background.a > 0 do fx.draw_rect(row, background, 7)
 
-	y := target.y
-	if prev, ok := queue_row_y[key]; ok {
-		t := ease.cubic_out(clamp(fx.frame_time() * 14, 0, 1))
-		y = math.lerp(prev, target.y, t)
-		if abs(y - target.y) < 0.2 {
-			y = target.y
-		}
-	}
-	queue_row_y[key] = y
-
-	return fx.Rect{target.x, y, target.w, target.h}
-}
-
-queue_item_key :: proc(list: Queue_List, index: int, song: ^Music) -> int {
-	offset := list == .Queue ? 900000 : 1200000
-	return int(uintptr(song)) + offset + queue_occurrence(list, index, song) * 1009
-}
-
-queue_occurrence :: proc(list: Queue_List, index: int, song: ^Music) -> int {
-	count := 0
-
-	switch list {
-	case .Queue:
-		for s, i in player.queue {
-			if i >= index do break
-			if s == song do count += 1
-		}
-	case .Songs:
-		for s, i in player.songs {
-			if i >= index do break
-			if s == song do count += 1
+	handle := fx.Rect{row.x + 3, row.y, 30, row.h}
+	handle_hovered := visible_hover && ui_hover(handle)
+	draw_queue_handle(handle, handle_hovered || overlay ? COLOR_TEXT : COLOR_MUTED)
+	if handle_hovered {
+		fx.set_cursor(.SizeAll)
+		if fx.key_is_pressed(.Mouse_Left) && ui_active == UI_NONE {
+			queue_begin_drag(song, section, index, row)
 		}
 	}
 
-	return count
-}
+	cover := fx.Rect{row.x + 36, row.y + 7, 42, 42}
+	draw_cover(song.thumbnail, cover, 6)
+	remove := fx.Rect{row.x + row.w - 36, row.y + 10, 30, 36}
+	remove_hovered := visible_hover && ui_hover(remove)
+	if remove_hovered do fx.set_cursor(.Hand)
+	if remove_hovered && hover_anim > .001 do fx.draw_rect(remove, fx.color_opacity(COLOR_BORDER, hover_anim * .55), 6)
+	icon_size := f32(13)
+	fx.draw_texture(
+		icons[.Cross],
+		{remove.x + (remove.w - icon_size) * .5, remove.y + (remove.h - icon_size) * .5, icon_size, icon_size},
+		remove_hovered || overlay ? COLOR_TEXT : COLOR_MUTED,
+	)
 
-queue_draw_handle :: proc(rect: fx.Rect, color: fx.Color) {
-	x := rect.x + (rect.w - 12) * 0.5
-	y := rect.y + (rect.h - 8) * 0.5
+	text_x := cover.x + cover.w + 11
+	text_width := max(0, remove.x - text_x - 7)
+	title_color := playing || overlay ? COLOR_TEXT : fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
+	fx.draw_text_faded(song.title, {text_x, row.y + 6, text_width, 25}, 13, title_color, false, true)
+	secondary := song.artist
+	if secondary == "" do secondary = song.album
+	fx.draw_text_faded(secondary, {text_x, row.y + 29, text_width, 18}, 10, COLOR_MUTED, false, true)
 
-	for row in 0..<2 {
-		fx.draw_rect({x, y + f32(row) * 6, 12, 2}, color, 1)
+	if remove_hovered && fx.key_is_pressed(.Mouse_Left) {
+		return true
 	}
-}
-
-queue_song_at :: proc(list: Queue_List, index: int) -> ^Music {
-	if index < 0 do return nil
-
-	switch list {
-	case .Queue:
-		if index >= len(player.queue) do return nil
-		return player.queue[index]
-	case .Songs:
-		if index >= len(player.songs) do return nil
-		return player.songs[index]
+	if visible_hover && ui_active == UI_NONE && fx.key_is_pressed(.Mouse_Right) {
+		open_context_menu(song)
 	}
-
-	return nil
+	return false
 }
 
-queue_index_matches :: proc(list: Queue_List, index: int, song: ^Music) -> bool {
-	return queue_song_at(list, index) == song
+draw_queue_divider :: proc(bounds: fx.Rect) {
+	label := "Playlist"
+	label_width := fx.measure_text(label, 11).x + 18
+	center_x := bounds.x + bounds.w * .5
+	line_y := bounds.y + bounds.h * .5
+	left_width := max(0, center_x - label_width * .5 - bounds.x - 5)
+	right_x := center_x + label_width * .5
+	right_width := max(0, bounds.x + bounds.w - right_x - 5)
+	fx.draw_rect({bounds.x + 5, line_y, left_width, 1}, COLOR_BORDER)
+	fx.draw_rect({right_x, line_y, right_width, 1}, COLOR_BORDER)
+	fx.draw_text(label, {center_x - label_width * .5, bounds.y, label_width, bounds.h}, 11, COLOR_MUTED, true, true)
 }
 
-queue_list_len :: proc(list: Queue_List) -> int {
-	switch list {
-	case .Queue:
-		return len(player.queue)
-	case .Songs:
-		return len(player.songs)
-	}
-
-	return 0
-}
-
-queue_remove_at :: proc(list: Queue_List, index: int) {
-	switch list {
-	case .Queue:
-		ordered_remove(&player.queue, index)
-	case .Songs:
-		ordered_remove(&player.songs, index)
-	}
-}
-
-queue_insert_at :: proc(list: Queue_List, index: int, song: ^Music) {
-	switch list {
-	case .Queue:
-		inject_at(&player.queue, index, song)
-	case .Songs:
-		inject_at(&player.songs, index, song)
-	}
-}
-
-queue_sync_cursor :: proc() {
-	if len(player.songs) == 0 {
-		player.cursor = 0
-		return
+draw_queue :: proc(bounds: fx.Rect) {
+	queue_view_bounds = bounds
+	remove_section := Queue_Section.None
+	remove_index := -1
+	if queue_drag.song != nil {
+		edge := f32(42)
+		mouse_y := fx.mouse_pos().y
+		if mouse_y < bounds.y + edge {
+			queue_scroll.target -= (bounds.y + edge - mouse_y) / edge * 480 * fx.frame_time()
+		} else if mouse_y > bounds.y + bounds.h - edge {
+			queue_scroll.target += (mouse_y - (bounds.y + bounds.h - edge)) / edge * 480 * fx.frame_time()
+		}
 	}
 
-	if player.music != nil {
-		for song, i in player.songs {
-			if song == player.music {
-				player.cursor = i
-				return
+	if layout_begin(bounds, padding = QUEUE_PADDING, gap = QUEUE_ROW_GAP, scroll = &queue_scroll, background = COLOR_SURFACE) {
+		if queue_drag.song != nil do queue_update_drag_target(bounds)
+
+		for song, index in player.queue {
+			target := layout_next(QUEUE_ROW_HEIGHT)
+			if queue_drag.song != nil && queue_drag.section == .Queue && queue_drag.index == index do continue
+			id := queue_entry_id(player.queue[:], index, .Queue)
+			row := target
+			row.y = queue_animate_row_y(id, target.y)
+			if draw_queue_song(song, row, .Queue, index) {
+				remove_section = .Queue
+				remove_index = index
+			}
+		}
+
+		divider_target := layout_next(QUEUE_DIVIDER_HEIGHT)
+		divider := divider_target
+		divider.y = queue_animate_row_y(ui_id(62, 0), divider_target.y)
+		draw_queue_divider(divider)
+
+		if len(player.songs) == 0 {
+			empty := layout_next(QUEUE_EMPTY_HEIGHT)
+			fx.draw_text("No playlist songs", empty, 11, fx.color_opacity(COLOR_MUTED, .72), true, true)
+		} else {
+			for song, index in player.songs {
+				target := layout_next(QUEUE_ROW_HEIGHT)
+				if queue_drag.song != nil && queue_drag.section == .Playlist && queue_drag.index == index do continue
+				id := queue_entry_id(player.songs[:], index, .Playlist)
+				row := target
+				row.y = queue_animate_row_y(id, target.y)
+				if draw_queue_song(song, row, .Playlist, index) {
+					remove_section = .Playlist
+					remove_index = index
+				}
 			}
 		}
 	}
+	if remove_index >= 0 {
+		if remove_section == .Queue {
+			ordered_remove(&player.queue, remove_index)
+		} else if remove_section == .Playlist {
+			queue_remove_playlist_song(remove_index)
+		}
+	}
 
-	player.cursor = clamp(player.cursor, 0, len(player.songs) - 1)
+	if queue_drag.song != nil {
+		overlay := fx.Rect{queue_drag.row_x, fx.mouse_pos().y - queue_drag.grab_offset, queue_drag.row_w, QUEUE_ROW_HEIGHT}
+		_ = draw_queue_song(queue_drag.song, overlay, queue_drag.section, queue_drag.index, true)
+		if fx.key_is_released(.Mouse_Left) do queue_finish_drag()
+	}
+}
+
+draw_queue_toggle :: proc(bounds: fx.Rect) {
+	button := fx.Rect{bounds.x + bounds.w - 50, bounds.y + 14, 34, 34}
+	hovered := ui_active == UI_NONE && ui_hover(button)
+	hover_anim := ui_animate(ui_id(31, uint(Icon.Queue)), hovered, UI_HOVER_SPEED)
+	background := fx.color_opacity(COLOR_ITEM, 0)
+	if queue_active {
+		background = fx.color_opacity(COLOR_ACCENT, .30)
+	} else if hover_anim > .001 {
+		background = fx.color_opacity(COLOR_ITEM_HOVER, hover_anim)
+	}
+	if background.a > 0 do fx.draw_rect(button, background, button.h * .5)
+	icon_size := button.h * .46
+	tint := queue_active ? COLOR_TEXT : fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
+	fx.draw_texture(
+		icons[.Queue],
+		{button.x + (button.w - icon_size) * .5, button.y + (button.h - icon_size) * .5, icon_size, icon_size},
+		tint,
+	)
+	if hovered {
+		fx.set_cursor(.Hand)
+		if fx.key_is_pressed(.Mouse_Left) {
+			queue_active = !queue_active
+			if !queue_active && queue_drag.song != nil {
+				queue_drag = {}
+				ui_active = UI_NONE
+			}
+		}
+	}
 }

@@ -23,7 +23,7 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - [x] Fast lyrics search
 - [x] Support for mp3 and flac
 - [x] Queue management
-- [x] Themes
+- [ ] Themes
 - [ ] Mini Player
 - [ ] Playlist management
 

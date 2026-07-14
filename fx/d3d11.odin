@@ -358,12 +358,15 @@ flush_batch :: proc() -> bool {
 }
 
 present :: proc(sync := u32(1)) {
-	flush_batch()
 	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		clear(&state.batch.instanced)
+		clear(&state.batch.runs)
 		return
 	}
+	flush_batch()
 
 	hr := state.swapchain.swapchain1->Present(sync, nil)
+	texture_release_deferred()
 	if win.FAILED(hr) {
 		return
 	}

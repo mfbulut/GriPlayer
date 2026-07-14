@@ -4,6 +4,8 @@ import "core:math"
 import "core:math/linalg"
 
 Vec2 :: [2]f32
+Vec3 :: [3]f32
+Vec4 :: [4]f32
 Rectangle :: [4]f32
 Color :: [4]byte
 
@@ -54,19 +56,25 @@ color_opacity :: proc(c: Color, alpha: f32) -> Color {
 	return {c.r, c.g, c.b, u8(clamp(alpha, 0, 1) * 255)}
 }
 
+_LINEAR_LMS_TO_LINEAR_SRGB :: #row_major matrix[3, 3]f32 {
+	4.0771870613, -3.3076224327,  0.2308591902,
+	-1.2685765028, 2.6096870899, -0.3411557376,
+	-0.0041965423, -0.7033996582, 1.7067960501,
+}
+
+_LINEAR_SRGB_TO_LINEAR_LMS := linalg.inverse(_LINEAR_LMS_TO_LINEAR_SRGB)
+
+_LINEAR_LMS_TO_OKLAB :: #row_major matrix[3, 3]f32 {
+	0.2104542553,  0.7936177850, -0.0040720468,
+	1.9779984951, -2.4285922050,  0.4505937099,
+	0.0259040371,  0.7827717662, -0.8086757660,
+}
+
 color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
-	col_vec := color_to_vec4(color)
-	linear := linalg.vector4_srgb_to_linear(col_vec)
-
-	_l := math.pow(0.4122214708 * linear.r + 0.5363325363 * linear.g + 0.0514459929 * linear.b, 1.0 / 3.0)
-	_m := math.pow(0.2119034982 * linear.r + 0.6806995451 * linear.g + 0.1073969566 * linear.b, 1.0 / 3.0)
-	_s := math.pow(0.0883024619 * linear.r + 0.2817188376 * linear.g + 0.6299787005 * linear.b, 1.0 / 3.0)
-
-	ok_l := 0.2104542553 * _l + 0.7936177850 * _m - 0.0040720468 * _s
-	ok_a := 1.9779984951 * _l - 2.4285922050 * _m + 0.4505937099 * _s
-	ok_b := 0.0259040371 * _l + 0.7827717662 * _m - 0.8086757660 * _s
-
-	return ok_l, math.sqrt(ok_a * ok_a + ok_b * ok_b), math.atan2(ok_b, ok_a),
+	linear := color_to_vec4(color)
+	lms := _LINEAR_SRGB_TO_LINEAR_LMS * Vec3{linear.r, linear.g, linear.b}
+	oklab := _LINEAR_LMS_TO_OKLAB * Vec3{math.cbrt(lms.r), math.cbrt(lms.g), math.cbrt(lms.b)}
+	return oklab.x, math.sqrt(oklab.y * oklab.y + oklab.z * oklab.z), math.atan2(oklab.z, oklab.y)
 }
 
 Rect :: struct {
@@ -75,14 +83,6 @@ Rect :: struct {
 
 point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
 	return 	p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
-}
-
-rect_overlapping :: proc(a: Rect, b: Rect) -> bool {
-	return  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
-}
-
-rect_center :: proc(r: Rect) -> Vec2 {
-	return { r.x + r.w/2, r.y + r.h/2 }
 }
 
 rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {

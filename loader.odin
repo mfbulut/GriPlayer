@@ -76,7 +76,7 @@ loader_start :: proc() {
 			sync.guard(&loading_mutex)
 			append(&loaded_songs_queue, music)
 		}
-	})
+	}, self_cleanup = true)
 }
 
 loader_poll :: proc() {
@@ -112,6 +112,7 @@ loader_poll :: proc() {
 	slice.sort_by(playlists[0].songs[:], proc(i, j: ^Music) -> bool {
 		return time.diff(j.liked_timestamp, i.liked_timestamp) > 0
 	})
+	search.initialized = false
 
 	delete(queue)
 }
@@ -235,7 +236,6 @@ toggle_like :: proc(song: ^Music) {
 
 cache: struct {
 	volume: f32,
-	theme: int,
 	songs: map[string]Music,
 }
 
@@ -252,7 +252,6 @@ cache_load :: proc() {
 	if unmarshal_err != nil do return
 
 	audio.volume = cache.volume
-	apply_theme(cache.theme)
 }
 
 cache_save :: proc() {
@@ -264,7 +263,6 @@ cache_save :: proc() {
 	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"})
 
 	cache.volume = audio.volume
-	cache.theme = current_theme
 	cache.songs = make(map[string]Music, 1024)
 
 	for playlist in playlists[1:] {

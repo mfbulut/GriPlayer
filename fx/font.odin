@@ -14,6 +14,12 @@ Font :: struct {
 	glyphs:  map[rune]Glyph,
 }
 
+default_font: Font
+
+font_initialize :: proc() {
+	default_font = load_font(#load("../assets/Inter.json"), #load("../assets/Inter.png"))
+}
+
 MSDF_Metrics :: struct {
 	emSize:             f32,
 	lineHeight:         f32,

@@ -2,6 +2,7 @@ package fx
 
 import win "core:sys/windows"
 import D3D11 "vendor:directx/d3d11"
+
 import "core:slice"
 import "vendor:stb/image"
 
@@ -89,10 +90,18 @@ texture_load :: proc(bytes: []byte, mipmaps := true) -> Texture {
 	return texture_load_raw(slice.reinterpret([]Color, pixels[:w * h * 4]), cast(int)w, cast(int)h, mipmaps)
 }
 
+deferred_texture_releases: [dynamic]^D3D11.IShaderResourceView
+
 texture_free :: proc(tex: ^Texture) {
 	if tex.srv != nil {
-		tex.srv->Release()
+		append(&deferred_texture_releases, tex.srv)
 	}
-
 	tex^ = {}
+}
+
+texture_release_deferred :: proc() {
+	for srv in deferred_texture_releases {
+		srv->Release()
+	}
+	clear(&deferred_texture_releases)
 }

@@ -35,28 +35,28 @@ player_start_playlist :: proc(songs: []^Music, song_idx: int) {
 }
 
 player_play_music :: proc(song: ^Music, gapless := false) {
-    if !audio.open(song.fullpath, gapless) {
-        player.playing = false
-        player.music = nil
-        return
-    }
+	if !audio.open(song.fullpath, gapless) {
+		player.playing = false
+		player.music = nil
+		return
+	}
 	audio.resume()
 	player.music = song
 	player.playing = true
+	lyrics_scroll = {}
+	lyrics_synced = true
 	visualizer_create_palette(song.thumbnail_pixels)
 
 	//-----------------------------------
 	fx.texture_free(&player.cover)
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
-    if cover_bytes != nil {
-        player.cover = fx.texture_load(cover_bytes)
-    } else {
-        player.cover = {}
-    }
+	if cover_bytes != nil {
+		player.cover = fx.texture_load(cover_bytes)
+	} else {
+		player.cover = {}
+	}
 
-	lyrics_synced = true
-	lyrics_scroll = {}
 	smtc.update_metadata(song.title, song.artist, cover_bytes)
 	smtc.update_status(1)
 }
@@ -65,6 +65,12 @@ player_next :: proc(gapless := false) {
 	if len(player.queue) > 0 {
 		player_play_music(player.queue[0], gapless)
 		ordered_remove(&player.queue, 0)
+		return
+	}
+	if len(player.songs) == 0 {
+		player.playing = false
+		audio.pause()
+		smtc.update_status(2)
 		return
 	}
 
@@ -77,6 +83,7 @@ player_prev :: proc() {
 		player_seek(0)
 		return
 	}
+	if len(player.songs) == 0 do return
 
 	player.cursor = (player.cursor - 1) %% len(player.songs)
 	player_play_music(player.songs[player.cursor])
@@ -118,7 +125,7 @@ player_toggle_shuffle :: proc() {
 }
 
 player_toggle_pause :: proc() {
-    player.playing = !player.playing
+	player.playing = !player.playing
 	if !player.playing {
 		audio.pause()
 		smtc.update_status(2)
@@ -135,23 +142,39 @@ player_seek :: proc(pos: f32) {
 	}
 }
 
+current_lyric :: proc() -> (index: int) {
+	if player.music == nil || len(player.music.lyrics) == 0 do return 0
+	t := scrub_time >= 0 ? scrub_time : audio.position()
+	for lyric, i in player.music.lyrics {
+		if t >= lyric.time {
+			index = i
+		} else {
+			break
+		}
+	}
+	return
+}
+
 player_update :: proc() {
 	if player.music == nil do return
 
 	switch smtc.poll_action() {
-	case 0: player_toggle_pause()
-	case 1: player_next()
-	case 2: player_prev()
+	case 0:
+		player_toggle_pause()
+	case 1:
+		player_next()
+	case 2:
+		player_prev()
 	}
 
 	if fx.key_is_pressed(.Play_Pause) do player_toggle_pause()
 	if fx.key_is_pressed(.Next_Track) do player_next()
 	if fx.key_is_pressed(.Prev_Track) do player_prev()
 
-    if audio.update(visualizer_push) {
-        player_next(true)
-        return
-    }
+	if audio.update(visualizer_push) {
+		player_next(true)
+		return
+	}
 
-    visualizer_update()
+	visualizer_update()
 }

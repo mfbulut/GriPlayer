@@ -16,39 +16,39 @@ hann_table: [FFT_SIZE]f32
 twiddle_table: [FFT_SIZE / 2]complex64
 
 fft_init :: proc() #no_bounds_check {
-    for i in 0..<FFT_SIZE {
-        hann_table[i] = 0.5 - 0.5 * math.cos(2.0 * math.PI * f32(i) / (FFT_SIZE - 1))
-    }
-    for i in 0..<FFT_SIZE/2 {
-        angle := -2.0 * math.PI * f32(i) / FFT_SIZE
-        twiddle_table[i] = complex(math.cos(angle), math.sin(angle))
-    }
+	for i in 0 ..< FFT_SIZE {
+		hann_table[i] = 0.5 - 0.5 * math.cos(2.0 * math.PI * f32(i) / (FFT_SIZE - 1))
+	}
+	for i in 0 ..< FFT_SIZE / 2 {
+		angle := -2.0 * math.PI * f32(i) / FFT_SIZE
+		twiddle_table[i] = complex(math.cos(angle), math.sin(angle))
+	}
 }
 
 fft :: proc() #no_bounds_check {
-    for i in 0..<u32(FFT_SIZE) {
-        j := intrinsics.reverse_bits(i) >> (32 - FFT_BITS)
-        if i < j {
-            work_buffer[i], work_buffer[j] = work_buffer[j], work_buffer[i]
-        }
-    }
+	for i in 0 ..< u32(FFT_SIZE) {
+		j := intrinsics.reverse_bits(i) >> (32 - FFT_BITS)
+		if i < j {
+			work_buffer[i], work_buffer[j] = work_buffer[j], work_buffer[i]
+		}
+	}
 
-    for length := u32(2); length <= FFT_SIZE; length <<= 1 {
-        for i := u32(0); i < FFT_SIZE; i += length {
-            for k in 0..<length/2 {
-                w := twiddle_table[k * FFT_SIZE / length]
-                u := work_buffer[i + k]
-                v := work_buffer[i + k + length / 2] * w
-                work_buffer[i + k] = u + v
-                work_buffer[i + k + length / 2] = u - v
-            }
-        }
-    }
+	for length := u32(2); length <= FFT_SIZE; length <<= 1 {
+		for i := u32(0); i < FFT_SIZE; i += length {
+			for k in 0 ..< length / 2 {
+				w := twiddle_table[k * FFT_SIZE / length]
+				u := work_buffer[i + k]
+				v := work_buffer[i + k + length / 2] * w
+				work_buffer[i + k] = u + v
+				work_buffer[i + k + length / 2] = u - v
+			}
+		}
+	}
 }
 
-ring_buffer : struct {
+ring_buffer: struct {
 	data: [FFT_SIZE]f32,
-	pos : int,
+	pos:  int,
 }
 
 spectrum: [SPECTRUM_BANDS]f32
@@ -56,8 +56,7 @@ spectrum_peak: [SPECTRUM_BANDS]f32
 
 SPECTRUM_RISE_SPEED :: f32(8.0)
 SPECTRUM_FALL_SPEED :: f32(6.0)
-SPECTRUM_PEAK_FALL  :: f32(1.0)
-SPECTRUM_BAR_GAP    :: f32(3)
+SPECTRUM_PEAK_FALL :: f32(1.0)
 
 visualizer_push :: proc(frames: [][2]f32) {
 	for f in frames {
@@ -69,14 +68,14 @@ visualizer_push :: proc(frames: [][2]f32) {
 visualizer_update :: proc() {
 	dt := fx.frame_time()
 	if !player.playing {
-		for i in 0..<SPECTRUM_BANDS {
+		for i in 0 ..< SPECTRUM_BANDS {
 			spectrum[i] = max(spectrum[i] - SPECTRUM_FALL_SPEED * dt, 0)
 			spectrum_peak[i] = max(spectrum_peak[i] - SPECTRUM_PEAK_FALL * dt, 0)
 		}
 		return
 	}
 
-	for i in 0..<FFT_SIZE {
+	for i in 0 ..< FFT_SIZE {
 		work_buffer[i] = ring_buffer.data[(ring_buffer.pos + i) % FFT_SIZE] * hann_table[i]
 	}
 
@@ -89,13 +88,17 @@ visualizer_update :: proc() {
 
 	for &current, band in spectrum {
 		t0 := f32(band) / f32(SPECTRUM_BANDS)
-		t1 := f32(band+1) / f32(SPECTRUM_BANDS)
+		t1 := f32(band + 1) / f32(SPECTRUM_BANDS)
 
 		bin_low := int(math.pow(2.0, log_min + (log_max - log_min) * t0))
-		bin_high := clamp(int(math.pow(2.0, log_min + (log_max - log_min) * t1)), bin_low + 1, max_bin)
+		bin_high := clamp(
+			int(math.pow(2.0, log_min + (log_max - log_min) * t1)),
+			bin_low + 1,
+			max_bin,
+		)
 
 		sum := f32(0)
-		for c in work_buffer[bin_low:bin_high+1] {
+		for c in work_buffer[bin_low:bin_high + 1] {
 			sum += math.sqrt(real(c) * real(c) + imag(c) * imag(c))
 		}
 
@@ -112,48 +115,58 @@ visualizer_update :: proc() {
 	}
 }
 
-ui_visualizer :: proc() {
-	bounds := layout_next()
-	bar_w := max((bounds.w - SPECTRUM_BAR_GAP * f32(SPECTRUM_BANDS - 1)) / f32(SPECTRUM_BANDS), 1)
+draw_visualizer :: proc(bounds: fx.Rect) {
+	if bounds.w <= 0 || bounds.h <= 0 do return
+	bar_width := max((bounds.w - 2 * f32(SPECTRUM_BANDS - 1)) / f32(SPECTRUM_BANDS), 1)
+	for level, index in spectrum {
+		bar_height := max(bounds.h * level, 2)
+		x := bounds.x + f32(index) * (bar_width + 2)
+		y := bounds.y + bounds.h - bar_height
+		peak_y := bounds.y + bounds.h - bounds.h * spectrum_peak[index]
 
-	for level, i in spectrum {
-		bar_h := max(bounds.h * level, 2)
-		x := bounds.x + f32(i) * (bar_w + SPECTRUM_BAR_GAP)
-		y := bounds.y + bounds.h - bar_h
-		peak_y := bounds.y + bounds.h - bounds.h * spectrum_peak[i]
-
+		color := COLOR_ACCENT
 		if len(visualizer_palette) > 0 {
-			t := f32(i) / f32(SPECTRUM_BANDS - 1)
-			color := visualizer_color_at(t)
-			top_color := fx.color_lerp(color, fx.WHITE, 0.08)
-			bottom_color := fx.color_brightness(color, 0.42)
-			peak_color := fx.color_lerp(TEXT_SECONDARY, color, 0.45)
-
-			fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{top_color, top_color, bottom_color, bottom_color})
-			fx.draw_rect({x, peak_y - 2, bar_w, 2}, peak_color, 1)
-		} else {
-			fx.draw_rect({x, y, bar_w, bar_h}, [4]fx.Color{ACCENT_BRIGHT, ACCENT_BRIGHT, ACCENT_DARK, ACCENT_DARK})
-			fx.draw_rect({x, peak_y - 2, bar_w, 2}, TEXT_SECONDARY, 1)
+			color = visualizer_color_at(f32(index) / f32(SPECTRUM_BANDS - 1))
 		}
+		top := fx.color_lerp(color, fx.WHITE, .08)
+		bottom := fx.color_brightness(color, .42)
+		fx.draw_rect({x, y, bar_width, bar_height}, [4]fx.Color{top, top, bottom, bottom})
+		fx.draw_rect({x, peak_y - 2, bar_width, 2}, fx.color_opacity(color, .62), 1)
 	}
 }
 
+draw_player_palette_tint :: proc(bounds: fx.Rect) {
+	if bounds.w <= 0 || bounds.h <= 0 || len(visualizer_palette) == 0 do return
+	top_left := visualizer_color_at(0)
+	bottom_right := visualizer_color_at(.65)
+	middle := fx.color_lerp(top_left, bottom_right, .5)
+	fx.draw_rect(
+		bounds,
+		[4]fx.Color{
+			fx.color_opacity(top_left, .10),
+			fx.color_opacity(middle, .05),
+			fx.color_opacity(middle, 0),
+			fx.color_opacity(bottom_right, 0),
+		},
+		8,
+	)
+}
 
 Palette_Bucket :: struct {
-	sum: [4]int,
+	sum:   [4]int,
 	count: int,
 	score: f32,
 }
 
 visualizer_palette: [dynamic; 8]fx.Color
 
-PALETTE_NEUTRAL_CHROMA        :: f32(0.045)
-PALETTE_NEUTRAL_MAX           :: 2
+PALETTE_NEUTRAL_CHROMA :: f32(0.045)
+PALETTE_NEUTRAL_MAX :: 2
 PALETTE_NEUTRAL_LIGHTNESS_GAP :: f32(0.25)
 
-PALETTE_HUE_GAP               :: f32(0.42)
-PALETTE_LIGHTNESS_GAP         :: f32(0.34)
-PALETTE_CHROMA_GAP            :: f32(0.10)
+PALETTE_HUE_GAP :: f32(0.42)
+PALETTE_LIGHTNESS_GAP :: f32(0.34)
+PALETTE_CHROMA_GAP :: f32(0.10)
 
 hue_distance :: proc(a, b: f32) -> f32 {
 	diff := abs(a - b)
@@ -174,12 +187,15 @@ visualizer_palette_accepts :: proc(color: fx.Color) -> bool {
 		}
 
 		if is_neutral && existing_is_neutral {
-			if neutral_count >= PALETTE_NEUTRAL_MAX || abs(l - existing_l) < PALETTE_NEUTRAL_LIGHTNESS_GAP {
+			if neutral_count >= PALETTE_NEUTRAL_MAX ||
+			   abs(l - existing_l) < PALETTE_NEUTRAL_LIGHTNESS_GAP {
 				return false
 			}
 		} else if !is_neutral && !existing_is_neutral {
 			same_hue := hue_distance(h, existing_h) < PALETTE_HUE_GAP
-			same_tone := abs(l - existing_l) < PALETTE_LIGHTNESS_GAP && abs(c - existing_c) < PALETTE_CHROMA_GAP
+			same_tone :=
+				abs(l - existing_l) < PALETTE_LIGHTNESS_GAP &&
+				abs(c - existing_c) < PALETTE_CHROMA_GAP
 			if same_hue && same_tone {
 				return false
 			}
@@ -196,7 +212,7 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 	buckets: [512]Palette_Bucket
 
 	for color in pixels {
-		l, c, h := fx.color_to_oklch(color)
+		l, c, _ := fx.color_to_oklch(color)
 		if l < 0.2 {
 			continue
 		}
