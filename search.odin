@@ -205,7 +205,7 @@ draw_search_box :: proc(bounds: fx.Rect) {
 	}
 	background := search.active ? COLOR_HOVER : COLOR_SURFACE
 	fx.draw_rect(bounds, background, 8)
-	if search.active {
+	if fx.text_box_is_focused() {
 		fx.draw_rect({bounds.x + 5, bounds.y + bounds.h - 2, bounds.w - 10, 2}, COLOR_ACCENT_BRIGHT, 1)
 	}
 

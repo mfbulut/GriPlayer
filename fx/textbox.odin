@@ -168,7 +168,8 @@ text_box_window_proc :: proc "system" (
 ) -> win.LRESULT {
 	context = runtime.default_context()
 
-	if msg == win.WM_CHAR && (wparam == 0x01 || wparam == 0x7f) {
+	if msg == win.WM_CHAR &&
+	   (wparam == 0x01 || wparam == 0x7f || wparam == win.VK_ESCAPE || wparam == win.VK_RETURN) {
 		return 0
 	}
 
