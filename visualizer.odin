@@ -228,7 +228,7 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 
 	for color in pixels {
 		l, c, _ := fx.color_to_oklch(color)
-		if l < 0.2 {
+		if l < 0.25 {
 			continue
 		}
 
@@ -236,7 +236,7 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 		bucket := &buckets[idx]
 		bucket.sum += cast([4]int)color
 		bucket.count += 1
-		bucket.score += l * 0.45 + c * 0.8
+		bucket.score += l * 0.55 + c * 0.8
 	}
 
 	slice.sort_by(buckets[:], proc(a, b: Palette_Bucket) -> bool {
