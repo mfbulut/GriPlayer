@@ -22,7 +22,7 @@ text_box_init :: proc(placeholder := "") {
 
 	if placeholder != "" {
 		placeholder_w := win.utf8_to_wstring(placeholder, context.temp_allocator)
-		win.SendMessageW(window.text_box.hwnd, win.EM_SETCUEBANNER, 0, cast(win.LPARAM)uintptr(rawptr(placeholder_w)))
+		win.SendMessageW(window.text_box.hwnd, win.EM_SETCUEBANNER, 1, cast(win.LPARAM)uintptr(rawptr(placeholder_w)))
 	}
 
 	text_box_set_colors({242, 239, 232, 255}, {12, 14, 18, 255})
@@ -96,12 +96,9 @@ text_box_set_text :: proc(text: string) {
 	win.SetWindowTextW(window.text_box.hwnd, text_w)
 }
 
-text_box_focus :: proc(select_all := false) {
+text_box_focus :: proc() {
 	if window.text_box.hwnd == nil do return
 	win.SetFocus(window.text_box.hwnd)
-	if select_all {
-		win.SendMessageW(window.text_box.hwnd, win.EM_SETSEL, 0, -1)
-	}
 }
 
 text_box_blur :: proc() {
@@ -130,6 +127,37 @@ color_ref :: proc(color: Color) -> win.COLORREF {
 	return win.COLORREF(color.r) | win.COLORREF(color.g) << 8 | win.COLORREF(color.b) << 16
 }
 
+text_box_delete_previous_word :: proc(hwnd: win.HWND) {
+	selection_start, selection_end: u32
+	win.SendMessageW(
+		hwnd,
+		win.EM_GETSEL,
+		cast(win.WPARAM)uintptr(&selection_start),
+		cast(win.LPARAM)uintptr(&selection_end),
+	)
+	if selection_start != selection_end {
+		win.SendMessageW(hwnd, win.WM_CLEAR, 0, 0)
+		return
+	}
+
+	caret := int(selection_start)
+	if caret <= 0 do return
+	length := int(win.GetWindowTextLengthW(hwnd))
+	text := make([]u16, length + 1, context.temp_allocator)
+	win.GetWindowTextW(hwnd, raw_data(text), cast(i32)len(text))
+
+	delete_start := min(caret, length)
+	for delete_start > 0 && (text[delete_start - 1] == ' ' || text[delete_start - 1] == '\t') {
+		delete_start -= 1
+	}
+	for delete_start > 0 && text[delete_start - 1] != ' ' && text[delete_start - 1] != '\t' {
+		delete_start -= 1
+	}
+
+	win.SendMessageW(hwnd, win.EM_SETSEL, cast(win.WPARAM)delete_start, cast(win.LPARAM)caret)
+	win.SendMessageW(hwnd, win.WM_CLEAR, 0, 0)
+}
+
 text_box_window_proc :: proc "system" (
 	hwnd: win.HWND,
 	msg: win.UINT,
@@ -140,8 +168,20 @@ text_box_window_proc :: proc "system" (
 ) -> win.LRESULT {
 	context = runtime.default_context()
 
+	if msg == win.WM_CHAR && (wparam == 0x01 || wparam == 0x7f) {
+		return 0
+	}
+
 	if msg == win.WM_KEYDOWN {
+		ctrl_down := (cast(u16)win.GetKeyState(win.VK_CONTROL) & 0x8000) != 0
+		alt_down := (cast(u16)win.GetKeyState(win.VK_MENU) & 0x8000) != 0
+		shortcut_down := ctrl_down && !alt_down
 		switch wparam {
+		case win.VK_A:
+			if shortcut_down {
+				win.SendMessageW(hwnd, win.EM_SETSEL, 0, -1)
+				return 0
+			}
 		case win.VK_RETURN:
 			window.text_box.enter_pressed = true
 			return 0
@@ -150,6 +190,10 @@ text_box_window_proc :: proc "system" (
 			return 0
 		case win.VK_BACK:
 			window.text_box.backspace_on_empty = win.GetWindowTextLengthW(hwnd) == 0
+			if shortcut_down {
+				text_box_delete_previous_word(hwnd)
+				return 0
+			}
 		}
 	}
 

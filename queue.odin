@@ -10,6 +10,12 @@ Queue_Section :: enum {
 	Playlist,
 }
 
+Queue_Row_Action :: enum {
+	None,
+	Play,
+	Remove,
+}
+
 Queue_Drag :: struct {
 	song:        ^Music,
 	section:     Queue_Section,
@@ -24,10 +30,6 @@ queue_scroll: Scroll_State
 queue_drag: Queue_Drag
 queue_row_positions: map[UI_ID]f32
 queue_view_bounds: fx.Rect
-
-queue_init :: proc() {
-	queue_row_positions = make(map[UI_ID]f32)
-}
 
 QUEUE_ROW_HEIGHT   :: f32(56)
 QUEUE_ROW_GAP      :: f32(6)
@@ -54,6 +56,10 @@ queue_animate_row_y :: proc(id: UI_ID, target: f32) -> f32 {
 	}
 	queue_row_positions[id] = value
 	return value
+}
+
+queue_playlist_start :: proc() -> int {
+	return clamp(player.cursor + 1, 0, len(player.songs))
 }
 
 queue_sync_playlist_order :: proc() {
@@ -191,7 +197,8 @@ queue_update_drag_target :: proc(bounds: fx.Rect) {
 	if !queue_validate_drag() do return
 
 	queue_count := len(player.queue)
-	playlist_count := len(player.songs)
+	playlist_start := queue_playlist_start()
+	playlist_count := len(player.songs) - playlist_start
 	if queue_drag.section == .Queue do queue_count -= 1
 	if queue_drag.section == .Playlist do playlist_count -= 1
 
@@ -220,7 +227,7 @@ queue_update_drag_target :: proc(bounds: fx.Rect) {
 		if distance < best_distance {
 			best_distance = distance
 			best_section = .Playlist
-			best_index = index
+			best_index = playlist_start + index
 		}
 	}
 
@@ -250,6 +257,21 @@ queue_finish_drag :: proc() {
 	ui_active = UI_NONE
 }
 
+queue_play_song :: proc(section: Queue_Section, index: int) {
+	switch section {
+	case .Queue:
+		if index < 0 || index >= len(player.queue) do return
+		player_play_music(player.queue[index])
+		for _ in 0 ..< index + 1 do ordered_remove(&player.queue, 0)
+	case .Playlist:
+		if index < 0 || index >= len(player.songs) do return
+		player.cursor = index
+		player_play_music(player.songs[index])
+	case .None:
+		return
+	}
+}
+
 draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 	width := f32(15)
 	x := bounds.x + (bounds.w - width) * .5
@@ -259,7 +281,7 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 	}
 }
 
-draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, overlay := false) -> bool {
+draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, overlay := false) -> Queue_Row_Action {
 	visible_hover := !overlay && ui_hover(queue_view_bounds) && ui_hover(row)
 	id_value := uint(uintptr(song)) ~ uint(section) * 0x27d4eb2d ~ uint(index)
 	hover_anim := ui_animate(ui_id(61, id_value), visible_hover, UI_HOVER_SPEED)
@@ -273,7 +295,8 @@ draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, inde
 	}
 	if background.a > 0 do fx.draw_rect(row, background, 7)
 
-	handle := fx.Rect{row.x + 3, row.y, 30, row.h}
+	handle_padding_x := f32(4)
+	handle := fx.Rect{row.x + 3, row.y, 30 + handle_padding_x * 2, row.h}
 	handle_hovered := visible_hover && ui_hover(handle)
 	draw_queue_handle(handle, handle_hovered || overlay ? COLOR_TEXT : COLOR_MUTED)
 	if handle_hovered {
@@ -283,11 +306,12 @@ draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, inde
 		}
 	}
 
-	cover := fx.Rect{row.x + 36, row.y + 7, 42, 42}
+	cover := fx.Rect{handle.x + handle.w + 3, row.y + 7, 42, 42}
 	draw_cover(song.thumbnail, cover, 6)
 	remove := fx.Rect{row.x + row.w - 36, row.y + 10, 30, 36}
 	remove_hovered := visible_hover && ui_hover(remove)
 	if remove_hovered do fx.set_cursor(.Hand)
+	if visible_hover && !handle_hovered && !remove_hovered do fx.set_cursor(.Hand)
 	if remove_hovered && hover_anim > .001 do fx.draw_rect(remove, fx.color_opacity(COLOR_BORDER, hover_anim * .55), 6)
 	icon_size := f32(13)
 	fx.draw_texture(
@@ -305,12 +329,15 @@ draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, inde
 	fx.draw_text_faded(secondary, {text_x, row.y + 29, text_width, 18}, 10, COLOR_MUTED, false, true)
 
 	if remove_hovered && fx.key_is_pressed(.Mouse_Left) {
-		return true
+		return .Remove
+	}
+	if visible_hover && !handle_hovered && ui_active == UI_NONE && fx.key_is_pressed(.Mouse_Left) {
+		return .Play
 	}
 	if visible_hover && ui_active == UI_NONE && fx.key_is_pressed(.Mouse_Right) {
 		open_context_menu(song)
 	}
-	return false
+	return .None
 }
 
 draw_queue_divider :: proc(bounds: fx.Rect) {
@@ -328,8 +355,9 @@ draw_queue_divider :: proc(bounds: fx.Rect) {
 
 draw_queue :: proc(bounds: fx.Rect) {
 	queue_view_bounds = bounds
-	remove_section := Queue_Section.None
-	remove_index := -1
+	action := Queue_Row_Action.None
+	action_section := Queue_Section.None
+	action_index := -1
 	if queue_drag.song != nil {
 		edge := f32(42)
 		mouse_y := fx.mouse_pos().y
@@ -350,9 +378,11 @@ draw_queue :: proc(bounds: fx.Rect) {
 			row := target
 			row.y = queue_animate_row_y(id, target.y)
 			if !fx.rect_overlaps(row, bounds) do continue
-			if draw_queue_song(song, row, .Queue, index) {
-				remove_section = .Queue
-				remove_index = index
+			row_action := draw_queue_song(song, row, .Queue, index)
+			if row_action != .None {
+				action = row_action
+				action_section = .Queue
+				action_index = index
 			}
 		}
 
@@ -361,31 +391,41 @@ draw_queue :: proc(bounds: fx.Rect) {
 		divider.y = queue_animate_row_y(ui_id(62, 0), divider_target.y)
 		if fx.rect_overlaps(divider, bounds) do draw_queue_divider(divider)
 
-		if len(player.songs) == 0 {
+		playlist_start := queue_playlist_start()
+		if playlist_start >= len(player.songs) {
 			empty := layout_next(QUEUE_EMPTY_HEIGHT)
 			if fx.rect_overlaps(empty, bounds) {
-				fx.draw_text("No playlist songs", empty, 11, fx.color_opacity(COLOR_MUTED, .72), true, true)
+				fx.draw_text("No upcoming songs", empty, 11, fx.color_opacity(COLOR_MUTED, .72), true, true)
 			}
 		} else {
-			for song, index in player.songs {
+			for song, offset in player.songs[playlist_start:] {
+				index := playlist_start + offset
 				target := layout_next(QUEUE_ROW_HEIGHT)
 				if queue_drag.song != nil && queue_drag.section == .Playlist && queue_drag.index == index do continue
 				id := queue_entry_id(player.songs[:], index, .Playlist)
 				row := target
 				row.y = queue_animate_row_y(id, target.y)
 				if !fx.rect_overlaps(row, bounds) do continue
-				if draw_queue_song(song, row, .Playlist, index) {
-					remove_section = .Playlist
-					remove_index = index
+				row_action := draw_queue_song(song, row, .Playlist, index)
+				if row_action != .None {
+					action = row_action
+					action_section = .Playlist
+					action_index = index
 				}
 			}
 		}
 	}
-	if remove_index >= 0 {
-		if remove_section == .Queue {
-			ordered_remove(&player.queue, remove_index)
-		} else if remove_section == .Playlist {
-			queue_remove_playlist_song(remove_index)
+	if action_index >= 0 {
+		switch action {
+		case .Play:
+			queue_play_song(action_section, action_index)
+		case .Remove:
+			if action_section == .Queue {
+				ordered_remove(&player.queue, action_index)
+			} else if action_section == .Playlist {
+				queue_remove_playlist_song(action_index)
+			}
+		case .None:
 		}
 	}
 

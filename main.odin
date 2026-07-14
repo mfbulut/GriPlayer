@@ -26,8 +26,6 @@ scrub_time := f32(-1)
 
 main :: proc() {
 	fx.init("GriPlayer", {1280, 720})
-	ui_animations = make(map[UI_ID]f32)
-	queue_init()
 	fx.text_box_init("Search tracks, artists, lyrics")
 	audio.initialize()
 	smtc.init(fx.window.hwnd)

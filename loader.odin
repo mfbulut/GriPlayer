@@ -112,6 +112,7 @@ loader_poll :: proc() {
 	slice.sort_by(playlists[0].songs[:], proc(i, j: ^Music) -> bool {
 		return time.diff(j.liked_timestamp, i.liked_timestamp) > 0
 	})
+	
 	search.initialized = false
 
 	delete(queue)
