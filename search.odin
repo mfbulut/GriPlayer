@@ -203,7 +203,7 @@ draw_search_box :: proc(bounds: fx.Rect) {
 		search.active = true
 		search.focused = true
 	}
-	background := search.active ? COLOR_ITEM : COLOR_SURFACE
+	background := search.active ? COLOR_HOVER : COLOR_SURFACE
 	fx.draw_rect(bounds, background, 8)
 	if search.active {
 		fx.draw_rect({bounds.x + 5, bounds.y + bounds.h - 2, bounds.w - 10, 2}, COLOR_ACCENT_BRIGHT, 1)

@@ -147,9 +147,9 @@ draw_compact_tab :: proc(bounds: fx.Rect, label: string, tab: Compact_Tab) {
 	hovered := ui_hover(bounds)
 	hover_anim := ui_animate(ui_id(70, uint(tab)), hovered, UI_HOVER_SPEED)
 	if selected {
-		fx.draw_rect(bounds, COLOR_ITEM, 6)
+		fx.draw_rect(bounds, COLOR_SURFACE, 6)
 	} else if hover_anim > .001 {
-		fx.draw_rect(bounds, fx.color_opacity(COLOR_ITEM_HOVER, hover_anim), 6)
+		fx.draw_rect(bounds, fx.color_opacity(COLOR_HOVER, hover_anim), 6)
 	}
 	text_anim := selected ? f32(1) : hover_anim
 	fx.draw_text(label, bounds, 13, fx.color_lerp(COLOR_MUTED, COLOR_TEXT, text_anim), true, true)
@@ -220,11 +220,12 @@ draw_library :: proc(bounds: fx.Rect) {
 		header := layout_next()
 		content := layout_next()
 		fx.draw_text("Playlists", header, 16, COLOR_TEXT, true, true)
-		fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_ITEM)
+		fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_BORDER)
 
 		if layout_begin(content, padding = 8, gap = 5, scroll = &library_scroll, background = COLOR_SURFACE) {
 			for playlist, index in playlists {
 				row := layout_next(30)
+				if !fx.rect_overlaps(row, content) do continue
 				hovered := ui_hover(content) && ui_hover(row)
 				hover_anim := ui_animate(ui_id(10, uint(index)), hovered, UI_HOVER_SPEED)
 				selected := index == selected_playlist
@@ -232,7 +233,7 @@ draw_library :: proc(bounds: fx.Rect) {
 				if selected {
 					fx.draw_rect(row, COLOR_ACCENT_DARK, 6)
 				} else if hover_anim > .001 {
-					fx.draw_rect(row, fx.color_opacity(COLOR_ITEM_HOVER, hover_anim), 6)
+					fx.draw_rect(row, fx.color_opacity(COLOR_HOVER, hover_anim), 6)
 				}
 
 				if hovered {
@@ -259,8 +260,8 @@ draw_playlist :: proc(bounds: fx.Rect) {
 		header := layout_next()
 		content := layout_next()
 		fx.draw_text_faded(playlist.name, header, 16, COLOR_TEXT, true, true)
-		fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_ITEM)
-		draw_song_list(content, &playlist_scroll, playlist.songs[:], "No tracks", 14, 11, true)
+		fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_BORDER)
+		draw_song_list(content, &playlist_scroll, playlist.songs[:], "No tracks", 14, 11)
 	}
 }
 
@@ -271,7 +272,6 @@ draw_song_list :: proc(
 	empty_label: string,
 	title_font_size := f32(13),
 	artist_font_size := f32(10),
-	show_duration := false,
 ) {
 	if layout_begin(bounds, padding = 8, gap = 5, scroll = scroll, background = COLOR_SURFACE) {
 		if len(songs) == 0 {
@@ -280,13 +280,14 @@ draw_song_list :: proc(
 
 		for song, index in songs {
 			row := layout_next(54)
+			if !fx.rect_overlaps(row, bounds) do continue
 			hovered := ui_hover(bounds) && ui_hover(row)
 			hover_anim := ui_animate(ui_id(20, uint(uintptr(song))), hovered, UI_HOVER_SPEED)
 			playing := player.music == song
 			if playing {
 				fx.draw_rect(row, COLOR_ACCENT_DARK, 6)
 			} else if hover_anim > .001 {
-				fx.draw_rect(row, fx.color_opacity(COLOR_ITEM_HOVER, hover_anim), 6)
+				fx.draw_rect(row, fx.color_opacity(COLOR_HOVER, hover_anim), 6)
 			}
 			if hovered {
 				fx.set_cursor(.Hand)
@@ -299,8 +300,7 @@ draw_song_list :: proc(
 			}
 
 			draw_cover(song.thumbnail, {row.x + 6, row.y + 6, 42, 42}, 6)
-			trailing_width := show_duration ? f32(48) : f32(0)
-			text_width := max(0, row.w - 70 - trailing_width)
+			text_width := max(0, row.w - 70 - 48)
 			title_color := fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
 			if playing do title_color = COLOR_TEXT
 			fx.draw_text_faded(song.title, {row.x + 58, row.y + 5, text_width, 25}, title_font_size, title_color, false, true)
@@ -308,16 +308,7 @@ draw_song_list :: proc(
 			secondary := song.artist
 			if secondary == "" do secondary = song.album
 			fx.draw_text_faded(secondary, {row.x + 58, row.y + 28, text_width, 18}, artist_font_size, COLOR_MUTED, false, true)
-			if show_duration {
-				fx.draw_text(
-					format_time(song.duration),
-					fx.Rect{row.x + row.w - 48, row.y, 40, row.h},
-					11,
-					COLOR_MUTED,
-					true,
-					true,
-				)
-			}
+			fx.draw_text(format_time(song.duration), fx.Rect{row.x + row.w - 48, row.y, 40, row.h}, 11, COLOR_MUTED, true, true)
 		}
 	}
 }
@@ -407,7 +398,7 @@ draw_label :: proc(text: string, bounds: fx.Rect, font_size: f32, idle_color := 
 }
 
 draw_player_controls :: proc(bounds: fx.Rect) {
-	fx.draw_rect({bounds.x + 10, bounds.y + bounds.h - 1, bounds.w - 20, 1}, COLOR_ITEM)
+	fx.draw_rect({bounds.x + 10, bounds.y + bounds.h - 1, bounds.w - 20, 1}, COLOR_BORDER)
 
 	if layout_begin(bounds, {26, 36}, .Vertical, padding = 5, gap = 8) {
 		progress_row := layout_next()
@@ -422,7 +413,7 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			fx.draw_texture(
 				icons[audio.muted ? .Mute : .Volume],
 				{
-					volume_button.x + (volume_button.w - volume_icon_size) * .5,
+					volume_button.x + (volume_button.w - volume_icon_size) * .5 - 2,
 					volume_button.y + (volume_button.h - volume_icon_size) * .5,
 					volume_icon_size,
 					volume_icon_size,
@@ -459,11 +450,11 @@ draw_icon_button :: proc(icon: Icon, active := false) -> bool {
 	hover_anim := ui_animate(ui_id(30, uint(icon)), hovered, UI_HOVER_SPEED)
 	if hovered do fx.set_cursor(.Hand)
 
-	background := fx.color_opacity(COLOR_ITEM, 0)
+	background := fx.color_opacity(COLOR_SURFACE, 0)
 	if active {
 		background = fx.color_opacity(COLOR_ACCENT, .30)
 	} else if hover_anim > .001 {
-		background = fx.color_opacity(COLOR_ITEM_HOVER, hover_anim)
+		background = fx.color_opacity(COLOR_HOVER, hover_anim)
 	}
 	if background.a > 0 do fx.draw_rect(bounds, background, bounds.h * .5)
 
@@ -491,7 +482,7 @@ draw_slider_tooltip :: proc(bounds: fx.Rect, value: f32, label: string) {
 	tooltip := fx.Rect{x, bounds.y - 17, width, 21}
 	fx.draw_rect({tooltip.x, tooltip.y + 2, tooltip.w, tooltip.h}, fx.color_opacity(COLOR_BACKGROUND, .72), 6)
 	fx.draw_rect(tooltip, COLOR_BORDER, 6)
-	fx.draw_rect(fx.rect_shrink(tooltip, 1, 1), COLOR_ITEM_HOVER, 5)
+	fx.draw_rect(fx.rect_shrink(tooltip, 1, 1), COLOR_HOVER, 5)
 	fx.draw_text(label, tooltip, 11, COLOR_TEXT, true, true)
 }
 
@@ -598,6 +589,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 	if layout_begin(bounds, padding = padding, gap = row_gap, scroll = &lyrics_scroll, background = COLOR_SURFACE, smooth_speed = 8) {
 		for lyric, index in song.lyrics {
 			row := layout_next(row_height)
+			if !fx.rect_overlaps(row, bounds) do continue
 			visible_hover := ui_hover(bounds) && ui_hover(row)
 			is_active := index == active
 			lyric_value := uint(uintptr(song)) ~ (uint(index) * 0x9e3779b9)

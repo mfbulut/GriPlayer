@@ -85,6 +85,13 @@ point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
 	return 	p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
 
+rect_overlaps :: proc(a, b: Rect) -> bool {
+	return a.x < b.x + b.w &&
+	       a.x + a.w > b.x &&
+	       a.y < b.y + b.h &&
+	       a.y + a.h > b.y
+}
+
 rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
 	return { r.x + x, r.y + y, r.w - x * 2, r.h - y * 2 }
 }

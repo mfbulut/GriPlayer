@@ -4,16 +4,17 @@ import "core:fmt"
 
 import "fx"
 
-COLOR_BACKGROUND :: fx.Color{14, 17, 22, 255}
-COLOR_SURFACE    :: fx.Color{21, 25, 31, 255}
-COLOR_ITEM       :: fx.Color{29, 34, 42, 255}
-COLOR_ITEM_HOVER :: fx.Color{31, 36, 44, 255}
-COLOR_BORDER     :: fx.Color{58, 65, 76, 255}
+COLOR_BACKGROUND    :: fx.Color{14, 17, 22, 255}
+COLOR_SURFACE       :: fx.Color{21, 25, 31, 255}
+COLOR_HOVER         :: fx.Color{31, 36, 44, 255}
+COLOR_BORDER        :: fx.Color{48, 54, 64, 255}
+
 COLOR_ACCENT_DARK   :: fx.Color{52, 43, 78, 255}
-COLOR_ACCENT     :: fx.Color{153, 112, 255, 255}
+COLOR_ACCENT        :: fx.Color{153, 112, 255, 255}
 COLOR_ACCENT_BRIGHT :: fx.Color{188, 157, 255, 255}
-COLOR_TEXT       :: fx.Color{246, 245, 241, 255}
-COLOR_MUTED      :: fx.Color{158, 166, 178, 255}
+
+COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
+COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
 
 Icon :: enum {
 	Album,
@@ -312,7 +313,7 @@ draw_context_menu :: proc() {
 			hovered := !disabled && ui_hover(row, true)
 			if hovered {
 				fx.set_cursor(.Hand)
-				fx.draw_rect(row, COLOR_ITEM_HOVER, 6)
+				fx.draw_rect(row, COLOR_HOVER, 6)
 			}
 
 			icon_size := f32(16)

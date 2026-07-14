@@ -265,11 +265,11 @@ draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, inde
 	hover_anim := ui_animate(ui_id(61, id_value), visible_hover, UI_HOVER_SPEED)
 	playing := player.music == song
 
-	background := fx.color_opacity(COLOR_ITEM_HOVER, hover_anim)
+	background := fx.color_opacity(COLOR_HOVER, hover_anim)
 	if overlay {
 		fx.draw_rect({row.x + 2, row.y + 5, row.w, row.h}, fx.color_opacity(COLOR_BACKGROUND, .55), 8)
 		fx.draw_rect(fx.rect_expand(row, 1, 1), fx.color_opacity(COLOR_ACCENT_BRIGHT, .72), 8)
-		background = COLOR_ITEM_HOVER
+		background = COLOR_HOVER
 	}
 	if background.a > 0 do fx.draw_rect(row, background, 7)
 
@@ -349,6 +349,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 			id := queue_entry_id(player.queue[:], index, .Queue)
 			row := target
 			row.y = queue_animate_row_y(id, target.y)
+			if !fx.rect_overlaps(row, bounds) do continue
 			if draw_queue_song(song, row, .Queue, index) {
 				remove_section = .Queue
 				remove_index = index
@@ -358,11 +359,13 @@ draw_queue :: proc(bounds: fx.Rect) {
 		divider_target := layout_next(QUEUE_DIVIDER_HEIGHT)
 		divider := divider_target
 		divider.y = queue_animate_row_y(ui_id(62, 0), divider_target.y)
-		draw_queue_divider(divider)
+		if fx.rect_overlaps(divider, bounds) do draw_queue_divider(divider)
 
 		if len(player.songs) == 0 {
 			empty := layout_next(QUEUE_EMPTY_HEIGHT)
-			fx.draw_text("No playlist songs", empty, 11, fx.color_opacity(COLOR_MUTED, .72), true, true)
+			if fx.rect_overlaps(empty, bounds) {
+				fx.draw_text("No playlist songs", empty, 11, fx.color_opacity(COLOR_MUTED, .72), true, true)
+			}
 		} else {
 			for song, index in player.songs {
 				target := layout_next(QUEUE_ROW_HEIGHT)
@@ -370,6 +373,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 				id := queue_entry_id(player.songs[:], index, .Playlist)
 				row := target
 				row.y = queue_animate_row_y(id, target.y)
+				if !fx.rect_overlaps(row, bounds) do continue
 				if draw_queue_song(song, row, .Playlist, index) {
 					remove_section = .Playlist
 					remove_index = index
@@ -396,11 +400,11 @@ draw_queue_toggle :: proc(bounds: fx.Rect) {
 	button := fx.Rect{bounds.x + bounds.w - 50, bounds.y + 14, 34, 34}
 	hovered := ui_active == UI_NONE && ui_hover(button)
 	hover_anim := ui_animate(ui_id(31, uint(Icon.Queue)), hovered, UI_HOVER_SPEED)
-	background := fx.color_opacity(COLOR_ITEM, 0)
+	background := fx.color_opacity(COLOR_SURFACE, 0)
 	if queue_active {
 		background = fx.color_opacity(COLOR_ACCENT, .30)
 	} else if hover_anim > .001 {
-		background = fx.color_opacity(COLOR_ITEM_HOVER, hover_anim)
+		background = fx.color_opacity(COLOR_HOVER, hover_anim)
 	}
 	if background.a > 0 do fx.draw_rect(button, background, button.h * .5)
 	icon_size := button.h * .46

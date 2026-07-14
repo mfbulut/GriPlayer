@@ -163,6 +163,7 @@ visualizer_palette: [dynamic; 8]fx.Color
 PALETTE_NEUTRAL_CHROMA :: f32(0.045)
 PALETTE_NEUTRAL_MAX :: 2
 PALETTE_NEUTRAL_LIGHTNESS_GAP :: f32(0.25)
+PALETTE_SURFACE_DISTANCE :: f32(0.12)
 
 PALETTE_HUE_GAP :: f32(0.42)
 PALETTE_LIGHTNESS_GAP :: f32(0.34)
@@ -173,8 +174,22 @@ hue_distance :: proc(a, b: f32) -> f32 {
 	return min(diff, 2.0 * math.PI - diff)
 }
 
+oklch_distance :: proc(l1, c1, h1, l2, c2, h2: f32) -> f32 {
+	hue_gap := hue_distance(h1, h2)
+	return math.sqrt(
+		(l1 - l2) * (l1 - l2) +
+		c1 * c1 + c2 * c2 - 2 * c1 * c2 * math.cos(hue_gap),
+	)
+}
+
 visualizer_palette_accepts :: proc(color: fx.Color) -> bool {
 	l, c, h := fx.color_to_oklch(color)
+	s_l, s_c, s_h := fx.color_to_oklch(COLOR_SURFACE)
+
+	if oklch_distance(l, c, h, s_l, s_c, s_h) < PALETTE_SURFACE_DISTANCE {
+		return false
+	}
+
 	is_neutral := c < PALETTE_NEUTRAL_CHROMA
 	neutral_count := 0
 
