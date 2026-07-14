@@ -147,7 +147,7 @@ draw_compact_tab :: proc(bounds: fx.Rect, label: string, tab: Compact_Tab) {
 	hovered := ui_hover(bounds)
 	hover_anim := ui_animate(ui_id(70, uint(tab)), hovered, UI_HOVER_SPEED)
 	if selected {
-		fx.draw_rect(bounds, COLOR_SURFACE, 6)
+		fx.draw_rect(bounds, fx.color_lerp(COLOR_SURFACE, COLOR_HOVER, hover_anim), 6)
 	} else if hover_anim > .001 {
 		fx.draw_rect(bounds, fx.color_opacity(COLOR_HOVER, hover_anim), 6)
 	}
@@ -336,8 +336,8 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 
 	text_x := cover.x + cover.w + 18
 	text_width := max(0, bounds.x + bounds.w - 18 - text_x)
-	title_width := max(0, text_width - 44)
-	fx.draw_text_faded(song.title, {text_x, bounds.y + 23, title_width, 40}, 28, COLOR_TEXT, false, true)
+	title_width := max(0, text_width - 47)
+	fx.draw_text_faded(song.title, {text_x, bounds.y + 23, title_width, 40}, 27, COLOR_TEXT, false, true)
 	artist_limit := song.album != "" ? text_width * .48 : text_width
 	artist_width := song.artist != "" ? min(fx.measure_text(song.artist, 16).x + 1, artist_limit) : 0
 	album_width := song.album != "" ? min(fx.measure_text(song.album, 16).x + 1, max(text_width - artist_width - 20, 0)) : 0
