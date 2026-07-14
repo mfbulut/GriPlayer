@@ -30,8 +30,8 @@ state: struct {
 	shader:      Shader,
 
 	// Renderer
-	instanced_buffer: ^D3D11.IBuffer,
-	uniforms_buffer: ^D3D11.IBuffer,
+	gpu_buffer: ^D3D11.IBuffer,
+	uniforms: ^D3D11.IBuffer,
 	batch: Batch,
 }
 
@@ -214,7 +214,7 @@ d3d11_initialize :: proc() {
 			CPUAccessFlags = {.WRITE},
 		}
 
-		state.device->CreateBuffer(&desc, nil, &state.instanced_buffer)
+		state.device->CreateBuffer(&desc, nil, &state.gpu_buffer)
 
 		state.shader = load_shader(shader)
 	}
@@ -228,7 +228,7 @@ d3d11_initialize :: proc() {
 			CPUAccessFlags = {.WRITE},
 		}
 
-		state.device->CreateBuffer(&desc, nil, &state.uniforms_buffer)
+		state.device->CreateBuffer(&desc, nil, &state.uniforms)
 		upload_uniforms()
 	}
 
@@ -236,11 +236,11 @@ d3d11_initialize :: proc() {
 		// Bind pipeline
 		stride := cast(u32)size_of(Instance)
 		offset := u32(0)
-		state.device_ctx->IASetVertexBuffers(0, 1, &state.instanced_buffer, &stride, &offset,)
+		state.device_ctx->IASetVertexBuffers(0, 1, &state.gpu_buffer, &stride, &offset,)
 		state.device_ctx->IASetPrimitiveTopology(.TRIANGLESTRIP)
 
-		state.device_ctx->VSSetConstantBuffers(0, 1, &state.uniforms_buffer)
-		// state.device_ctx->PSSetConstantBuffers(0, 1, &state.uniforms_buffer)
+		state.device_ctx->VSSetConstantBuffers(0, 1, &state.uniforms)
+		// state.device_ctx->PSSetConstantBuffers(0, 1, &state.uniforms)
 
 		state.device_ctx->RSSetState(state.rasterizer)
 		state.device_ctx->OMSetBlendState(state.blend_state, nil, 0xffffffff)
@@ -318,7 +318,7 @@ flush_batch :: proc() -> bool {
 	{
 		sub_rsrc: D3D11.MAPPED_SUBRESOURCE
 		hr := state.device_ctx->Map(
-			state.instanced_buffer,
+			state.gpu_buffer,
 			0,
 			.WRITE_DISCARD,
 			{},
@@ -335,7 +335,7 @@ flush_batch :: proc() -> bool {
 			raw_data(state.batch.instanced[:]),
 			len(state.batch.instanced) * size_of(Instance),
 		)
-		state.device_ctx->Unmap(state.instanced_buffer, 0)
+		state.device_ctx->Unmap(state.gpu_buffer, 0)
 	}
 
 	for &run in state.batch.runs {
@@ -382,7 +382,7 @@ upload_uniforms :: proc() {
 
 	sub_rsrc: D3D11.MAPPED_SUBRESOURCE
 	hr := state.device_ctx->Map(
-		state.uniforms_buffer,
+		state.uniforms,
 		0,
 		.WRITE_DISCARD,
 		{},
@@ -393,7 +393,7 @@ upload_uniforms :: proc() {
 	}
 
 	mem.copy(sub_rsrc.pData, &uniforms, size_of(uniforms))
-	state.device_ctx->Unmap(state.uniforms_buffer, 0)
+	state.device_ctx->Unmap(state.uniforms, 0)
 }
 
 uniforms: struct #align (16) {
@@ -537,9 +537,9 @@ float4 ps_main(vs_out input) : SV_TARGET {
     float4 out_color = input.color * tex_color;
     out_color.a *= alpha;
 
-    float noise = some_noise(input.sv_pos.xy);
-    noise = (noise - 0.5) / 255.0;
-    out_color.rgb += noise;
+	// float noise = some_noise(input.sv_pos.xy);
+	// noise = (noise - 0.5) / 255.0;
+	// out_color.rgb += noise;
 
     return out_color;
 }`
