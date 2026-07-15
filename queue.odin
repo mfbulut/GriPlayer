@@ -284,7 +284,7 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, overlay := false) -> Queue_Row_Action {
 	visible_hover := !overlay && ui_hover(queue_view_bounds) && ui_hover(row)
 	id_value := uint(uintptr(song)) ~ uint(section) * 0x27d4eb2d ~ uint(index)
-	hover_anim := ui_animate(ui_id(61, id_value), visible_hover, UI_HOVER_SPEED)
+	hover_anim := ui_animate(ui_id(61, id_value), visible_hover)
 	playing := player.music == song
 
 	background := fx.color_opacity(COLOR_HOVER, hover_anim)
@@ -439,7 +439,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 draw_queue_toggle :: proc(bounds: fx.Rect) {
 	button := fx.Rect{bounds.x + bounds.w - 50, bounds.y + 14, 34, 34}
 	hovered := ui_active == UI_NONE && ui_hover(button)
-	hover_anim := ui_animate(ui_id(31, uint(Icon.Queue)), hovered, UI_HOVER_SPEED)
+	hover_anim := ui_animate(ui_id(31, uint(Icon.Queue)), hovered)
 	background := fx.color_opacity(COLOR_SURFACE, 0)
 	if queue_active {
 		background = fx.color_opacity(COLOR_ACCENT, .30)

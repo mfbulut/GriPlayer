@@ -30,7 +30,10 @@ text_box_init :: proc(placeholder := "") {
 
 text_box_set_visible :: proc(visible: bool) {
 	if window.text_box.hwnd == nil || window.text_box.visible == visible do return
-	if !visible do text_box_blur()
+	if !visible {
+		text_box_blur()
+		window.text_box.hovered = false
+	}
 	window.text_box.visible = visible
 	win.ShowWindow(window.text_box.hwnd, visible ? win.SW_SHOWNA : win.SW_HIDE)
 }
@@ -111,6 +114,10 @@ text_box_is_focused :: proc() -> bool {
 	return window.text_box.hwnd != nil && win.GetFocus() == window.text_box.hwnd
 }
 
+text_box_is_hovered :: proc() -> bool {
+	return window.text_box.hwnd != nil && window.text_box.visible && window.text_box.hovered
+}
+
 text_box_enter_pressed :: proc() -> bool {
 	return window.text_box.enter_pressed
 }
@@ -168,12 +175,31 @@ text_box_window_proc :: proc "system" (
 ) -> win.LRESULT {
 	context = runtime.default_context()
 
-	if msg == win.WM_CHAR &&
-	   (wparam == 0x01 || wparam == 0x7f || wparam == win.VK_ESCAPE || wparam == win.VK_RETURN) {
-		return 0
-	}
+	switch msg {
+	case win.WM_SETCURSOR:
+		win.SetCursor(win.LoadCursorA(nil, win.IDC_IBEAM))
+		return 1
 
-	if msg == win.WM_KEYDOWN {
+	case win.WM_MOUSEMOVE:
+		if !window.text_box.hovered {
+			window.text_box.hovered = true
+			track := win.TRACKMOUSEEVENT {
+				cbSize = size_of(win.TRACKMOUSEEVENT),
+				dwFlags = win.TME_LEAVE,
+				hwndTrack = hwnd,
+			}
+			win.TrackMouseEvent(&track)
+		}
+
+	case win.WM_MOUSELEAVE:
+		window.text_box.hovered = false
+
+	case win.WM_CHAR:
+		if wparam == 0x01 || wparam == 0x7f || wparam == win.VK_ESCAPE || wparam == win.VK_RETURN {
+			return 0
+		}
+
+	case win.WM_KEYDOWN:
 		ctrl_down := (cast(u16)win.GetKeyState(win.VK_CONTROL) & 0x8000) != 0
 		alt_down := (cast(u16)win.GetKeyState(win.VK_MENU) & 0x8000) != 0
 		shortcut_down := ctrl_down && !alt_down

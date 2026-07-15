@@ -203,7 +203,10 @@ draw_search_box :: proc(bounds: fx.Rect) {
 		search.active = true
 		search.focused = true
 	}
-	background := search.active ? COLOR_HOVER : COLOR_SURFACE
+	hovered := ui_hover(bounds) || fx.text_box_is_hovered()
+	hover_anim := ui_animate(ui_id(71, 0), hovered)
+	if search.active do hover_anim = 1
+	background := fx.color_lerp(COLOR_SURFACE, COLOR_HOVER, hover_anim)
 	fx.draw_rect(bounds, background, 8)
 	if fx.text_box_is_focused() {
 		fx.draw_rect({bounds.x + 5, bounds.y + bounds.h - 2, bounds.w - 10, 2}, COLOR_ACCENT_BRIGHT, 1)
@@ -215,7 +218,6 @@ draw_search_box :: proc(bounds: fx.Rect) {
 		close_hovered = ui_hover(close_hit)
 	}
 
-	hovered := ui_hover(bounds)
 	if fx.key_is_pressed(.Mouse_Left) {
 		if hovered && !close_hovered {
 			search.active = true

@@ -8,11 +8,9 @@ COLOR_BACKGROUND    :: fx.Color{14, 17, 22, 255}
 COLOR_SURFACE       :: fx.Color{21, 25, 31, 255}
 COLOR_HOVER         :: fx.Color{31, 36, 44, 255}
 COLOR_BORDER        :: fx.Color{48, 54, 64, 255}
-
 COLOR_ACCENT_DARK   :: fx.Color{52, 43, 78, 255}
 COLOR_ACCENT        :: fx.Color{153, 112, 255, 255}
 COLOR_ACCENT_BRIGHT :: fx.Color{188, 157, 255, 255}
-
 COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
 COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
 
@@ -44,8 +42,6 @@ lyrics_scroll: Scroll_State
 
 ui_animations: map[UI_ID]f32
 
-UI_HOVER_SPEED :: f32(30)
-
 ui_id :: proc(group, value: uint) -> UI_ID {
 	x := u64(value) + u64(group) * 0x9e3779b97f4a7c15
 	x = (x ~ (x >> 30)) * 0xbf58476d1ce4e5b9
@@ -53,7 +49,7 @@ ui_id :: proc(group, value: uint) -> UI_ID {
 	return UI_ID(x ~ (x >> 31))
 }
 
-ui_animate :: proc(id: UI_ID, on: bool, speed := f32(15)) -> f32 {
+ui_animate :: proc(id: UI_ID, on: bool, speed := f32(30)) -> f32 {
 	value := ui_animations[id]
 	target := on ? f32(1) : f32(0)
 	value += (target - value) * min(fx.frame_time() * speed, 1)

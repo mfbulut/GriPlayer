@@ -25,7 +25,7 @@ lyrics_synced := true
 scrub_time := f32(-1)
 
 main :: proc() {
-	fx.init("GriPlayer", {1280, 720})
+	fx.init("GriPlayer")
 	fx.text_box_init("Search tracks, artists, lyrics")
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
@@ -143,7 +143,7 @@ draw_compact_tabs :: proc(bounds: fx.Rect) {
 draw_compact_tab :: proc(bounds: fx.Rect, label: string, tab: Compact_Tab) {
 	selected := compact_tab == tab
 	hovered := ui_hover(bounds)
-	hover_anim := ui_animate(ui_id(70, uint(tab)), hovered, UI_HOVER_SPEED)
+	hover_anim := ui_animate(ui_id(70, uint(tab)), hovered)
 	if selected {
 		fx.draw_rect(bounds, fx.color_lerp(COLOR_SURFACE, COLOR_HOVER, hover_anim), 6)
 	} else if hover_anim > .001 {
@@ -234,7 +234,7 @@ draw_library :: proc(bounds: fx.Rect) {
 				row := layout_next(30)
 				if !fx.rect_overlaps(row, content) do continue
 				hovered := ui_hover(content) && ui_hover(row)
-				hover_anim := ui_animate(ui_id(10, uint(index)), hovered, UI_HOVER_SPEED)
+				hover_anim := ui_animate(ui_id(10, uint(index)), hovered)
 				selected := index == selected_playlist
 
 				if selected {
@@ -289,7 +289,7 @@ draw_song_list :: proc(
 			row := layout_next(54)
 			if !fx.rect_overlaps(row, bounds) do continue
 			hovered := ui_hover(bounds) && ui_hover(row)
-			hover_anim := ui_animate(ui_id(20, uint(uintptr(song))), hovered, UI_HOVER_SPEED)
+			hover_anim := ui_animate(ui_id(20, uint(uintptr(song))), hovered)
 			playing := player.music == song
 			if playing {
 				fx.draw_rect(row, COLOR_ACCENT_DARK, 6)
@@ -383,7 +383,7 @@ draw_label :: proc(text: string, bounds: fx.Rect, font_size: f32, idle_color := 
 	hit_bounds := fx.Rect{bounds.x, bounds.y, link_width, bounds.h}
 	hovered := ui_hover(hit_bounds)
 	label_value := uint(uintptr(raw_data(text))) ~ uint(int(bounds.x * 16))
-	hover_anim := ui_animate(ui_id(32, label_value), hovered, UI_HOVER_SPEED)
+	hover_anim := ui_animate(ui_id(32, label_value), hovered)
 	text_color := fx.color_lerp(idle_color, COLOR_TEXT, hover_anim)
 	fx.draw_text_faded(text, bounds, font_size, text_color, false, true)
 	if hovered {
@@ -454,7 +454,7 @@ draw_icon_button :: proc(icon: Icon, active := false) -> bool {
 	bounds := layout_next()
 	disabled := player.music == nil
 	hovered := !disabled && ui_hover(bounds)
-	hover_anim := ui_animate(ui_id(30, uint(icon)), hovered, UI_HOVER_SPEED)
+	hover_anim := ui_animate(ui_id(30, uint(icon)), hovered)
 	if hovered do fx.set_cursor(.Hand)
 
 	background := fx.color_opacity(COLOR_SURFACE, 0)
@@ -518,7 +518,7 @@ draw_progress_slider :: proc(bounds: fx.Rect) {
 	}
 
 	y := bounds.y + bounds.h * .5
-	hover_anim := ui_animate(UI_PROGRESS, hovered || active, UI_HOVER_SPEED)
+	hover_anim := ui_animate(UI_PROGRESS, hovered || active)
 	track_height := 3 + hover_anim
 	fx.draw_rect({bounds.x, y - track_height * .5, bounds.w, track_height}, COLOR_BORDER, track_height * .5)
 	fx.draw_rect({bounds.x, y - track_height * .5, bounds.w * value, track_height}, COLOR_ACCENT_BRIGHT, track_height * .5)
@@ -549,7 +549,7 @@ draw_volume_slider :: proc(input_bounds: fx.Rect) {
 
 	color := audio.muted ? COLOR_MUTED : COLOR_ACCENT_BRIGHT
 	y := bounds.y + bounds.h * .5
-	hover_anim := ui_animate(UI_VOLUME, hovered || active, UI_HOVER_SPEED)
+	hover_anim := ui_animate(UI_VOLUME, hovered || active)
 	track_height := 3 + hover_anim
 	fx.draw_rect({bounds.x, y - track_height * .5, bounds.w, track_height}, COLOR_BORDER, track_height * .5)
 	fx.draw_rect({bounds.x, y - track_height * .5, bounds.w * audio.volume, track_height}, color, track_height * .5)
@@ -600,8 +600,8 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 			visible_hover := ui_hover(bounds) && ui_hover(row)
 			is_active := active_found && index == active
 			lyric_value := uint(uintptr(song)) ~ (uint(index) * 0x9e3779b9)
-			active_anim := ui_animate(ui_id(40, lyric_value), is_active)
-			hover_anim := ui_animate(ui_id(41, lyric_value), visible_hover, UI_HOVER_SPEED)
+			active_anim := ui_animate(ui_id(40, lyric_value), is_active, 15)
+			hover_anim := ui_animate(ui_id(41, lyric_value), visible_hover, 15)
 
 			if visible_hover {
 				fx.set_cursor(.Hand)

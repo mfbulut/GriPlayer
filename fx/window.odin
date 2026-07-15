@@ -42,6 +42,7 @@ Native_Text_Box :: struct {
 	enter_pressed:     bool,
 	escape_pressed:    bool,
 	backspace_on_empty: bool,
+	hovered:            bool,
 	rect:              [4]i32,
 	visible:           bool,
 }
