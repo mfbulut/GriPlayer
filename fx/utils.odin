@@ -56,25 +56,31 @@ color_opacity :: proc(c: Color, alpha: f32) -> Color {
 	return {c.r, c.g, c.b, u8(clamp(alpha, 0, 1) * 255)}
 }
 
-_LINEAR_LMS_TO_LINEAR_SRGB :: #row_major matrix[3, 3]f32 {
-	4.0771870613, -3.3076224327,  0.2308591902,
-	-1.2685765028, 2.6096870899, -0.3411557376,
-	-0.0041965423, -0.7033996582, 1.7067960501,
+LINEAR_SRGB_TO_LINEAR_LMS :: #row_major matrix[3, 3]f32{
+	0.4121764600, 0.5362739563, 0.0514403731,
+	0.2119092047, 0.6807178855, 0.1073998436,
+	0.0883448124, 0.2818539739, 0.6302808523,
 }
 
-_LINEAR_SRGB_TO_LINEAR_LMS := linalg.inverse(_LINEAR_LMS_TO_LINEAR_SRGB)
-
-_LINEAR_LMS_TO_OKLAB :: #row_major matrix[3, 3]f32 {
+LINEAR_LMS_TO_OKLAB :: #row_major matrix[3, 3]f32{
 	0.2104542553,  0.7936177850, -0.0040720468,
 	1.9779984951, -2.4285922050,  0.4505937099,
 	0.0259040371,  0.7827717662, -0.8086757660,
 }
 
 color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
-	linear := color_to_vec4(color)
-	lms := _LINEAR_SRGB_TO_LINEAR_LMS * Vec3{linear.r, linear.g, linear.b}
-	oklab := _LINEAR_LMS_TO_OKLAB * Vec3{math.cbrt(lms.r), math.cbrt(lms.g), math.cbrt(lms.b)}
-	return oklab.x, math.sqrt(oklab.y * oklab.y + oklab.z * oklab.z), math.atan2(oklab.z, oklab.y)
+	srgb   := color_to_vec4(color).rgb
+	linear := linalg.vector3_srgb_to_linear(srgb)
+
+	lms := LINEAR_SRGB_TO_LINEAR_LMS * linear
+	lms  = {math.cbrt(lms.x), math.cbrt(lms.y), math.cbrt(lms.z)}
+
+	oklab := LINEAR_LMS_TO_OKLAB * lms
+
+	l = oklab.x
+	c = math.hypot(oklab.y, oklab.z)
+	h = c > 1e-6 ? math.atan2(oklab.z, oklab.y) : 0.0
+	return
 }
 
 Rect :: struct {

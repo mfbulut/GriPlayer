@@ -44,7 +44,7 @@ lyrics_scroll: Scroll_State
 
 ui_animations: map[UI_ID]f32
 
-UI_HOVER_SPEED :: f32(28)
+UI_HOVER_SPEED :: f32(30)
 
 ui_id :: proc(group, value: uint) -> UI_ID {
 	x := u64(value) + u64(group) * 0x9e3779b97f4a7c15
@@ -53,7 +53,7 @@ ui_id :: proc(group, value: uint) -> UI_ID {
 	return UI_ID(x ~ (x >> 31))
 }
 
-ui_animate :: proc(id: UI_ID, on: bool, speed := f32(14)) -> f32 {
+ui_animate :: proc(id: UI_ID, on: bool, speed := f32(15)) -> f32 {
 	value := ui_animations[id]
 	target := on ? f32(1) : f32(0)
 	value += (target - value) * min(fx.frame_time() * speed, 1)
