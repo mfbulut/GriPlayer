@@ -25,6 +25,7 @@ window: struct {
 	key_state:      [256]Key_States,
 	cursor:       	Cursor,
 	mouse_pos: 		Vec2,
+	mouse_inside:  bool,
 	mouse_scroll:   Vec2,
 	prev_time:      time.Time,
 	frame_time:     f32,
@@ -94,7 +95,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	}
 
 	window.prev_time = time.now()
-	window.mouse_pos = mouse_pos()
+	window.mouse_pos = {-1, -1}
 
 	value := win.TRUE
 	win.DwmSetWindowAttribute(window.hwnd, u32(win.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE), &value, size_of(value))
@@ -171,12 +172,6 @@ update :: proc(poll_msg := true) -> bool {
 		state -= {.Pressed, .Released, .Repeat}
 	}
 
-	p: win.POINT
-	if win.GetCursorPos(&p) {
-		win.ScreenToClient(window.hwnd, &p)
-	}
-
-	window.mouse_pos = {f32(p.x), f32(p.y)} / dpi_scale()
 	window.mouse_scroll = {0, 0}
 	window.text_box.enter_pressed = false
 	window.text_box.escape_pressed = false
@@ -300,6 +295,29 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	case win.WM_RBUTTONDOWN:
 		update_button(.Mouse_Right, true)
 		win.SetCapture(hwnd)
+
+	case win.WM_MOUSEMOVE:
+		x := win.GET_X_LPARAM(lparam)
+		y := win.GET_Y_LPARAM(lparam)
+		window.mouse_pos = {
+			f32(x),
+			f32(y),
+		} / dpi_scale()
+		inside := x >= 0 && y >= 0 && x < window.size.x && y < window.size.y
+		if inside && !window.mouse_inside {
+			window.mouse_inside = true
+			track := win.TRACKMOUSEEVENT {
+				cbSize = size_of(win.TRACKMOUSEEVENT),
+				dwFlags = win.TME_LEAVE,
+				hwndTrack = hwnd,
+			}
+			win.TrackMouseEvent(&track)
+		}
+	case win.WM_MOUSELEAVE:
+		window.mouse_inside = false
+		if win.GetCapture() != hwnd {
+			window.mouse_pos = {-1, -1}
+		}
 
 	case win.WM_MOUSEWHEEL:
 		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA

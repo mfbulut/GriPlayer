@@ -142,17 +142,17 @@ player_seek :: proc(pos: f32) {
 	}
 }
 
-current_lyric :: proc() -> (index: int) {
-	if player.music == nil || len(player.music.lyrics) == 0 do return 0
+current_lyric :: proc() -> (index: int, found: bool) {
+	if player.music == nil || len(player.music.lyrics) == 0 do return
 	t := scrub_time >= 0 ? scrub_time : audio.position()
+	if t < player.music.lyrics[0].time do return 0, false
+
 	for lyric, i in player.music.lyrics {
-		if t >= lyric.time {
-			index = i
-		} else {
-			break
-		}
+		if t < lyric.time do break
+		index = i
 	}
-	return
+	
+	return index, true
 }
 
 player_update :: proc() {

@@ -193,12 +193,21 @@ handle_keyboard_input :: proc() {
 
 	if fx.key_is_pressed(.Space) do player_toggle_pause()
 	if fx.key_is_down(.Ctrl) {
-		lyric_index := current_lyric()
+		lyric_index, lyric_found := current_lyric()
+		lyric_time := scrub_time >= 0 ? scrub_time : audio.position()
 		if fx.key_is_pressed_repeat(.Left) {
-			player_seek(lyric_index > 0 ? player.music.lyrics[lyric_index - 1].time : 0)
+			if !lyric_found && len(player.music.lyrics) > 0 && lyric_time >= player.music.lyrics[len(player.music.lyrics) - 1].time {
+				player_seek(player.music.lyrics[lyric_index].time)
+			} else {
+				player_seek(lyric_index > 0 ? player.music.lyrics[lyric_index - 1].time : 0)
+			}
 		}
 		if fx.key_is_pressed_repeat(.Right) {
-			if lyric_index < len(player.music.lyrics) - 1 {
+			if len(player.music.lyrics) == 0 {
+				player_next()
+			} else if !lyric_found && lyric_time < player.music.lyrics[0].time {
+				player_seek(player.music.lyrics[0].time)
+			} else if lyric_index < len(player.music.lyrics) - 1 {
 				player_seek(player.music.lyrics[lyric_index + 1].time)
 			} else {
 				player_next()
@@ -572,7 +581,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 	row_height := f32(60)
 	row_gap := f32(0)
 	padding := f32(20)
-	active := current_lyric()
+	active, active_found := current_lyric()
 	if ui_hover(bounds) && fx.mouse_scroll().y != 0 {
 		lyrics_synced = false
 	}
@@ -589,7 +598,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 			row := layout_next(row_height)
 			if !fx.rect_overlaps(row, bounds) do continue
 			visible_hover := ui_hover(bounds) && ui_hover(row)
-			is_active := index == active
+			is_active := active_found && index == active
 			lyric_value := uint(uintptr(song)) ~ (uint(index) * 0x9e3779b9)
 			active_anim := ui_animate(ui_id(40, lyric_value), is_active)
 			hover_anim := ui_animate(ui_id(41, lyric_value), visible_hover, UI_HOVER_SPEED)
