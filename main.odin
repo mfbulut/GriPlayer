@@ -3,16 +3,9 @@ package main
 import "core:fmt"
 
 import "fx"
-import "fx/audio"
 import "fx/smtc"
-
-UI_ID :: distinct u64
-
-UI_NONE     :: UI_ID(0)
-UI_PROGRESS :: UI_ID(1)
-UI_VOLUME   :: UI_ID(2)
-
-ui_active: UI_ID
+import "fx/audio"
+import "fx/textbox"
 
 Compact_Tab :: enum {
 	Library,
@@ -26,7 +19,7 @@ scrub_time := f32(-1)
 
 main :: proc() {
 	fx.init("GriPlayer")
-	fx.text_box_init("Search tracks, artists, lyrics")
+	textbox.init(fx.window.hwnd, 16, "Search tracks, artists, lyrics")
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
 	fft_init()
@@ -77,16 +70,16 @@ frame :: proc() {
 			draw_compact_tabs(layout_next())
 			content := layout_next()
 			if compact_tab == .Library {
-				fx.text_box_set_visible(true)
+				textbox.set_visible(true)
 				draw_library_panel(content)
 			} else {
 				search.focused = false
-				fx.text_box_set_visible(false)
+				textbox.set_visible(false)
 				draw_player_panel(content)
 			}
 		}
 	} else {
-		fx.text_box_set_visible(true)
+		textbox.set_visible(true)
 		left_width := clamp(size.x * .42, 460, 540)
 		if layout_begin({0, 0, size.x, size.y}, {left_width, GROW}, .Horizontal, padding = 8, gap = 8) {
 			draw_library_panel(layout_next())
@@ -174,7 +167,7 @@ handle_keyboard_input :: proc() {
 	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
 		if fx.window_size().x < 720 {
 			compact_tab = .Library
-			fx.text_box_set_visible(true)
+			textbox.set_visible(true)
 		}
 		search_open()
 		return

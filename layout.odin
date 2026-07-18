@@ -4,6 +4,14 @@ import "core:fmt"
 
 import "fx"
 
+UI_ID :: distinct u64
+ui_active: UI_ID
+
+UI_NONE       :: UI_ID(0)
+UI_PROGRESS   :: UI_ID(1)
+UI_VOLUME     :: UI_ID(2)
+UI_QUEUE_DRAG :: UI_ID(3)
+
 COLOR_BACKGROUND    :: fx.Color{14, 17, 22, 255}
 COLOR_SURFACE       :: fx.Color{21, 25, 31, 255}
 COLOR_HOVER         :: fx.Color{31, 36, 44, 255}
@@ -266,7 +274,6 @@ draw_cover :: proc(cover: fx.Texture, bounds: fx.Rect, radius := f32(6)) {
 	fx.draw_texture_ex(cover, source, bounds, fx.WHITE, radius)
 }
 
-
 context_menu: struct {
 	song: ^Music,
 	bounds: fx.Rect,
@@ -296,13 +303,7 @@ draw_context_menu :: proc() {
 	labels := [?]string{song.liked ? "Unlike" : "Like", "Play next", "Add to queue", "Show artist", "Show album"}
 	menu_icons := [?]Icon{.Heart, .Add_Next, .Add_Last, .Artist, .Album}
 
-	if layout_begin(
-		bounds,
-		{28, 28, 28, 28, 28},
-		.Vertical,
-		padding = 4,
-		gap = 0,
-	) {
+	if layout_begin(bounds, {28, 28, 28, 28, 28}, .Vertical, padding = 4) {
 		for label, index in labels {
 			row := layout_next()
 			disabled := (index == 3 && song.artist == "") || (index == 4 && song.album == "")

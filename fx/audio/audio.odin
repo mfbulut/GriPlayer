@@ -272,7 +272,7 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
         callback(samples)
     }
 
-    current_vol := muted ? f32(0) : (volume * volume)
+    current_vol := muted ? f32(0) : (volume * volume) * 3
     for &sample in samples {
         sample[0] *= current_vol
         sample[1] *= current_vol

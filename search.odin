@@ -7,6 +7,7 @@ import "core:strings"
 import "core:unicode"
 
 import "fx"
+import "fx/textbox"
 
 Search_Match :: struct {
 	music: ^Music,
@@ -26,16 +27,16 @@ search: struct {
 search_open :: proc(artist := "", album := "") {
 	search.focused = true
 	search.active = true
-	fx.text_box_set_text("")
-	fx.text_box_focus()
+	textbox.set_text("")
+	textbox.focus()
 	search.filter_artist = artist
 	search.filter_album = album
 	search.initialized = false
 }
 
 search_close :: proc() {
-	fx.text_box_set_text("")
-	fx.text_box_blur()
+	textbox.set_text("")
+	textbox.blur()
 	search.initialized = false
 	search.filter_artist = ""
 	search.filter_album = ""
@@ -44,22 +45,22 @@ search_close :: proc() {
 }
 
 handle_search_input :: proc() {
-	if fx.text_box_backspace_on_empty() {
+	if textbox.pressed(.Backspace_On_Empty) {
 		search.filter_artist = ""
 		search.filter_album = ""
 		search.initialized = false
 	}
 
-	if fx.text_box_escape_pressed() {
+	if textbox.pressed(.Escape) {
 		search.focused = false
-		fx.text_box_blur()
+		textbox.blur()
 		return
 	}
 
-	if fx.text_box_enter_pressed() && len(search.results) > 0 {
+	if textbox.pressed(.Enter) && len(search.results) > 0 {
 		player_start_playlist(search.results[:], 0)
 		search.focused = false
-		fx.text_box_blur()
+		textbox.blur()
 	}
 }
 
@@ -145,7 +146,7 @@ update_search :: proc() {
 	if !search.active && !search.focused do return
 	if search.focused do handle_search_input()
 
-	current_query := fx.text_box_text()
+	current_query := textbox.text()
 	if current_query == search.last_query && search.initialized do return
 	search.initialized = true
 	search_scroll = {}
@@ -185,7 +186,7 @@ update_search :: proc() {
 }
 
 draw_search_box :: proc(bounds: fx.Rect) {
-	query := fx.text_box_text()
+	query := textbox.text()
 	filter := search.filter_artist != "" ? search.filter_artist : search.filter_album
 	close_width := f32(len(query) > 0 || search.active ? 14 : 0)
 	badge_width := f32(0)
@@ -199,16 +200,16 @@ draw_search_box :: proc(bounds: fx.Rect) {
 	append(&slots, GROW)
 	if close_width > 0 do append(&slots, close_width)
 
-	if fx.text_box_is_focused() {
+	if textbox.focused() {
 		search.active = true
 		search.focused = true
 	}
-	hovered := ui_hover(bounds) || fx.text_box_is_hovered()
+	hovered := ui_hover(bounds) || textbox.hovered()
 	hover_anim := ui_animate(ui_id(71, 0), hovered)
 	if search.active do hover_anim = 1
 	background := fx.color_lerp(COLOR_SURFACE, COLOR_HOVER, hover_anim)
 	fx.draw_rect(bounds, background, 8)
-	if fx.text_box_is_focused() {
+	if textbox.focused() {
 		fx.draw_rect({bounds.x + 5, bounds.y + bounds.h - 2, bounds.w - 10, 2}, COLOR_ACCENT_BRIGHT, 1)
 	}
 
@@ -222,10 +223,10 @@ draw_search_box :: proc(bounds: fx.Rect) {
 		if hovered && !close_hovered {
 			search.active = true
 			search.focused = true
-			fx.text_box_focus()
+			textbox.focus()
 		} else if !hovered {
 			search.focused = false
-			fx.text_box_blur()
+			textbox.blur()
 		}
 	}
 
@@ -249,8 +250,8 @@ draw_search_box :: proc(bounds: fx.Rect) {
 
 		text_area := layout_next()
 		if ui_hover(text_area) do fx.set_cursor(.IBeam)
-		fx.text_box_set_colors(COLOR_TEXT, background)
-		fx.text_box_set_rect({text_area.x, text_area.y, text_area.w, text_area.h + 6})
+		textbox.set_colors(COLOR_TEXT, background)
+		textbox.set_bounds(text_area.x, text_area.y, text_area.w, text_area.h + 6)
 
 		if close_width > 0 {
 			close_slot := layout_next()

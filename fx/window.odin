@@ -30,21 +30,6 @@ window: struct {
 	prev_time:      time.Time,
 	frame_time:     f32,
 	frame_callback: proc(),
-	text_box:       Native_Text_Box,
-}
-
-Native_Text_Box :: struct {
-	hwnd:              win.HWND,
-	font:              win.HFONT,
-	brush:             win.HBRUSH,
-	text_color:        win.COLORREF,
-	background_color:  win.COLORREF,
-	enter_pressed:     bool,
-	escape_pressed:    bool,
-	backspace_on_empty: bool,
-	hovered:            bool,
-	rect:              [4]i32,
-	visible:           bool,
 }
 
 init :: proc(title: string, size := [2]i32{1280, 720}) {
@@ -174,9 +159,6 @@ update :: proc(poll_msg := true) -> bool {
 	}
 
 	window.mouse_scroll = {0, 0}
-	window.text_box.enter_pressed = false
-	window.text_box.escape_pressed = false
-	window.text_box.backspace_on_empty = false
 
 	cur_time := time.now()
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
@@ -266,17 +248,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		ps: win.PAINTSTRUCT
 		win.BeginPaint(hwnd, &ps)
 		win.EndPaint(hwnd, &ps)
-
-	case win.WM_CTLCOLOREDIT:
-		if cast(win.HWND)uintptr(lparam) == window.text_box.hwnd {
-			hdc := cast(win.HDC)wparam
-			win.SetTextColor(hdc, window.text_box.text_color)
-			win.SetBkColor(hdc, window.text_box.background_color)
-			win.SetBkMode(hdc, .OPAQUE)
-			result = cast(win.LRESULT)uintptr(window.text_box.brush)
-		} else {
-			result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
-		}
 
 	case win.WM_LBUTTONUP:
 		update_button(.Mouse_Left, false)

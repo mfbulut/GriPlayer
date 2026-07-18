@@ -2,7 +2,6 @@ package main
 
 import "fx"
 
-UI_QUEUE_DRAG :: UI_ID(3)
 
 Queue_Section :: enum {
 	None,
