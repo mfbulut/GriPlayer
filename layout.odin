@@ -243,7 +243,7 @@ layout_end :: proc(started: bool) {
 	thumb_y := track.y + travel * clamp(c.scroll.current / max_scroll, 0, 1)
 	fx.draw_rect(
 		{track.x, thumb_y, track.w, thumb_height},
-		fx.color_opacity(COLOR_BORDER, .48),
+		fx.color_opacity(COLOR_BORDER, .75),
 		3 * .5,
 	)
 }
@@ -251,11 +251,8 @@ layout_end :: proc(started: bool) {
 layout_next :: proc(height: ..f32) -> fx.Rect {
 	c := &layout_stack[len(layout_stack) - 1]
 	if c.scroll != nil {
-		if len(height) != 1 do fmt.panicf("layout_next requires a height inside a scroll container")
 		return layout_take(c, max(0, height[0]))
 	}
-	if len(height) != 0 do fmt.panicf("layout_next height can only be used inside a scroll container")
-	if c.index >= len(c.sizes) do fmt.panicf("layout has no remaining slots")
 
 	size := c.sizes[c.index]
 	if size == GROW do size = c.grow_size
