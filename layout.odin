@@ -101,8 +101,8 @@ layout_begin :: proc(
 	padding := f32(0),
 	gap := f32(0),
 	scroll: ^Scroll_State = nil,
-	background := fx.Color{},
-	smooth_speed := f32(16),
+	background := fx.BLANK,
+	anim_speed := f32(16),
 ) -> bool {
 	if bounds.w <= 0 || bounds.h <= 0 do return false
 	if scroll != nil {
@@ -112,7 +112,7 @@ layout_begin :: proc(
 			scroll.target -= fx.mouse_scroll().y * 64
 		}
 		scroll.target = clamp(scroll.target, 0, max_scroll)
-		scroll.current += (scroll.target - scroll.current) * min(fx.frame_time() * smooth_speed, 1)
+		scroll.current += (scroll.target - scroll.current) * min(fx.frame_time() * anim_speed, 1)
 		scroll.content_size = 0
 	}
 
@@ -162,14 +162,14 @@ layout_end :: proc(started: bool) {
 	if c.scroll.current > 1 {
 		fx.draw_rect(
 			{c.bounds.x, c.bounds.y, c.bounds.w, fade_height},
-			[4]fx.Color{opaque, opaque, transparent, transparent},
+			{opaque, opaque, transparent, transparent},
 			8,
 		)
 	}
 	if max_scroll - c.scroll.current > 1 {
 		fx.draw_rect(
 			{c.bounds.x, c.bounds.y + c.bounds.h - fade_height, c.bounds.w, fade_height},
-			[4]fx.Color{transparent, transparent, opaque, opaque},
+			{transparent, transparent, opaque, opaque},
 			8,
 		)
 	}
@@ -204,6 +204,38 @@ layout_next :: proc(height: ..f32) -> fx.Rect {
 	size := c.sizes[c.index]
 	if size == GROW do size = c.grow_size
 	return layout_take(c, size)
+}
+
+draw_icon_button :: proc(icon: Icon, active := false) -> bool {
+	bounds := layout_next()
+	disabled := player.music == nil
+	hovered := !disabled && ui_hover(bounds)
+	hover_anim := ui_animate(ui_id(30, uint(icon)), hovered)
+	if hovered do fx.set_cursor(.Hand)
+
+	background := fx.color_opacity(COLOR_SURFACE, 0)
+	if active {
+		background = fx.color_opacity(COLOR_ACCENT, .30)
+	} else if hover_anim > .001 {
+		background = fx.color_opacity(COLOR_HOVER, hover_anim)
+	}
+	if background.a > 0 do fx.draw_rect(bounds, background, bounds.h * .5)
+
+	icon_size := bounds.h * .45
+	tint := disabled ? fx.color_opacity(COLOR_MUTED, .30) : COLOR_MUTED
+	if active do tint = COLOR_TEXT
+	if !active && !disabled do tint = fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
+	fx.draw_texture(
+		icons[icon],
+		{
+			bounds.x + (bounds.w - icon_size) * .5,
+			bounds.y + (bounds.h - icon_size) * .5,
+			icon_size,
+			icon_size,
+		},
+		tint,
+	)
+	return hovered && fx.key_is_pressed(.Mouse_Left)
 }
 
 layout_take :: proc(c: ^Layout_Container, size: f32) -> fx.Rect {

@@ -15,14 +15,15 @@ Cursor :: enum {
 	SizeAll,
 }
 
-Key_States :: bit_set[enum { Held, Pressed, Released, Repeat }]
+Key_State :: enum { Held, Pressed, Released, Repeat }
+Key_States :: [256]bit_set[Key_State]
 
 window: struct {
 	hwnd:           win.HWND,
 	size:      		[2]i32,
 	is_resized:     bool,
 	should_close:   bool,
-	key_state:      [256]Key_States,
+	key_state:      Key_States,
 	cursor:       	Cursor,
 	mouse_pos: 		Vec2,
 	mouse_inside:  bool,

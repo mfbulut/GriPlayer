@@ -130,26 +130,9 @@ draw_visualizer :: proc(bounds: fx.Rect) {
 		}
 		top := fx.color_lerp(color, fx.WHITE, .08)
 		bottom := fx.color_brightness(color, .42)
-		fx.draw_rect({x, y, bar_width, bar_height}, [4]fx.Color{top, top, bottom, bottom})
+		fx.draw_rect({x, y, bar_width, bar_height}, {top, top, bottom, bottom})
 		fx.draw_rect({x, peak_y - 2, bar_width, 2}, fx.color_opacity(color, .62), 1)
 	}
-}
-
-draw_player_palette_tint :: proc(bounds: fx.Rect) {
-	if bounds.w <= 0 || bounds.h <= 0 || len(visualizer_palette) == 0 do return
-	top_left := visualizer_color_at(0)
-	bottom_right := visualizer_color_at(.65)
-	middle := fx.color_lerp(top_left, bottom_right, .5)
-	fx.draw_rect(
-		bounds,
-		[4]fx.Color{
-			fx.color_opacity(top_left, .10),
-			fx.color_opacity(middle, .05),
-			fx.color_opacity(middle, 0),
-			fx.color_opacity(bottom_right, 0),
-		},
-		8,
-	)
 }
 
 Palette_Bucket :: struct {

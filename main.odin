@@ -55,7 +55,6 @@ main :: proc() {
 
 frame :: proc() {
 	loader_poll()
-	size := fx.window_size()
 	handle_keyboard_input()
 	update_search()
 	player_update()
@@ -64,18 +63,24 @@ frame :: proc() {
 		player.music.playtime += fx.frame_time()
 	}
 
+	size := fx.window_size()
 	fx.clear_window(COLOR_BACKGROUND)
 	if size.x < 800 {
 		if layout_begin({0, 0, size.x, size.y}, {42, GROW}, .Vertical, padding = 8, gap = 8) {
-			draw_compact_tabs(layout_next())
-			content := layout_next()
+			tab_bounds := layout_next()
+			fx.draw_rect(tab_bounds, COLOR_SURFACE, 8)
+			if layout_begin(tab_bounds, {GROW, GROW}, .Horizontal, padding = 4, gap = 4) {
+				draw_compact_tab(layout_next(), "Library", .Library)
+				draw_compact_tab(layout_next(), "Player", .Player)
+			}
+
 			if compact_tab == .Library {
 				textbox.set_visible(true)
-				draw_library_panel(content)
+				draw_library_panel(layout_next())
 			} else {
 				search.focused = false
 				textbox.set_visible(false)
-				draw_player_panel(content)
+				draw_player_panel(layout_next())
 			}
 		}
 	} else {
@@ -103,7 +108,17 @@ draw_library_panel :: proc(bounds: fx.Rect) {
 			library_width := clamp(content.w * .30, 150, 180)
 			if layout_begin(content, {library_width, GROW}, .Horizontal, gap = 8) {
 				draw_library(layout_next())
-				draw_playlist(layout_next())
+
+				playlist := &playlists[selected_playlist]
+				playlist_bounds := layout_next()
+				fx.draw_rect(playlist_bounds, COLOR_SURFACE, 8)
+				if layout_begin(playlist_bounds, {48, GROW}, .Vertical) {
+					header := layout_next()
+					playlist_content := layout_next()
+					fx.draw_text_faded(playlist.name, header, 16, COLOR_TEXT, true, true)
+					fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_BORDER)
+					draw_song_list(playlist_content, &playlist_scroll, playlist.songs[:], "No tracks")
+				}
 			}
 		}
 	}
@@ -112,7 +127,22 @@ draw_library_panel :: proc(bounds: fx.Rect) {
 draw_player_panel :: proc(bounds: fx.Rect) {
 	fx.draw_rect(bounds, COLOR_SURFACE, 8)
 	tint_height := min(bounds.h, f32(190 + 88))
-	draw_player_palette_tint({bounds.x, bounds.y, bounds.w, tint_height})
+	tint_bounds := fx.Rect{bounds.x, bounds.y, bounds.w, tint_height}
+	if tint_bounds.w > 0 && tint_bounds.h > 0 && len(visualizer_palette) > 0 {
+		top_left := visualizer_color_at(0)
+		bottom_right := visualizer_color_at(.65)
+		middle := fx.color_lerp(top_left, bottom_right, .5)
+		fx.draw_rect(
+			tint_bounds,
+			{
+				fx.color_opacity(top_left, .10),
+				fx.color_opacity(middle, .05),
+				fx.color_opacity(middle, 0),
+				fx.color_opacity(bottom_right, 0),
+			}, 8,
+		)
+	}
+
 	if layout_begin(bounds, {190, 88, GROW}, .Vertical) {
 		draw_now_playing(layout_next())
 		draw_player_controls(layout_next())
@@ -122,14 +152,6 @@ draw_player_panel :: proc(bounds: fx.Rect) {
 		} else {
 			draw_lyrics(content)
 		}
-	}
-}
-
-draw_compact_tabs :: proc(bounds: fx.Rect) {
-	fx.draw_rect(bounds, COLOR_SURFACE, 8)
-	if layout_begin(bounds, {GROW, GROW}, .Horizontal, padding = 4, gap = 4) {
-		draw_compact_tab(layout_next(), "Library", .Library)
-		draw_compact_tab(layout_next(), "Player", .Player)
 	}
 }
 
@@ -213,7 +235,6 @@ handle_keyboard_input :: proc() {
 	}
 }
 
-
 draw_library :: proc(bounds: fx.Rect) {
 	fx.draw_rect(bounds, COLOR_SURFACE, 8)
 	if layout_begin(bounds, {48, GROW}, .Vertical) {
@@ -252,27 +273,15 @@ draw_library :: proc(bounds: fx.Rect) {
 	}
 }
 
-draw_playlist :: proc(bounds: fx.Rect) {
-	playlist := &playlists[selected_playlist]
-
-	fx.draw_rect(bounds, COLOR_SURFACE, 8)
-	if layout_begin(bounds, {48, GROW}, .Vertical) {
-		header := layout_next()
-		content := layout_next()
-		fx.draw_text_faded(playlist.name, header, 16, COLOR_TEXT, true, true)
-		fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_BORDER)
-		draw_song_list(content, &playlist_scroll, playlist.songs[:], "No tracks", 14, 11)
-	}
-}
-
 draw_song_list :: proc(
 	bounds: fx.Rect,
 	scroll: ^Scroll_State,
 	songs: []^Music,
 	empty_label: string,
-	title_font_size := f32(13),
-	artist_font_size := f32(10),
 ) {
+	title_font_size := f32(13)
+	artist_font_size := f32(10)
+
 	if layout_begin(bounds, padding = 8, gap = 5, scroll = scroll, background = COLOR_SURFACE) {
 		if len(songs) == 0 {
 			fx.draw_text(empty_label, layout_next(48), 12, COLOR_MUTED, true, true)
@@ -379,9 +388,7 @@ draw_label :: proc(text: string, bounds: fx.Rect, font_size: f32, idle_color := 
 	hover_anim := ui_animate(ui_id(32, label_value), hovered)
 	text_color := fx.color_lerp(idle_color, COLOR_TEXT, hover_anim)
 	fx.draw_text_faded(text, bounds, font_size, text_color, false, true)
-	if hovered {
-		fx.set_cursor(.Hand)
-	}
+	if hovered do fx.set_cursor(.Hand)
 	if hover_anim > .001 {
 		underline_width := hit_bounds.w * hover_anim
 		fx.draw_rect(
@@ -394,6 +401,7 @@ draw_label :: proc(text: string, bounds: fx.Rect, font_size: f32, idle_color := 
 			fx.color_opacity(COLOR_TEXT, hover_anim),
 		)
 	}
+
 	return hovered && fx.key_is_pressed(.Mouse_Left)
 }
 
@@ -441,38 +449,6 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			layout_next()
 		}
 	}
-}
-
-draw_icon_button :: proc(icon: Icon, active := false) -> bool {
-	bounds := layout_next()
-	disabled := player.music == nil
-	hovered := !disabled && ui_hover(bounds)
-	hover_anim := ui_animate(ui_id(30, uint(icon)), hovered)
-	if hovered do fx.set_cursor(.Hand)
-
-	background := fx.color_opacity(COLOR_SURFACE, 0)
-	if active {
-		background = fx.color_opacity(COLOR_ACCENT, .30)
-	} else if hover_anim > .001 {
-		background = fx.color_opacity(COLOR_HOVER, hover_anim)
-	}
-	if background.a > 0 do fx.draw_rect(bounds, background, bounds.h * .5)
-
-	icon_size := bounds.h * .45
-	tint := disabled ? fx.color_opacity(COLOR_MUTED, .30) : COLOR_MUTED
-	if active do tint = COLOR_TEXT
-	if !active && !disabled do tint = fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
-	fx.draw_texture(
-		icons[icon],
-		{
-			bounds.x + (bounds.w - icon_size) * .5,
-			bounds.y + (bounds.h - icon_size) * .5,
-			icon_size,
-			icon_size,
-		},
-		tint,
-	)
-	return hovered && fx.key_is_pressed(.Mouse_Left)
 }
 
 draw_slider_tooltip :: proc(bounds: fx.Rect, value: f32, label: string) {
@@ -572,7 +548,6 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 	}
 
 	row_height := f32(60)
-	row_gap := f32(0)
 	padding := f32(20)
 	active, active_found := current_lyric()
 	if ui_hover(bounds) && fx.mouse_scroll().y != 0 {
@@ -580,13 +555,13 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 	}
 
 	if lyrics_synced {
-		content_height := padding * 2 + f32(len(song.lyrics)) * row_height + f32(max(0, len(song.lyrics) - 1)) * row_gap
+		content_height := padding * 2 + f32(len(song.lyrics)) * row_height
 		max_scroll := max(content_height - bounds.h, 0)
-		centered := padding + f32(active) * (row_height + row_gap) + row_height * .5 - bounds.h * .5
+		centered := padding + f32(active) * row_height + row_height * .5 - bounds.h * .5
 		lyrics_scroll.target = clamp(centered, 0, max_scroll)
 	}
 
-	if layout_begin(bounds, padding = padding, gap = row_gap, scroll = &lyrics_scroll, background = COLOR_SURFACE, smooth_speed = 8) {
+	if layout_begin(bounds, padding = padding, scroll = &lyrics_scroll, background = COLOR_SURFACE, anim_speed = 8) {
 		for lyric, index in song.lyrics {
 			row := layout_next(row_height)
 			if !fx.rect_overlaps(row, bounds) do continue

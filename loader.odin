@@ -5,6 +5,7 @@ import "core:encoding/cbor"
 import "core:hash/xxhash"
 
 import "core:os"
+import "core:fmt"
 import "core:time"
 import "core:slice"
 import "core:strconv"
@@ -250,7 +251,10 @@ cache_load :: proc() {
 	if read_err != nil do return
 
 	unmarshal_err := cbor.unmarshal(data, &cache, {.Trusted_Input})
-	if unmarshal_err != nil do return
+	if unmarshal_err != nil {
+		fmt.eprintfln("Failed to load cache.cbor")
+		return
+	}
 
 	audio.volume = cache.volume
 }
@@ -275,5 +279,7 @@ cache_save :: proc() {
 	bytes, marshal_err := cbor.marshal(cache)
 	if marshal_err == nil {
 		_ = os.write_entire_file(save_path, bytes)
+	} else {
+		fmt.eprintfln("Failed to save cache.cbor")
 	}
 }
