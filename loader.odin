@@ -186,11 +186,11 @@ loader_poll :: proc() {
 	}
 
 	for &playlist in playlists {
-		playlist_sort_songs(&playlist)
+		playlist_sort(&playlist)
 	}
 }
 
-playlist_sort_songs :: proc(playlist: ^Playlist) {
+playlist_sort :: proc(playlist: ^Playlist) {
 	switch playlist.sort {
 	case .Title:
 		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
@@ -349,7 +349,8 @@ toggle_like :: proc(song: ^Music) {
 			}
 		}
 	}
-	playlist_sort_songs(liked_playlist)
+
+	playlist_sort(liked_playlist)
 }
 
 record_listen :: proc(song: ^Music) {
@@ -365,7 +366,7 @@ record_listen :: proc(song: ^Music) {
 	inject_at(&history_playlist.songs, 0, song)
 
 	for &playlist in playlists {
-		playlist_sort_songs(&playlist)
+		playlist_sort(&playlist)
 	}
 }
 

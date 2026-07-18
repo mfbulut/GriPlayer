@@ -136,11 +136,11 @@ draw_playlist_header :: proc(bounds: fx.Rect, playlist: ^Playlist) {
 		fx.set_cursor(.Hand)
 		if fx.key_is_pressed(.Mouse_Left) {
 			playlist.sort = Playlist_Sort((int(playlist.sort) + 1) % len(PLAYLIST_SORT_LABELS))
-			playlist_sort_songs(playlist)
+			playlist_sort(playlist)
 			playlist_scroll = {}
 		} else if fx.key_is_pressed(.Mouse_Right) {
 			playlist.sort_reversed = !playlist.sort_reversed
-			playlist_sort_songs(playlist)
+			playlist_sort(playlist)
 			playlist_scroll = {}
 		}
 	}
