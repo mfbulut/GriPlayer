@@ -43,6 +43,7 @@ player_play_music :: proc(song: ^Music, gapless := false) {
 	audio.resume()
 	player.music = song
 	player.playing = true
+	record_listen(song)
 	lyrics_scroll = {}
 	lyrics_synced = true
 	visualizer_create_palette(song.thumbnail_pixels)

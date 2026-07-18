@@ -159,7 +159,7 @@ update_search :: proc() {
 
 	matches: [dynamic]Search_Match
 	defer delete(matches)
-	for playlist in playlists[1:] {
+	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
 		for song in playlist.songs {
 			if search.filter_artist != "" && song.artist != search.filter_artist do continue
 			if search.filter_album != "" && song.album != search.filter_album do continue

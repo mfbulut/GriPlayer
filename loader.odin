@@ -34,6 +34,7 @@ Music :: struct {
 	duration:         f32,
 	liked:            bool,
 	liked_timestamp:  time.Time,
+	last_listened_timestamp: time.Time,
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []fx.Color,
@@ -47,11 +48,16 @@ Playlist :: struct {
 
 playlists: [dynamic]Playlist
 
+LIKED_PLAYLIST_INDEX   :: 0
+HISTORY_PLAYLIST_INDEX :: 1
+LIBRARY_PLAYLIST_START :: 2
+
 loading_mutex: sync.Mutex
 loaded_songs_queue: [dynamic]^Music
 
 loader_start :: proc() {
 	append(&playlists, Playlist{ name = "Liked" })
+	append(&playlists, Playlist{ name = "History" })
 
 	thread.create_and_start(proc() {
 		music_dir := os.user_music_dir(context.temp_allocator) or_else panic("Failed to find music dir")
@@ -96,10 +102,13 @@ loader_poll :: proc() {
 		playlist_name := os.base(os.dir(music.fullpath))
 
 		if music.liked {
-			append(&playlists[0].songs, music)
+			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
+		}
+		if time.to_unix_nanoseconds(music.last_listened_timestamp) > 0 {
+			append(&playlists[HISTORY_PLAYLIST_INDEX].songs, music)
 		}
 
-		for &playlist in playlists[1:] {
+		for &playlist in playlists[LIBRARY_PLAYLIST_START:] {
 			if playlist.name == playlist_name {
 				append(&playlist.songs, music)
 				continue next
@@ -110,8 +119,11 @@ loader_poll :: proc() {
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
 
-	slice.sort_by(playlists[0].songs[:], proc(i, j: ^Music) -> bool {
+	slice.sort_by(playlists[LIKED_PLAYLIST_INDEX].songs[:], proc(i, j: ^Music) -> bool {
 		return time.diff(j.liked_timestamp, i.liked_timestamp) > 0
+	})
+	slice.sort_by(playlists[HISTORY_PLAYLIST_INDEX].songs[:], proc(i, j: ^Music) -> bool {
+		return time.diff(j.last_listened_timestamp, i.last_listened_timestamp) > 0
 	})
 
 	search.initialized = false
@@ -219,7 +231,7 @@ load_thumbnail :: proc(music: ^Music) {
 }
 
 toggle_like :: proc(song: ^Music) {
-	liked_playlist := &playlists[0]
+	liked_playlist := &playlists[LIKED_PLAYLIST_INDEX]
 
 	if !song.liked {
 		song.liked = true
@@ -234,6 +246,19 @@ toggle_like :: proc(song: ^Music) {
 			}
 		}
 	}
+}
+
+record_listen :: proc(song: ^Music) {
+	history_playlist := &playlists[HISTORY_PLAYLIST_INDEX]
+	song.last_listened_timestamp = time.now()
+
+	for history_song, i in history_playlist.songs {
+		if history_song == song {
+			ordered_remove(&history_playlist.songs, i)
+			break
+		}
+	}
+	inject_at(&history_playlist.songs, 0, song)
 }
 
 cache: struct {
@@ -270,7 +295,7 @@ cache_save :: proc() {
 	cache.volume = audio.volume
 	cache.songs = make(map[string]Music, 1024)
 
-	for playlist in playlists[1:] {
+	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
 		for m in playlist.songs {
 			cache.songs[m.fullpath] = m^
 		}
