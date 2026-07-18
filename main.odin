@@ -23,25 +23,7 @@ main :: proc() {
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
 	fft_init()
-
-	icons = {
-		.Album    = fx.texture_load(#load("assets/icons/album.png")),
-		.Artist   = fx.texture_load(#load("assets/icons/artist.png")),
-		.Heart    = fx.texture_load(#load("assets/icons/heart.png")),
-		.Next     = fx.texture_load(#load("assets/icons/next.png")),
-		.Note     = fx.texture_load(#load("assets/icons/note.png")),
-		.Pause    = fx.texture_load(#load("assets/icons/pause.png")),
-		.Play     = fx.texture_load(#load("assets/icons/play.png")),
-		.Previous = fx.texture_load(#load("assets/icons/previous.png")),
-		.Queue    = fx.texture_load(#load("assets/icons/queue.png")),
-		.Add_Last = fx.texture_load(#load("assets/icons/add_last.png")),
-		.Add_Next = fx.texture_load(#load("assets/icons/add_next.png")),
-		.Search   = fx.texture_load(#load("assets/icons/search.png")),
-		.Shuffle  = fx.texture_load(#load("assets/icons/shuffle.png")),
-		.Volume   = fx.texture_load(#load("assets/icons/volume.png")),
-		.Mute     = fx.texture_load(#load("assets/icons/mute.png")),
-		.Cross    = fx.texture_load(#load("assets/icons/cross.png")),
-	}
+	load_icons()
 
 	loader_start()
 
@@ -115,11 +97,51 @@ draw_library_panel :: proc(bounds: fx.Rect) {
 				if layout_begin(playlist_bounds, {48, GROW}, .Vertical) {
 					header := layout_next()
 					playlist_content := layout_next()
-					fx.draw_text_faded(playlist.name, header, 16, COLOR_TEXT, true, true)
+					draw_playlist_header(header, playlist)
 					fx.draw_rect({header.x + 10, header.y + header.h - 1, header.w - 20, 1}, COLOR_BORDER)
 					draw_song_list(playlist_content, &playlist_scroll, playlist.songs[:], "No tracks")
 				}
 			}
+		}
+	}
+}
+
+draw_playlist_header :: proc(bounds: fx.Rect, playlist: ^Playlist) {
+	label := PLAYLIST_SORT_LABELS[playlist.sort]
+	label_width := fx.measure_text(label, 12).x
+	button_padding := f32(10)
+	icon_size := f32(16)
+	icon_gap := f32(7)
+	button_width := button_padding * 2 + label_width + icon_gap + icon_size
+	button := fx.Rect{
+		bounds.x + bounds.w - button_width - 10,
+		bounds.y + 9,
+		button_width,
+		30,
+	}
+	title_x := bounds.x + 16
+	title := fx.Rect{title_x, bounds.y, max(0, button.x - title_x - 10), bounds.h}
+	fx.draw_text_faded(playlist.name, title, 16, COLOR_TEXT, false, true)
+
+	hovered := ui_hover(button)
+	hover_anim := ui_animate(ui_id(12, 0), hovered)
+	tint := fx.color_lerp(COLOR_MUTED, COLOR_TEXT, hover_anim)
+	fx.draw_rect(button, fx.color_lerp(COLOR_HOVER, COLOR_ACCENT_DARK, hover_anim), 6)
+	label_bounds := fx.Rect{button.x + button_padding, button.y, label_width, button.h}
+	icon_bounds := fx.Rect{label_bounds.x + label_bounds.w + icon_gap, button.y + (button.h - icon_size) * .5, icon_size, icon_size}
+	fx.draw_text(label, label_bounds, 12, tint, false, true)
+	direction := playlist.sort_reversed ? 1 : 0
+	fx.draw_texture(sort_icons[direction][playlist.sort], icon_bounds, tint)
+	if hovered {
+		fx.set_cursor(.Hand)
+		if fx.key_is_pressed(.Mouse_Left) {
+			playlist.sort = Playlist_Sort((int(playlist.sort) + 1) % len(PLAYLIST_SORT_LABELS))
+			playlist_sort_songs(playlist)
+			playlist_scroll = {}
+		} else if fx.key_is_pressed(.Mouse_Right) {
+			playlist.sort_reversed = !playlist.sort_reversed
+			playlist_sort_songs(playlist)
+			playlist_scroll = {}
 		}
 	}
 }
@@ -139,7 +161,7 @@ draw_player_panel :: proc(bounds: fx.Rect) {
 				fx.color_opacity(middle, .05),
 				fx.color_opacity(middle, 0),
 				fx.color_opacity(bottom_right, 0),
-			}, 8,
+			}, 8
 		)
 	}
 
@@ -266,7 +288,15 @@ draw_library :: proc(bounds: fx.Rect) {
 				}
 
 				count := fmt.tprintf("%d", len(playlist.songs))
-				fx.draw_text_faded(playlist.name, {row.x + 10, row.y, row.w - 48, row.h}, 13, selected || hovered ? COLOR_TEXT : COLOR_MUTED)
+				text_color := selected || hovered ? COLOR_TEXT : COLOR_MUTED
+				text_x := row.x + 10
+				if playlist.icon != nil {
+					icon_size := f32(16)
+					fx.draw_texture(playlist.icon^, {text_x, row.y + (row.h - icon_size) * .5, icon_size, icon_size}, text_color)
+					text_x += icon_size + 8
+				}
+				name_width := max(0, row.x + row.w - 48 - text_x)
+				fx.draw_text_faded(playlist.name, {text_x, row.y, name_width, row.h}, 13, text_color)
 				fx.draw_text(count, fx.Rect{row.x + row.w - 38, row.y, 28, row.h}, 10, COLOR_MUTED, true, true)
 			}
 		}

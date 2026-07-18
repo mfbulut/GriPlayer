@@ -34,7 +34,7 @@ Music :: struct {
 	duration:         f32,
 	liked:            bool,
 	liked_timestamp:  time.Time,
-	last_listened_timestamp: time.Time,
+	last_timestamp:   time.Time,
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []fx.Color,
@@ -42,22 +42,57 @@ Music :: struct {
 }
 
 Playlist :: struct {
-	name:  string,
-	songs: [dynamic]^Music,
+	name:          string,
+	songs:         [dynamic]^Music,
+	icon:          ^fx.Texture,
+	sort:          Playlist_Sort,
+	sort_reversed: bool,
 }
 
-playlists: [dynamic]Playlist
+Playlist_Sort :: enum {
+	Title,
+	Artist,
+	Album,
+	Track,
+	Duration,
+	Playtime,
+	Last_Listened,
+	Liked_Time,
+}
+
+PLAYLIST_SORT_LABELS := [Playlist_Sort]string{
+	.Title = "Title",
+	.Artist = "Artist",
+	.Album = "Album",
+	.Track = "Track Index",
+	.Duration = "Duration",
+	.Playtime = "Playtime",
+	.Last_Listened = "Last Listened",
+	.Liked_Time = "Liked",
+}
 
 LIKED_PLAYLIST_INDEX   :: 0
 HISTORY_PLAYLIST_INDEX :: 1
 LIBRARY_PLAYLIST_START :: 2
 
-loading_mutex: sync.Mutex
-loaded_songs_queue: [dynamic]^Music
+playlists: [dynamic]Playlist
+
+loader_queue: [dynamic]^Music
+loader_mutex: sync.Mutex
+loading_finished: bool
 
 loader_start :: proc() {
-	append(&playlists, Playlist{ name = "Liked" })
-	append(&playlists, Playlist{ name = "History" })
+	append(&playlists, Playlist{
+		name = "Liked",
+		icon = &icons[.Heart],
+		sort = .Liked_Time,
+	})
+
+	append(&playlists, Playlist{
+		name = "History",
+		icon = &icons[.History],
+		sort = .Last_Listened,
+	})
 
 	thread.create_and_start(proc() {
 		music_dir := os.user_music_dir(context.temp_allocator) or_else panic("Failed to find music dir")
@@ -80,19 +115,34 @@ loader_start :: proc() {
 
 			music := load_music(info.fullpath)
 
-			sync.guard(&loading_mutex)
-			append(&loaded_songs_queue, music)
+			sync.guard(&loader_mutex)
+			append(&loader_queue, music)
 		}
+
+		sync.lock(&loader_mutex)
+		loading_finished = true
+		sync.unlock(&loader_mutex)
 	}, self_cleanup = true)
 }
 
-loader_poll :: proc() {
-	sync.lock(&loading_mutex)
-	queue := slice.clone(loaded_songs_queue[:])
-	clear(&loaded_songs_queue)
-	sync.unlock(&loading_mutex)
+loader_is_fully_loaded :: proc() -> bool {
+	sync.lock(&loader_mutex)
+	fully_loaded := loading_finished && len(loader_queue) == 0
+	sync.unlock(&loader_mutex)
+	return fully_loaded
+}
 
-	if len(queue) == 0 do return
+loader_poll :: proc() {
+	sync.lock(&loader_mutex)
+	queue := slice.clone(loader_queue[:])
+	defer delete(queue)
+
+	clear(&loader_queue)
+	sync.unlock(&loader_mutex)
+
+	if len(queue) == 0 {
+		return
+	}
 
 	next: for music in queue {
 		if len(music.thumbnail_pixels) > 0 {
@@ -104,7 +154,7 @@ loader_poll :: proc() {
 		if music.liked {
 			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
-		if time.to_unix_nanoseconds(music.last_listened_timestamp) > 0 {
+		if time.to_unix_nanoseconds(music.last_timestamp) > 0 {
 			append(&playlists[HISTORY_PLAYLIST_INDEX].songs, music)
 		}
 
@@ -115,20 +165,73 @@ loader_poll :: proc() {
 			}
 		}
 
-		append(&playlists, Playlist{name = playlist_name})
+		append(&playlists, Playlist{name = playlist_name, sort = .Title})
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
 
-	slice.sort_by(playlists[LIKED_PLAYLIST_INDEX].songs[:], proc(i, j: ^Music) -> bool {
-		return time.diff(j.liked_timestamp, i.liked_timestamp) > 0
-	})
-	slice.sort_by(playlists[HISTORY_PLAYLIST_INDEX].songs[:], proc(i, j: ^Music) -> bool {
-		return time.diff(j.last_listened_timestamp, i.last_listened_timestamp) > 0
-	})
-
 	search.initialized = false
 
-	delete(queue)
+	next_playlist: for &playlist in playlists[LIBRARY_PLAYLIST_START:] {
+		if len(playlist.songs) < 2 do continue
+		album := playlist.songs[0].album
+		if album == "" do continue
+
+		for song in playlist.songs[1:] {
+			if song.album != album {
+				continue next_playlist
+			}
+		}
+
+		playlist.sort = .Track
+	}
+
+	for &playlist in playlists {
+		playlist_sort_songs(&playlist)
+	}
+}
+
+playlist_sort_songs :: proc(playlist: ^Playlist) {
+	switch playlist.sort {
+	case .Title:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			return strings.compare(a.title, b.title) == -1
+		})
+	case .Artist:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			return strings.compare(a.artist, b.artist) == -1
+		})
+	case .Album:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			return strings.compare(a.album, b.album) == -1
+		})
+	case .Track:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			if a.track == b.track do return strings.compare(a.title, b.title) == -1
+			return a.track < b.track
+		})
+	case .Duration:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			return a.duration < b.duration
+		})
+	case .Playtime:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			if a.playtime == b.playtime do return strings.compare(a.title, b.title) == -1
+			return a.playtime > b.playtime
+		})
+	case .Last_Listened:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			if a.last_timestamp == b.last_timestamp do return strings.compare(a.title, b.title) == -1
+			return time.diff(b.last_timestamp, a.last_timestamp) > 0
+		})
+	case .Liked_Time:
+		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
+			if a.liked != b.liked do return a.liked
+			if !a.liked || a.liked_timestamp == b.liked_timestamp do return strings.compare(a.title, b.title) == -1
+			return time.diff(b.liked_timestamp, a.liked_timestamp) > 0
+		})
+	}
+
+	if playlist.sort_reversed do slice.reverse(playlist.songs[:])
 }
 
 load_music :: proc(fullpath: string) -> ^Music {
@@ -246,11 +349,12 @@ toggle_like :: proc(song: ^Music) {
 			}
 		}
 	}
+	playlist_sort_songs(liked_playlist)
 }
 
 record_listen :: proc(song: ^Music) {
 	history_playlist := &playlists[HISTORY_PLAYLIST_INDEX]
-	song.last_listened_timestamp = time.now()
+	song.last_timestamp = time.now()
 
 	for history_song, i in history_playlist.songs {
 		if history_song == song {
@@ -259,6 +363,10 @@ record_listen :: proc(song: ^Music) {
 		}
 	}
 	inject_at(&history_playlist.songs, 0, song)
+
+	for &playlist in playlists {
+		playlist_sort_songs(&playlist)
+	}
 }
 
 cache: struct {
@@ -267,17 +375,17 @@ cache: struct {
 }
 
 cache_load :: proc() {
-	dir, err := os.user_data_dir(context.temp_allocator)
-	if err != nil do return
+	dir, dir_err := os.user_data_dir(context.temp_allocator)
+	if dir_err != nil do return
 
 	save_path := strings.concatenate({dir, "\\fmusic\\cache.cbor"}, context.temp_allocator)
 
 	data, read_err := os.read_entire_file(save_path, context.temp_allocator);
 	if read_err != nil do return
 
-	unmarshal_err := cbor.unmarshal(data, &cache, {.Trusted_Input})
-	if unmarshal_err != nil {
-		fmt.eprintfln("Failed to load cache.cbor")
+	err := cbor.unmarshal(data, &cache, {.Trusted_Input})
+	if err != nil {
+		fmt.eprintfln("Failed to load cache.cbor", err)
 		return
 	}
 
@@ -285,12 +393,14 @@ cache_load :: proc() {
 }
 
 cache_save :: proc() {
-	dir, err := os.user_data_dir(context.temp_allocator)
-	if err != nil do return
+	if !loader_is_fully_loaded() do return
 
-	fmusic_dir := strings.concatenate({dir, "\\fmusic"})
+	dir, dir_err := os.user_data_dir(context.temp_allocator)
+	if dir_err != nil do return
+
+	fmusic_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
 	os.make_directory(fmusic_dir)
-	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"})
+	save_path := strings.concatenate({fmusic_dir, "\\cache.cbor"}, context.temp_allocator)
 
 	cache.volume = audio.volume
 	cache.songs = make(map[string]Music, 1024)
@@ -301,10 +411,10 @@ cache_save :: proc() {
 		}
 	}
 
-	bytes, marshal_err := cbor.marshal(cache)
-	if marshal_err == nil {
+	bytes, err := cbor.marshal(cache)
+	if err == nil {
 		_ = os.write_entire_file(save_path, bytes)
 	} else {
-		fmt.eprintfln("Failed to save cache.cbor")
+		fmt.eprintfln("Failed to save cache.cbor", err)
 	}
 }

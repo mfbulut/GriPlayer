@@ -26,6 +26,7 @@ Icon :: enum {
 	Album,
 	Artist,
 	Heart,
+	History,
 	Next,
 	Note,
 	Pause,
@@ -42,6 +43,61 @@ Icon :: enum {
 }
 
 icons: [Icon]fx.Texture
+sort_icons: [2][Playlist_Sort]fx.Texture
+
+load_icons :: proc() {
+	icons = {
+		.Album    = fx.texture_load(#load("assets/icons/album.png")),
+		.Artist   = fx.texture_load(#load("assets/icons/artist.png")),
+		.Heart    = fx.texture_load(#load("assets/icons/heart.png")),
+		.History  = fx.texture_load(#load("assets/icons/history.png")),
+		.Next     = fx.texture_load(#load("assets/icons/next.png")),
+		.Note     = fx.texture_load(#load("assets/icons/note.png")),
+		.Pause    = fx.texture_load(#load("assets/icons/pause.png")),
+		.Play     = fx.texture_load(#load("assets/icons/play.png")),
+		.Previous = fx.texture_load(#load("assets/icons/previous.png")),
+		.Queue    = fx.texture_load(#load("assets/icons/queue.png")),
+		.Add_Last = fx.texture_load(#load("assets/icons/add_last.png")),
+		.Add_Next = fx.texture_load(#load("assets/icons/add_next.png")),
+		.Search   = fx.texture_load(#load("assets/icons/search.png")),
+		.Shuffle  = fx.texture_load(#load("assets/icons/shuffle.png")),
+		.Volume   = fx.texture_load(#load("assets/icons/volume.png")),
+		.Mute     = fx.texture_load(#load("assets/icons/mute.png")),
+		.Cross    = fx.texture_load(#load("assets/icons/cross.png")),
+	}
+
+	alpha_ascending := fx.texture_load(#load("assets/icons/sort_alpha_ascending.png"))
+	alpha_descending := fx.texture_load(#load("assets/icons/sort_alpha_descending.png"))
+	number_ascending := fx.texture_load(#load("assets/icons/sort_number_ascending.png"))
+	number_descending := fx.texture_load(#load("assets/icons/sort_number_descending.png"))
+	time_ascending := fx.texture_load(#load("assets/icons/sort_time_ascending.png"))
+	time_descending := fx.texture_load(#load("assets/icons/sort_time_descending.png"))
+	date_ascending := fx.texture_load(#load("assets/icons/sort_date_ascending.png"))
+	date_descending := fx.texture_load(#load("assets/icons/sort_date_descending.png"))
+
+	sort_icons = {
+		{
+			.Title = alpha_ascending,
+			.Artist = alpha_ascending,
+			.Album = alpha_ascending,
+			.Track = number_ascending,
+			.Duration = time_ascending,
+			.Playtime = time_descending,
+			.Last_Listened = date_descending,
+			.Liked_Time = date_descending,
+		},
+		{
+			.Title = alpha_descending,
+			.Artist = alpha_descending,
+			.Album = alpha_descending,
+			.Track = number_descending,
+			.Duration = time_descending,
+			.Playtime = time_ascending,
+			.Last_Listened = date_ascending,
+			.Liked_Time = date_ascending,
+		},
+	}
+}
 
 library_scroll: Scroll_State
 playlist_scroll: Scroll_State
