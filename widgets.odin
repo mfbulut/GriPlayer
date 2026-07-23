@@ -6,9 +6,9 @@ COLOR_BACKGROUND :: fx.Color{14, 17, 22, 255}
 COLOR_SURFACE    :: fx.Color{21, 25, 31, 255}
 COLOR_HOVER      :: fx.Color{31, 36, 44, 255}
 COLOR_BORDER     :: fx.Color{48, 54, 64, 255}
-COLOR_ACCENT_DARK :: fx.Color{52, 43, 78, 255}
-COLOR_ACCENT     :: fx.Color{153, 112, 255, 255}
-COLOR_ACCENT_BRIGHT :: fx.Color{188, 157, 255, 255}
+COLOR_ACCENT_DARK :: fx.Color{31, 51, 86, 255}
+COLOR_ACCENT     :: fx.Color{70, 111, 190, 255}
+COLOR_ACCENT_BRIGHT :: fx.Color{96, 145, 230, 255}
 COLOR_TEXT       :: fx.Color{246, 245, 241, 255}
 COLOR_MUTED      :: fx.Color{158, 166, 178, 255}
 HOVER_DURATION   :: f32(0.1)
@@ -117,10 +117,10 @@ BUTTON_STYLE :: Style{
 }
 
 ACTIVE_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{52, 43, 78, 115}, text = fx.Color{158, 166, 178, 70}},
+	disabled = {bg = fx.Color{31, 51, 86, 115}, text = fx.Color{158, 166, 178, 70}},
 	normal = {bg = COLOR_ACCENT_DARK, text = COLOR_TEXT},
-	hover = {bg = fx.Color{62, 51, 92, 255}, text = COLOR_TEXT},
-	press = {bg = fx.Color{72, 58, 108, 255}, text = COLOR_TEXT},
+	hover = {bg = fx.Color{40, 66, 110, 255}, text = COLOR_TEXT},
+	press = {bg = fx.Color{49, 81, 136, 255}, text = COLOR_TEXT},
 }
 
 SLIDER_STYLE :: Style{
@@ -154,8 +154,8 @@ LIKE_BUTTON_STYLE :: Style{
 ACTIVE_ICON_BUTTON_STYLE :: Style{
 	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
 	normal = {bg = fx.Color{}, text = COLOR_TEXT},
-	hover = {bg = fx.Color{72, 58, 108, 255}, text = COLOR_TEXT},
-	press = {bg = fx.Color{86, 67, 130, 255}, text = COLOR_TEXT},
+	hover = {bg = fx.Color{49, 81, 136, 255}, text = COLOR_TEXT},
+	press = {bg = fx.Color{58, 96, 160, 255}, text = COLOR_TEXT},
 }
 
 SCROLL_STYLE :: Style{
