@@ -15,6 +15,7 @@ player: struct {
 	playing:  bool,
 	shuffle:  bool,
 	cursor:   int,
+	session:  u64,
 }
 
 player_start_playlist :: proc(songs: []^Music, song_index: int) {
@@ -42,6 +43,7 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	}
 	if paused do audio.pause()
 	else do audio.resume()
+	player.session += 1
 	player.music = song
 	player.playing = !paused
 	lyrics_synced = true

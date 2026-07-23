@@ -2,16 +2,16 @@ package main
 
 import "fx"
 
-COLOR_BACKGROUND :: fx.Color{14, 17, 22, 255}
-COLOR_SURFACE    :: fx.Color{21, 25, 31, 255}
-COLOR_HOVER      :: fx.Color{31, 36, 44, 255}
-COLOR_BORDER     :: fx.Color{48, 54, 64, 255}
-COLOR_ACCENT_DARK :: fx.Color{31, 51, 86, 255}
-COLOR_ACCENT     :: fx.Color{70, 111, 190, 255}
+COLOR_BACKGROUND    :: fx.Color{14, 17, 22, 255}
+COLOR_SURFACE       :: fx.Color{21, 25, 31, 255}
+COLOR_HOVER         :: fx.Color{31, 36, 44, 255}
+COLOR_BORDER        :: fx.Color{48, 54, 64, 255}
+COLOR_ACCENT_DARK   :: fx.Color{31, 51, 86, 255}
+COLOR_ACCENT        :: fx.Color{70, 111, 190, 255}
 COLOR_ACCENT_BRIGHT :: fx.Color{96, 145, 230, 255}
-COLOR_TEXT       :: fx.Color{246, 245, 241, 255}
-COLOR_MUTED      :: fx.Color{158, 166, 178, 255}
-HOVER_DURATION   :: f32(0.1)
+COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
+COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
+HOVER_DURATION      :: f32(0.1)
 
 Icon :: enum {
 	Album,
@@ -62,6 +62,9 @@ load_icons :: proc() {
 		.Add_Next = fx.texture_load(#load("assets/icons/add_next.png")),
 		.Search = fx.texture_load(#load("assets/icons/search.png")),
 		.Shuffle = fx.texture_load(#load("assets/icons/shuffle.png")),
+		.Volume = fx.texture_load(#load("assets/icons/volume.png")),
+		.Mute = fx.texture_load(#load("assets/icons/mute.png")),
+		.Cross = fx.texture_load(#load("assets/icons/cross.png")),
 		.Sort_Alpha_Ascending = fx.texture_load(#load("assets/icons/sort_alpha_ascending.png")),
 		.Sort_Alpha_Descending = fx.texture_load(#load("assets/icons/sort_alpha_descending.png")),
 		.Sort_Number_Ascending = fx.texture_load(#load("assets/icons/sort_number_ascending.png")),
@@ -70,10 +73,8 @@ load_icons :: proc() {
 		.Sort_Time_Descending = fx.texture_load(#load("assets/icons/sort_time_descending.png")),
 		.Sort_Date_Ascending = fx.texture_load(#load("assets/icons/sort_date_ascending.png")),
 		.Sort_Date_Descending = fx.texture_load(#load("assets/icons/sort_date_descending.png")),
-		.Volume = fx.texture_load(#load("assets/icons/volume.png")),
-		.Mute = fx.texture_load(#load("assets/icons/mute.png")),
-		.Cross = fx.texture_load(#load("assets/icons/cross.png")),
 	}
+	
 	sort_icons[0] = {
 		.Title = .Sort_Alpha_Ascending, .Artist = .Sort_Alpha_Ascending, .Album = .Sort_Alpha_Ascending,
 		.Track = .Sort_Number_Ascending, .Duration = .Sort_Time_Descending, .Playtime = .Sort_Time_Descending,
@@ -239,7 +240,15 @@ button :: proc( button_id: ID, bounds: fx.Rect, label: string, style: Style = BU
 	return hit.clicked
 }
 
-icon_button :: proc(button_id: ID, bounds: fx.Rect, icon: Icon, selected := false, disabled := false, style: Style = ICON_BUTTON_STYLE) -> bool {
+icon_button :: proc(
+	button_id: ID,
+	bounds: fx.Rect,
+	icon: Icon,
+	selected := false,
+	disabled := false,
+	style: Style = ICON_BUTTON_STYLE,
+	inset := f32(8),
+) -> bool {
 	hit := interact(button_id, bounds, disabled)
 	state := style_state(style, hit, disabled, selected)
 	background := animate(id("background", button_id), state.bg, HOVER_DURATION, .Sine_In_Out)
@@ -252,7 +261,7 @@ icon_button :: proc(button_id: ID, bounds: fx.Rect, icon: Icon, selected := fals
 		background,
 	)
 
-	draw_icon(icon, bounds, tint, 9)
+	draw_icon(icon, bounds, tint, inset)
 	if hit.hovered && !disabled {
 		fx.set_cursor(.Hand)
 	}

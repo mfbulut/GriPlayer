@@ -69,6 +69,7 @@ Layout :: struct {
 	scroll_index:   int,
 	scroll_style:   Style,
 	scroll_marker:  f32,
+	scroll_duration: f32,
 }
 
 Context :: struct {
@@ -264,6 +265,7 @@ layout :: proc(
 	scroll_style: Style = SCROLL_STYLE,
 	scroll_speed := f32(0),
 	scroll_marker := f32(-1),
+	scroll_duration := f32(.16),
 ) -> bool {
 	scroll_index := -1
 	if can_scroll {
@@ -289,7 +291,7 @@ layout :: proc(
 				animation_cancel(id("offset", scroll_id))
 				state.current += (state.target - state.current) * min(fx.frame_time() * scroll_speed, 1)
 			} else {
-				state.current = animate(id("offset", scroll_id), state.target, .16, .Quadratic_Out)
+				state.current = animate(id("offset", scroll_id), state.target, scroll_duration, .Quadratic_Out)
 			}
 		} else {
 			state.current = 0
@@ -334,6 +336,7 @@ layout :: proc(
 		scroll_index = scroll_index,
 		scroll_style = scroll_style,
 		scroll_marker = scroll_marker,
+		scroll_duration = scroll_duration,
 	})
 	if can_scroll {
 		push_clip(bounds)
@@ -513,7 +516,7 @@ end_layout :: proc() {
 		marker_position := animate(
 			id("marker-position", state.id),
 			marker_target,
-			.24,
+			layout.scroll_duration,
 			.Quadratic_Out,
 		)
 		marker_height := min(f32(10), track.h)

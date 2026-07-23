@@ -117,9 +117,9 @@ draw_playlists :: proc(bounds: fx.Rect) {
 				background := animate(id("background", row_id), row_colors.bg, HOVER_DURATION, .Sine_In_Out)
 				text_color := animate(id("text", row_id), row_colors.text, HOVER_DURATION, .Sine_In_Out)
 				fx.draw_rect(row, background, 6)
-				if hit.clicked && selected_playlist != index {
-					liked_playlist_refresh()
-					selected_playlist = index
+				if hit.clicked {
+					if index == LIKED_PLAYLIST_INDEX do liked_playlist_refresh()
+					if selected_playlist != index do selected_playlist = index
 				}
 				if hit.hovered {
 					fx.set_cursor(.Hand)
@@ -249,7 +249,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	if hit.hovered && fx.key_is_pressed(.Mouse_Right) do open_context_menu(song)
 	if hit.hovered do fx.set_cursor(.Hand)
 
-	if layout(bounds, .Row, {px(42), fr(), px(48)}, pad = pad_xy(6, 6), gap = 10) {
+	if layout(bounds, .Row, {px(42), fr(), px(36)}, pad = pad_xy(6, 6), gap = 10) {
 		cover := next()
 		background := animate(
 			id("thumbnail-placeholder-background", row_id),
@@ -272,7 +272,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 		like_style.normal.text = COLOR_MUTED
 		like_style.hover.text = COLOR_MUTED
 		like_style.press.text = COLOR_MUTED
-		if icon_button(id("like-song", row_id), next(), like_icon, style = like_style) {
+		if icon_button(id("like-song", row_id), next(), like_icon, style = like_style, inset = 6) {
 			toggle_like(song)
 		}
 	}
@@ -321,7 +321,8 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 	if player.music == nil {
 		draw_icon(.Note, bounds, fx.color_opacity(COLOR_MUTED, .35), min(bounds.w, bounds.h) * .38)
 		queue_bounds := fx.Rect{bounds.x + bounds.w - 52, bounds.y + 14, 36, 36}
-		if icon_button(id("queue"), queue_bounds, .Queue, selected = queue_active) {
+		queue_style := queue_active ? ACTIVE_ICON_BUTTON_STYLE : ICON_BUTTON_STYLE
+		if icon_button(id("queue"), queue_bounds, .Queue, selected = queue_active, style = queue_style) {
 			queue_active = !queue_active
 			if !queue_active do queue_drag = {}
 		}
@@ -335,7 +336,8 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 			title_row := next()
 			if layout(title_row, .Row, {fr(), px(36)}, gap = 10) {
 				label(next(), player.music.title, 27, text_style(COLOR_TEXT))
-				if icon_button(id("queue"), next(), .Queue, selected = queue_active) {
+				queue_style := queue_active ? ACTIVE_ICON_BUTTON_STYLE : ICON_BUTTON_STYLE
+				if icon_button(id("queue"), next(), .Queue, selected = queue_active, style = queue_style) {
 					queue_active = !queue_active
 					if !queue_active do queue_drag = {}
 				}
@@ -429,7 +431,7 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			if icon_button(id("next"), next(), .Next, disabled = player.music == nil) do player_next()
 			liked := player.music != nil && player.music.liked
 			like_icon: Icon = liked ? .Heart : .Heart_Empty
-			if icon_button(id("like"), next(), like_icon, disabled = player.music == nil, style = LIKE_BUTTON_STYLE) do toggle_like(player.music)
+			if icon_button(id("like"), next(), like_icon, disabled = player.music == nil, style = LIKE_BUTTON_STYLE, inset = 6) do toggle_like(player.music)
 			next()
 		}
 	}
@@ -457,7 +459,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 		return
 	}
 	active, found := current_lyric()
-	lyrics_id := id("lyrics", id(player.music.fullpath))
+	lyrics_id := id(fmt.tprintf("lyrics-%d-%s", player.session, player.music.fullpath))
 	lyrics_scroll_id := id("scroll", lyrics_id)
 	for state in ui_ctx.scrolls {
 		if state.id == lyrics_scroll_id && state.thumb_held do lyrics_synced = false
@@ -473,16 +475,21 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 		pad = pad_all(20),
 		can_scroll = true,
 		layout_id = lyrics_id,
-		scroll_speed = 8,
 		scroll_marker = lyric_marker,
+		scroll_duration = .3,
 	) {
 		for lyric, index in player.music.lyrics {
 			row := next_size(px(60))
 			if !is_visible(row) do continue
-			row_id := id("lyric", id(fmt.tprintf("%s-%d", player.music.fullpath, index)))
+			row_id := id(fmt.tprintf("lyric-%d", index), lyrics_id)
 			hit := interact(row_id, row)
 			is_active := found && index == active
-			active_amount := smooth_f32(id("active", row_id), is_active ? f32(1) : f32(0), 15)
+			active_amount := animate(
+				id("active", row_id),
+				is_active ? f32(1) : f32(0),
+				.3,
+				.Quadratic_Out,
+			)
 			hover_amount := smooth_f32(id("hover", row_id), hit.hovered ? f32(1) : f32(0), 15)
 			color := fx.color_lerp(COLOR_MUTED, COLOR_TEXT, max(active_amount, hover_amount))
 			if lyric.text == "" {
