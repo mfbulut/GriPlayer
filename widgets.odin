@@ -29,13 +29,21 @@ Icon :: enum {
 	Add_Next,
 	Search,
 	Shuffle,
+	Sort_Alpha_Ascending,
+	Sort_Alpha_Descending,
+	Sort_Number_Ascending,
+	Sort_Number_Descending,
+	Sort_Time_Ascending,
+	Sort_Time_Descending,
+	Sort_Date_Ascending,
+	Sort_Date_Descending,
 	Volume,
 	Mute,
 	Cross,
 }
 
 icons: [Icon]fx.Texture
-sort_icons: [2][Playlist_Sort]fx.Texture
+sort_icons: [2][Playlist_Sort]Icon
 
 load_icons :: proc() {
 	icons = {
@@ -54,22 +62,28 @@ load_icons :: proc() {
 		.Add_Next = fx.texture_load(#load("assets/icons/add_next.png")),
 		.Search = fx.texture_load(#load("assets/icons/search.png")),
 		.Shuffle = fx.texture_load(#load("assets/icons/shuffle.png")),
+		.Sort_Alpha_Ascending = fx.texture_load(#load("assets/icons/sort_alpha_ascending.png")),
+		.Sort_Alpha_Descending = fx.texture_load(#load("assets/icons/sort_alpha_descending.png")),
+		.Sort_Number_Ascending = fx.texture_load(#load("assets/icons/sort_number_ascending.png")),
+		.Sort_Number_Descending = fx.texture_load(#load("assets/icons/sort_number_descending.png")),
+		.Sort_Time_Ascending = fx.texture_load(#load("assets/icons/sort_time_ascending.png")),
+		.Sort_Time_Descending = fx.texture_load(#load("assets/icons/sort_time_descending.png")),
+		.Sort_Date_Ascending = fx.texture_load(#load("assets/icons/sort_date_ascending.png")),
+		.Sort_Date_Descending = fx.texture_load(#load("assets/icons/sort_date_descending.png")),
 		.Volume = fx.texture_load(#load("assets/icons/volume.png")),
 		.Mute = fx.texture_load(#load("assets/icons/mute.png")),
 		.Cross = fx.texture_load(#load("assets/icons/cross.png")),
 	}
-	alpha_up := fx.texture_load(#load("assets/icons/sort_alpha_ascending.png"))
-	alpha_down := fx.texture_load(#load("assets/icons/sort_alpha_descending.png"))
-	number_up := fx.texture_load(#load("assets/icons/sort_number_ascending.png"))
-	number_down := fx.texture_load(#load("assets/icons/sort_number_descending.png"))
-	time_up := fx.texture_load(#load("assets/icons/sort_time_ascending.png"))
-	time_down := fx.texture_load(#load("assets/icons/sort_time_descending.png"))
-	date_up := fx.texture_load(#load("assets/icons/sort_date_ascending.png"))
-	date_down := fx.texture_load(#load("assets/icons/sort_date_descending.png"))
-	sort_icons[0] = {.Title = alpha_up, .Artist = alpha_up, .Album = alpha_up, .Track = number_up,
-		.Duration = time_down, .Playtime = time_down, .Last_Listened = date_down, .Liked_Time = date_down}
-	sort_icons[1] = {.Title = alpha_down, .Artist = alpha_down, .Album = alpha_down, .Track = number_down,
-		.Duration = time_up, .Playtime = time_up, .Last_Listened = date_up, .Liked_Time = date_up}
+	sort_icons[0] = {
+		.Title = .Sort_Alpha_Ascending, .Artist = .Sort_Alpha_Ascending, .Album = .Sort_Alpha_Ascending,
+		.Track = .Sort_Number_Ascending, .Duration = .Sort_Time_Descending, .Playtime = .Sort_Time_Descending,
+		.Last_Listened = .Sort_Date_Descending, .Liked_Time = .Sort_Date_Descending,
+	}
+	sort_icons[1] = {
+		.Title = .Sort_Alpha_Descending, .Artist = .Sort_Alpha_Descending, .Album = .Sort_Alpha_Descending,
+		.Track = .Sort_Number_Descending, .Duration = .Sort_Time_Ascending, .Playtime = .Sort_Time_Ascending,
+		.Last_Listened = .Sort_Date_Ascending, .Liked_Time = .Sort_Date_Ascending,
+	}
 }
 
 Style_State :: struct {
@@ -260,16 +274,16 @@ slider :: proc(slider_id: ID, bounds: fx.Rect, value: ^f32, low, high: f32, styl
 	center_y := bounds.y + bounds.h * .5
 	track := fx.Rect{
 		x = bounds.x,
-		y = center_y - 2,
+		y = center_y - 3.5/2,
 		w = bounds.w,
-		h = 4,
+		h = 3.5,
 	}
 
 	track_color := animate(id("background", slider_id), state.bg, HOVER_DURATION, .Sine_In_Out)
 	fill_color := animate(id("text", slider_id), state.text, HOVER_DURATION, .Sine_In_Out)
 	fx.draw_rect(track, track_color, 2)
 	fx.draw_rect({track.x, track.y, track.w * ratio, track.h}, fill_color, 2)
-	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4.5) : f32(3.5), HOVER_DURATION, .Sine_In_Out)
+	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3), HOVER_DURATION, .Sine_In_Out)
 	fx.draw_circle({bounds.x + bounds.w * ratio, center_y}, thumb_size, fill_color)
 
 	if hit.hovered || hit.held {

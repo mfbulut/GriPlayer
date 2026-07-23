@@ -56,7 +56,7 @@ draw_app :: proc(bounds: fx.Rect) {
 		if layout(bounds, .Col, {px(42), fr()}, pad = pad_all(8), gap = 8) {
 			tabs := next()
 			fx.draw_rect(tabs, COLOR_SURFACE, 8)
-			if layout(tabs, .Row, {fr(), fr()}, pad = pad_all(4), gap = 4) {
+			if layout(tabs, .Row, {fr(), fr()}, pad = pad_all(4), gap = 6) {
 				if button(id("tab-library"), next(), "Library") do compact_tab = .Library
 				if button(id("tab-player"), next(), "Player") do compact_tab = .Player
 			}
@@ -161,33 +161,31 @@ draw_playlist_header :: proc(bounds: fx.Rect, playlist: ^Playlist) {
 	text_width := fx.measure_text(text, 12).x
 	text_button_width := text_width + 20
 	icon_button_width := f32(30)
-	gap := f32(4)
-	controls_width := text_button_width + gap + icon_button_width
-	text_bounds := fx.Rect{bounds.x + bounds.w - controls_width - 10, bounds.y + 9, text_button_width, 30}
-	icon_bounds := fx.Rect{text_bounds.x + text_bounds.w + gap, text_bounds.y, icon_button_width, 30}
-	title_bounds := fx.Rect{bounds.x + 16, bounds.y, max(0, text_bounds.x - bounds.x - 26), bounds.h}
-	fx.draw_text_faded(playlist.name, title_bounds, 16, COLOR_TEXT, false, true)
-	if button(id("playlist-sort", id(playlist.name)), text_bounds, text) {
-		playlist.sort = Playlist_Sort((int(playlist.sort) + 1) % len(PLAYLIST_SORT_LABELS))
-		playlist_sort(playlist)
-		scroll_to(id("songs", id(playlist.name)), 0)
+
+	if layout(bounds, .Row, {fr(), px(text_button_width), px(icon_button_width)}, pad = {left = 16, top = 8, right = 8, bottom = 8}, gap = 6) {
+		fx.draw_text_faded(playlist.name, next(), 16, COLOR_TEXT, false, true)
+		text_bounds := next()
+		if button(id("playlist-sort", id(playlist.name)), text_bounds, text) {
+			playlist.sort = Playlist_Sort((int(playlist.sort) + 1) % len(PLAYLIST_SORT_LABELS))
+			playlist_sort(playlist)
+			scroll_to(id("songs", id(playlist.name)), 0)
+		}
+
+		icon_bounds := next()
+		sort_icon := sort_icons[playlist.sort_reversed ? 1 : 0][playlist.sort]
+		if button(id("playlist-direction", id(playlist.name)), icon_bounds, "") {
+			playlist.sort_reversed = !playlist.sort_reversed
+			playlist_sort(playlist)
+			scroll_to(id("songs", id(playlist.name)), 0)
+		}
+		icon_color := animate(
+			id("playlist-direction-icon", id(playlist.name)),
+			mouse_visible(icon_bounds) ? COLOR_TEXT : COLOR_MUTED,
+			HOVER_DURATION,
+			.Sine_In_Out,
+		)
+		fx.draw_texture(icons[sort_icon], square_bounds(icon_bounds, 7), icon_color)
 	}
-	if button(id("playlist-direction", id(playlist.name)), icon_bounds, "") {
-		playlist.sort_reversed = !playlist.sort_reversed
-		playlist_sort(playlist)
-		scroll_to(id("songs", id(playlist.name)), 0)
-	}
-	icon_color := animate(
-		id("playlist-direction-icon", id(playlist.name)),
-		mouse_visible(icon_bounds) ? COLOR_TEXT : COLOR_MUTED,
-		HOVER_DURATION,
-		.Sine_In_Out,
-	)
-	fx.draw_texture(
-		sort_icons[playlist.sort_reversed ? 1 : 0][playlist.sort],
-		square_bounds(icon_bounds, 7),
-		icon_color,
-	)
 }
 
 draw_songs :: proc(bounds: fx.Rect) {
@@ -246,28 +244,28 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	row_colors := style_state(row_style, hit)
 	background := animate(id("background", row_id), row_colors.bg, HOVER_DURATION, .Sine_In_Out)
 	text_color := animate(id("text", row_id), row_colors.text, HOVER_DURATION, .Sine_In_Out)
-	fx.draw_rect(bounds, background, 7)
+	fx.draw_rect(bounds, background, 6)
 	if hit.clicked do player_start_playlist(songs, index)
 	if hit.hovered && fx.key_is_pressed(.Mouse_Right) do open_context_menu(song)
 	if hit.hovered do fx.set_cursor(.Hand)
 
-	if layout(bounds, .Row, {px(42), fr(), px(48)}, pad = pad_xy(7, 7), gap = 10) {
+	if layout(bounds, .Row, {px(42), fr(), px(48)}, pad = pad_xy(6, 6), gap = 10) {
 		cover := next()
-		placeholder_background := animate(
+		background := animate(
 			id("thumbnail-placeholder-background", row_id),
 			active || hit.held ? fx.Color{72, 80, 94, 255} : COLOR_BORDER,
 			HOVER_DURATION,
 			.Sine_In_Out,
 		)
-		draw_cover(song.thumbnail, cover, placeholder_background = placeholder_background)
+		draw_cover(song.thumbnail, cover, background = background)
 		text_bounds := next()
 		if layout(text_bounds, .Col, {px(25), px(17)}) {
-			label(next(), song.title, 13, text_style(text_color))
+			label(next(), song.title, 14, text_style(text_color))
 			secondary := song.artist
 			if secondary == "" {
 				secondary = song.album
 			}
-			label(next(), secondary, 10, text_style(COLOR_MUTED))
+			label(next(), secondary, 11, text_style(COLOR_MUTED))
 		}
 		like_icon: Icon = song.liked ? .Heart : .Heart_Empty
 		like_style := active ? ACTIVE_ICON_BUTTON_STYLE : LIKE_BUTTON_STYLE
@@ -280,12 +278,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(
-	texture: fx.Texture,
-	bounds: fx.Rect,
-	radius := f32(6),
-	placeholder_background := COLOR_BORDER,
-) {
+draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect,radius := f32(6), background := COLOR_BORDER) {
 	if texture.srv != nil {
 		size := fx.Vec2(texture.size)
 		crop := min(size.x, size.y)
@@ -293,7 +286,8 @@ draw_cover :: proc(
 		fx.draw_texture_ex(texture, source, bounds, fx.WHITE, radius)
 		return
 	}
-	fx.draw_rect(bounds, placeholder_background, radius)
+
+	fx.draw_rect(bounds, background, radius)
 	draw_icon(.Note, bounds, COLOR_MUTED, min(bounds.w, bounds.h) * .3)
 }
 
@@ -334,10 +328,10 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 		return
 	}
 
-	if layout(bounds, .Row, {px(162), fr()}, pad = Padding{16, 14, 18, 14}, gap = 18) {
+	if layout(bounds, .Row, {px(160), fr()}, pad = pad_all(16), gap = 18) {
 		draw_cover(player.cover, next(), 8)
 		info := next()
-		if layout(info, .Col, {px(48), px(28), fr()}) {
+		if layout(info, .Col, {px(48), px(28), px(10), fr()}) {
 			title_row := next()
 			if layout(title_row, .Row, {fr(), px(36)}, gap = 10) {
 				label(next(), player.music.title, 27, text_style(COLOR_TEXT))
@@ -346,6 +340,7 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 					if !queue_active do queue_drag = {}
 				}
 			}
+
 			metadata := next()
 			artist_width := player.music.artist != "" ? min(fx.measure_text(player.music.artist, 16).x + 1, metadata.w * .48) : 0
 			album_width := player.music.album != "" ? min(fx.measure_text(player.music.album, 16).x + 1, max(metadata.w - artist_width - 20, 0)) : 0
@@ -371,6 +366,7 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 					}
 				}
 			}
+			next()
 			draw_visualizer(next())
 		}
 	}
@@ -379,11 +375,15 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 draw_player_controls :: proc(bounds: fx.Rect) {
 	if layout(bounds, .Col, {px(26), px(36)}, pad = pad_all(5), gap = 8) {
 		progress_row := next()
-		if layout( progress_row, .Row, {px(40), fr(), px(40), px(20), px(88)}, pad = {right = 5}, gap = 5) {
-			duration := audio.duration()
-			position := audio.position()
-			if scrub_time >= 0 do position = scrub_time
-			label(next(), format_time(position), 10, text_style(COLOR_MUTED), center_x = true)
+		duration := audio.duration()
+		position := audio.position()
+		if scrub_time >= 0 do position = scrub_time
+		position_text := format_time(position)
+		duration_text := format_time(duration)
+		position_width := fx.measure_text(position_text, 10).x
+		duration_width := fx.measure_text(duration_text, 10).x
+		if layout(progress_row, .Row, {px(position_width), fr(), px(duration_width), px(20), px(88)}, pad_xy(8, 0), gap = 12) {
+			label(next(), position_text, 10, text_style(COLOR_MUTED), center_x = true)
 			progress_bounds := next()
 			progress := slider(id("progress"), progress_bounds, &position, 0, max(duration, 1), disabled = player.music == nil)
 			if progress.held {
@@ -397,10 +397,10 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			if progress.held {
 				draw_slider_tooltip(progress_bounds, position / max(duration, 1), format_time(position))
 			}
-			label(next(), format_time(duration), 10, text_style(COLOR_MUTED), center_x = true)
+			label(next(), duration_text, 10, text_style(COLOR_MUTED), center_x = true)
 			volume_icon: Icon = audio.muted ? .Mute : .Volume
 			volume_bounds := next()
-			volume_bounds.x -= 3
+			volume_bounds.x += 3
 			volume_hit := interact(id("mute"), volume_bounds)
 			draw_icon(volume_icon, volume_bounds, COLOR_MUTED, 2)
 			if volume_hit.clicked {
@@ -445,7 +445,6 @@ draw_slider_tooltip :: proc(bounds: fx.Rect, value: f32, text: string) {
 	fx.draw_rect(fx.rect_shrink(tooltip, 1, 1), COLOR_HOVER, 5)
 	label(tooltip, text, 11, text_style(COLOR_TEXT), center_x = true)
 }
-
 
 draw_lyrics :: proc(bounds: fx.Rect) {
 	if player.music == nil || len(player.music.lyrics) == 0 {
