@@ -99,10 +99,9 @@ draw_app :: proc(bounds: fx.Rect) {
 draw_library_panel :: proc(bounds: fx.Rect) {
 	if layout(bounds, .Col, {px(42), fr()}, gap = 8) {
 		draw_search_box(next())
-		content := next()
 		if search.active {
-			draw_songs(content)
-		} else if layout(content, .Row, {px(170), fr()}, gap = 8) {
+			draw_songs(next())
+		} else if layout(next(), .Row, {px(170), fr()}, gap = 8) {
 			draw_playlists(next())
 			draw_songs(next())
 		}
@@ -204,8 +203,9 @@ draw_songs :: proc(bounds: fx.Rect) {
 
 	header_height := search.active ? f32(0) : f32(48)
 	if layout(bounds, .Col, {px(header_height), fr()}) {
+		header := next()
 		if !search.active {
-			draw_playlist_header(next(), playlist)
+			draw_playlist_header(header, playlist)
 		}
 
 		if layout(next(), .Col, pad = pad_xy(8, 8), gap = 5, can_scroll = true, layout_id = id("songs", list_id), scroll_marker = active_marker) {
