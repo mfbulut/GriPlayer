@@ -73,6 +73,7 @@ frame :: proc() {
 
 	draw_context_menu()
 	end_frame()
+
 	fx.present()
 	free_all(context.temp_allocator)
 }
@@ -87,7 +88,8 @@ draw_app :: proc(bounds: fx.Rect) {
 		draw_player(bounds)
 	case .Both:
 		textbox.set_visible(true)
-		if layout(bounds, .Row, {fr(), fr()}, gap = 8) {
+		library_width := min(max(bounds.w * 0.45, f32(460)), bounds.w)
+		if layout(bounds, .Row, {px(library_width), fr()}, gap = 8) {
 			draw_library_panel(next())
 			draw_player(next())
 		}
@@ -244,7 +246,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 			.Sine_In_Out,
 		)
 
-		draw_cover(song.thumbnail, next(), background = background)
+		draw_cover(song.thumbnail, next(), background)
 
 		if layout(next(), .Col, {px(25), px(17)}) {
 			label(next(), song.title, 14, text_style(text_color))
@@ -266,7 +268,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect,radius := f32(6), background := COLOR_BORDER) {
+draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
 	if texture.srv != nil {
 		size := fx.Vec2(texture.size)
 		crop := min(size.x, size.y)
