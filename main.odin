@@ -246,7 +246,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 			.Sine_In_Out,
 		)
 
-		draw_cover(song.thumbnail, next(), background)
+		draw_cover(song.thumbnail, next(), background = background)
 
 		if layout(next(), .Col, {px(25), px(17)}) {
 			label(next(), song.title, 14, text_style(text_color))
@@ -268,7 +268,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
+draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, radius := f32(6), background := COLOR_BORDER) {
 	if texture.srv != nil {
 		size := fx.Vec2(texture.size)
 		crop := min(size.x, size.y)
