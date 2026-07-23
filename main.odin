@@ -253,7 +253,13 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 
 	if layout(bounds, .Row, {px(42), fr(), px(48)}, pad = pad_xy(7, 7), gap = 10) {
 		cover := next()
-		draw_cover(song.thumbnail, cover)
+		placeholder_background := animate(
+			id("thumbnail-placeholder-background", row_id),
+			active || hit.held ? fx.Color{72, 80, 94, 255} : COLOR_BORDER,
+			HOVER_DURATION,
+			.Sine_In_Out,
+		)
+		draw_cover(song.thumbnail, cover, placeholder_background = placeholder_background)
 		text_bounds := next()
 		if layout(text_bounds, .Col, {px(25), px(17)}) {
 			label(next(), song.title, 13, text_style(text_color))
@@ -274,7 +280,12 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, radius := f32(6)) {
+draw_cover :: proc(
+	texture: fx.Texture,
+	bounds: fx.Rect,
+	radius := f32(6),
+	placeholder_background := COLOR_BORDER,
+) {
 	if texture.srv != nil {
 		size := fx.Vec2(texture.size)
 		crop := min(size.x, size.y)
@@ -282,7 +293,7 @@ draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, radius := f32(6)) {
 		fx.draw_texture_ex(texture, source, bounds, fx.WHITE, radius)
 		return
 	}
-	fx.draw_rect(bounds, COLOR_BORDER, radius)
+	fx.draw_rect(bounds, placeholder_background, radius)
 	draw_icon(.Note, bounds, COLOR_MUTED, min(bounds.w, bounds.h) * .3)
 }
 
@@ -389,6 +400,7 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			label(next(), format_time(duration), 10, text_style(COLOR_MUTED), center_x = true)
 			volume_icon: Icon = audio.muted ? .Mute : .Volume
 			volume_bounds := next()
+			volume_bounds.x -= 3
 			volume_hit := interact(id("mute"), volume_bounds)
 			draw_icon(volume_icon, volume_bounds, COLOR_MUTED, 2)
 			if volume_hit.clicked {
@@ -413,7 +425,7 @@ draw_player_controls :: proc(bounds: fx.Rect) {
 			if icon_button(id("shuffle"), next(), .Shuffle, selected = player.shuffle, disabled = player.music == nil, style = shuffle_style) do player_toggle_shuffle()
 			if icon_button(id("previous"), next(), .Previous, disabled = player.music == nil) do player_prev()
 			play_icon: Icon = player.playing ? .Pause : .Play
-			if icon_button(id("play"), next(), play_icon, selected = player.playing, disabled = player.music == nil) do player_toggle_pause()
+			if icon_button(id("play"), next(), play_icon, selected = true, disabled = player.music == nil) do player_toggle_pause()
 			if icon_button(id("next"), next(), .Next, disabled = player.music == nil) do player_next()
 			liked := player.music != nil && player.music.liked
 			like_icon: Icon = liked ? .Heart : .Heart_Empty
