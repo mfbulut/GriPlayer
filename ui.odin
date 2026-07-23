@@ -4,7 +4,7 @@ import "core:hash/xxhash"
 
 import "fx"
 
-ID :: distinct u64
+ID :: int
 ID_NONE :: ID(0)
 
 Direction :: enum {
@@ -161,14 +161,6 @@ end_frame :: proc() {
 	fx.reset_scissor()
 }
 
-intersect_rects :: proc(a, b: fx.Rect) -> fx.Rect {
-	x1 := max(a.x, b.x)
-	y1 := max(a.y, b.y)
-	x2 := min(a.x + a.w, b.x + b.w)
-	y2 := min(a.y + a.h, b.y + b.h)
-	return {x1, y1, max(0, x2 - x1), max(0, y2 - y1)}
-}
-
 current_clip :: proc() -> (fx.Rect, bool) {
 	if len(ui_ctx.clips) == 0 {
 		return {}, false
@@ -179,7 +171,7 @@ current_clip :: proc() -> (fx.Rect, bool) {
 push_clip :: proc(bounds: fx.Rect) {
 	clip := bounds
 	if parent, ok := current_clip(); ok {
-		clip = intersect_rects(parent, bounds)
+		clip = fx.rect_overlap(parent, bounds)
 	}
 	append(&ui_ctx.clips, clip)
 	fx.set_scissor(clip)
@@ -263,7 +255,6 @@ layout :: proc(
 	can_scroll := false,
 	layout_id := ID_NONE,
 	scroll_style: Style = SCROLL_STYLE,
-	scroll_speed := f32(0),
 	scroll_marker := f32(-1),
 	scroll_duration := f32(.16),
 ) -> bool {
@@ -287,9 +278,6 @@ layout :: proc(
 			state.target = clamp(state.target, 0, maximum)
 			if state.thumb_held {
 				state.current = state.target
-			} else if scroll_speed > 0 {
-				animation_cancel(id("offset", scroll_id))
-				state.current += (state.target - state.current) * min(fx.frame_time() * scroll_speed, 1)
 			} else {
 				state.current = animate(id("offset", scroll_id), state.target, scroll_duration, .Quadratic_Out)
 			}
@@ -505,8 +493,8 @@ end_layout :: proc() {
 		thumb.y = track.y + position
 	}
 	colors := style_state(style, hit)
-	track_color := animate(id("track-color", state.id), colors.bg, HOVER_DURATION, .Sine_In_Out)
-	thumb_color := animate(id("thumb-color", state.id), colors.text, HOVER_DURATION, .Sine_In_Out)
+	track_color := animate(id("track-color", state.id), colors.bg, ANIM_DURATION, .Sine_In_Out)
+	thumb_color := animate(id("thumb-color", state.id), colors.text, ANIM_DURATION, .Sine_In_Out)
 	if track_color.a > 0 do fx.draw_rect(track, track_color, track.w * .5)
 	if thumb_color.a > 0 {
 		fx.draw_rect(thumb, thumb_color, thumb.w * .5)

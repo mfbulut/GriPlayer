@@ -217,7 +217,7 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 
 draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, entry_id: ID, overlay := false) -> Queue_Action {
 	hovered := !overlay && queue_drag.song == nil && mouse_visible(row)
-	background := overlay ? COLOR_HOVER : animate(id("background", entry_id), hovered ? COLOR_HOVER : fx.Color{}, HOVER_DURATION, .Sine_In_Out)
+	background := overlay ? COLOR_HOVER : animate(id("background", entry_id), hovered ? COLOR_HOVER : fx.Color{}, ANIM_DURATION, .Sine_In_Out)
 	if overlay {
 		fx.draw_rect({row.x + 2, row.y + 5, row.w, row.h}, fx.color_opacity(COLOR_BACKGROUND, .55), 8)
 		fx.draw_rect(fx.rect_expand(row, 1, 1), fx.color_opacity(COLOR_ACCENT_BRIGHT, .72), 8)
@@ -288,7 +288,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 			if queue_drag.song != nil && queue_drag.section == .Queue && queue_drag.index == index do continue
 			entry_id := queue_entry_id(player.queue[:], index, .Queue)
 			row := target
-			row.y = animate(id("y", entry_id), target.y, .12, .Quadratic_Out)
+			row.y = animate(id("y", entry_id), target.y, ANIM_DURATION, .Quadratic_Out)
 			if !is_visible(row) do continue
 			if row_action := draw_queue_song(song, row, .Queue, index, entry_id); row_action != .None {
 				action, action_section, action_index = row_action, .Queue, index
@@ -296,7 +296,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 		}
 		divider_target := next_size(px(QUEUE_DIVIDER_HEIGHT))
 		divider := divider_target
-		divider.y = animate(id("queue-divider-y"), divider_target.y, .12, .Quadratic_Out)
+		divider.y = animate(id("queue-divider-y"), divider_target.y, ANIM_DURATION, .Quadratic_Out)
 		if is_visible(divider) do draw_queue_divider(divider)
 		playlist_start := queue_playlist_start()
 		if playlist_start >= len(player.songs) {
@@ -308,7 +308,7 @@ draw_queue :: proc(bounds: fx.Rect) {
 				if queue_drag.song != nil && queue_drag.section == .Playlist && queue_drag.index == index do continue
 				entry_id := queue_entry_id(player.songs[:], index, .Playlist)
 				row := target
-				row.y = animate(id("y", entry_id), target.y, .12, .Quadratic_Out)
+				row.y = animate(id("y", entry_id), target.y, ANIM_DURATION, .Quadratic_Out)
 				if !is_visible(row) do continue
 				if row_action := draw_queue_song(song, row, .Playlist, index, entry_id); row_action != .None {
 					action, action_section, action_index = row_action, .Playlist, index

@@ -42,7 +42,7 @@ Music :: struct {
 Playlist :: struct {
 	name:          string,
 	songs:         [dynamic]^Music,
-	icon:          ^fx.Texture,
+	icon:          Icon,
 	sort:          Playlist_Sort,
 	sort_reversed: bool,
 }
@@ -75,12 +75,12 @@ loading_finished: bool
 loader_start :: proc() {
 	append(&playlists, Playlist{
 		name = "Liked",
-		icon = &icons[.Heart],
+		icon = .Heart,
 		sort = .Liked_Time,
 	})
 	append(&playlists, Playlist{
 		name = "History",
-		icon = &icons[.History],
+		icon = .History,
 		sort = .Last_Listened,
 	})
 
@@ -92,6 +92,7 @@ loader_start :: proc() {
 			sync.unlock(&loader_mutex)
 			return
 		}
+
 		cache_load()
 		walker := os.walker_create(music_dir)
 		defer os.walker_destroy(&walker)
@@ -148,6 +149,7 @@ loader_poll :: proc() {
 		append(&playlists, Playlist{name = playlist_name, sort = .Title})
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
+
 	next_playlist: for &playlist in playlists[LIBRARY_PLAYLIST_START:] {
 		if len(playlist.songs) < 2 || playlist.songs[0].album == "" do continue
 		album := playlist.songs[0].album
@@ -156,9 +158,11 @@ loader_poll :: proc() {
 		}
 		playlist.sort = .Track
 	}
+
 	for &playlist in playlists {
 		playlist_sort(&playlist)
 	}
+
 	search.initialized = false
 }
 
@@ -182,12 +186,15 @@ load_music :: proc(fullpath: string) -> ^Music {
 			music.track = metadata.track
 			music.duration = metadata.duration
 		}
+
 		if music.title == "" {
 			music.title = strings.clone(os.stem(music.fullpath))
 		}
+
 		load_lrc(music)
 		load_thumbnail(music)
 	}
+
 	free_all(context.temp_allocator)
 	return music
 }
@@ -233,16 +240,12 @@ load_lrc :: proc(music: ^Music) {
 
 load_thumbnail :: proc(music: ^Music) {
 	cover_bytes := audio.cover(music.fullpath)
-	if len(cover_bytes) == 0 {
-		return
-	}
+	if len(cover_bytes) == 0 do return
 	defer delete(cover_bytes)
 
 	w, h, channels: i32
 	pixels := image.load_from_memory(raw_data(cover_bytes), i32(len(cover_bytes)), &w, &h, &channels, 4)
-	if pixels == nil {
-		return
-	}
+	if pixels == nil do return
 	defer image.image_free(pixels)
 
 	music.thumbnail_pixels = make([]fx.Color, 64 * 64)
@@ -347,6 +350,7 @@ record_listen :: proc(song: ^Music) {
 			break
 		}
 	}
+
 	inject_at(&history.songs, 0, song)
 	for &playlist in playlists do playlist_sort(&playlist)
 }
@@ -359,13 +363,16 @@ cache: struct {
 cache_load :: proc() {
 	dir, dir_error := os.user_data_dir(context.temp_allocator)
 	if dir_error != nil do return
+
 	path := strings.concatenate({dir, "\\fmusic\\cache.cbor"}, context.temp_allocator)
 	data, read_error := os.read_entire_file(path, context.temp_allocator)
 	if read_error != nil do return
+
 	if error := cbor.unmarshal(data, &cache, {.Trusted_Input}); error != nil {
 		fmt.eprintln("Failed to load cache:", error)
 		return
 	}
+
 	audio.volume = cache.volume
 }
 
@@ -373,9 +380,11 @@ cache_save :: proc() {
 	if !loader_is_finished() do return
 	dir, dir_error := os.user_data_dir(context.temp_allocator)
 	if dir_error != nil do return
+
 	app_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
 	os.make_directory(app_dir)
 	path := strings.concatenate({app_dir, "\\cache.cbor"}, context.temp_allocator)
+
 	cache.volume = audio.volume
 	cache.songs = make(map[string]Music, 1024)
 	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
@@ -383,6 +392,7 @@ cache_save :: proc() {
 			cache.songs[song.fullpath] = song^
 		}
 	}
+	
 	bytes, error := cbor.marshal(cache)
 	if error == nil {
 		_ = os.write_entire_file(path, bytes)

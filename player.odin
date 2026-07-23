@@ -15,7 +15,7 @@ player: struct {
 	playing:  bool,
 	shuffle:  bool,
 	cursor:   int,
-	session:  u64,
+	session:  int,
 }
 
 player_start_playlist :: proc(songs: []^Music, song_index: int) {
@@ -41,6 +41,7 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 		player.music = nil
 		return
 	}
+
 	if paused do audio.pause()
 	else do audio.resume()
 	player.session += 1
@@ -167,6 +168,7 @@ player_update :: proc() {
 	if player.music == nil {
 		return
 	}
+	
 	switch smtc.poll_action() {
 	case 0:
 		player_toggle_pause()
@@ -178,9 +180,11 @@ player_update :: proc() {
 	if fx.key_is_pressed(.Play_Pause) do player_toggle_pause()
 	if fx.key_is_pressed(.Next_Track) do player_next()
 	if fx.key_is_pressed(.Prev_Track) do player_prev()
+
 	if audio.update(visualizer_push) {
 		player_next(true)
 		return
 	}
+
 	visualizer_update()
 }

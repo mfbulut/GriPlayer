@@ -24,8 +24,9 @@ spectrum_peak: [SPECTRUM_BANDS]f32
 
 fft_init :: proc() #no_bounds_check {
 	for index in 0 ..< FFT_SIZE {
-		fft_hann[index] = .5 - .5 * math.cos(2 * math.PI * f32(index) / (FFT_SIZE - 1))
+		fft_hann[index] = 0.5 - 0.5 * math.cos(2 * math.PI * f32(index) / (FFT_SIZE - 1))
 	}
+
 	for index in 0 ..< FFT_SIZE / 2 {
 		angle := -2 * math.PI * f32(index) / FFT_SIZE
 		fft_twiddle[index] = complex(math.cos(angle), math.sin(angle))
@@ -39,6 +40,7 @@ fft_run :: proc() #no_bounds_check {
 			fft_work[index], fft_work[reversed] = fft_work[reversed], fft_work[index]
 		}
 	}
+
 	for length := u32(2); length <= FFT_SIZE; length <<= 1 {
 		for start := u32(0); start < FFT_SIZE; start += length {
 			for offset in 0 ..< length / 2 {
@@ -53,7 +55,7 @@ fft_run :: proc() #no_bounds_check {
 
 visualizer_push :: proc(frames: [][2]f32) {
 	for frame in frames {
-		audio_ring[audio_ring_pos] = (frame.x + frame.y) * .5
+		audio_ring[audio_ring_pos] = (frame.x + frame.y) * 0.5
 		audio_ring_pos = (audio_ring_pos + 1) % FFT_SIZE
 	}
 }
@@ -71,6 +73,7 @@ visualizer_update :: proc() {
 	for index in 0 ..< FFT_SIZE {
 		fft_work[index] = audio_ring[(audio_ring_pos + index) % FFT_SIZE] * fft_hann[index]
 	}
+
 	fft_run()
 
 	min_bin := 1
@@ -105,9 +108,10 @@ visualizer_update :: proc() {
 
 draw_visualizer :: proc(bounds: fx.Rect) {
 	if bounds.w <= 0 || bounds.h <= 0 do return
-	top_space := min(f32(8), bounds.h)
+	top_space := min(f32(20), bounds.h)
 	content := fx.Rect{bounds.x, bounds.y + top_space, bounds.w, bounds.h - top_space}
 	if content.h <= 0 do return
+
 	gap := f32(2)
 	bar_width := max((content.w - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS, 1)
 	for level, index in spectrum {
@@ -117,7 +121,8 @@ draw_visualizer :: proc(bounds: fx.Rect) {
 		if len(visualizer_palette) > 0 {
 			color = visualizer_color_at(f32(index) / f32(SPECTRUM_BANDS - 1))
 		}
-		fx.draw_rect({x, content.y + content.h - height, bar_width, height}, fx.color_opacity(color, .72), 1)
+
+		fx.draw_rect({x, content.y + content.h - height, bar_width, height}, fx.color_opacity(color, 0.7), 1)
 		peak_y := content.y + content.h - content.h * spectrum_peak[index]
 		fx.draw_rect({x, peak_y, bar_width, 1}, color)
 	}
@@ -177,12 +182,12 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 	buckets: [512]Palette_Bucket
 	for color in pixels {
 		lightness, chroma, _ := fx.color_to_oklch(color)
-		if lightness < .25 do continue
+		if lightness < 0.25 do continue
 		index := (int(color.r) >> 5) << 6 | (int(color.g) >> 5) << 3 | (int(color.b) >> 5)
 		bucket := &buckets[index]
 		bucket.sum += cast([4]int)color
 		bucket.count += 1
-		bucket.score += lightness * .55 + chroma * .8
+		bucket.score += lightness * 0.55 + chroma * 0.8
 	}
 	slice.sort_by(buckets[:], proc(a, b: Palette_Bucket) -> bool {return a.score > b.score})
 	for bucket in buckets {

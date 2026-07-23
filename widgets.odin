@@ -11,9 +11,10 @@ COLOR_ACCENT        :: fx.Color{70, 111, 190, 255}
 COLOR_ACCENT_BRIGHT :: fx.Color{96, 145, 230, 255}
 COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
 COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
-HOVER_DURATION      :: f32(0.1)
+ANIM_DURATION      :: f32(0.08)
 
 Icon :: enum {
+	None,
 	Album,
 	Artist,
 	Heart,
@@ -29,6 +30,9 @@ Icon :: enum {
 	Add_Next,
 	Search,
 	Shuffle,
+	Volume,
+	Mute,
+	Cross,
 	Sort_Alpha_Ascending,
 	Sort_Alpha_Descending,
 	Sort_Number_Ascending,
@@ -37,9 +41,6 @@ Icon :: enum {
 	Sort_Time_Descending,
 	Sort_Date_Ascending,
 	Sort_Date_Descending,
-	Volume,
-	Mute,
-	Cross,
 }
 
 icons: [Icon]fx.Texture
@@ -47,6 +48,7 @@ sort_icons: [2][Playlist_Sort]Icon
 
 load_icons :: proc() {
 	icons = {
+		.None = {},
 		.Album = fx.texture_load(#load("assets/icons/album.png")),
 		.Artist = fx.texture_load(#load("assets/icons/artist.png")),
 		.Heart = fx.texture_load(#load("assets/icons/heart.png")),
@@ -115,6 +117,13 @@ BUTTON_STYLE :: Style{
 	normal = {bg = COLOR_HOVER, text = COLOR_MUTED},
 	hover = {bg = COLOR_BORDER, text = COLOR_TEXT},
 	press = {bg = fx.Color{62, 69, 80, 255}, text = COLOR_TEXT},
+}
+
+MENU_BUTTON_STYLE :: Style{
+	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
+	normal = {bg = fx.Color{}, text = COLOR_MUTED},
+	hover = {bg = COLOR_HOVER, text = COLOR_TEXT},
+	press = {bg = COLOR_BORDER, text = COLOR_TEXT},
 }
 
 ACTIVE_BUTTON_STYLE :: Style{
@@ -207,9 +216,9 @@ link :: proc(link_id: ID, bounds: fx.Rect, text: string, font_size := f32(13), s
 	hit_bounds := fx.Rect{bounds.x, bounds.y, width, bounds.h}
 	hit := interact(link_id, hit_bounds, disabled)
 	state := style_state(style, hit, disabled)
-	background := animate(id("background", link_id), state.bg, HOVER_DURATION, .Sine_In_Out)
-	color := animate(id("text", link_id), state.text, HOVER_DURATION, .Sine_In_Out)
-	amount := animate(id("hover", link_id), hit.hovered ? f32(1) : f32(0), HOVER_DURATION, .Sine_In_Out)
+	background := animate(id("background", link_id), state.bg, ANIM_DURATION, .Sine_In_Out)
+	color := animate(id("text", link_id), state.text, ANIM_DURATION, .Sine_In_Out)
+	amount := animate(id("hover", link_id), hit.hovered ? f32(1) : f32(0), ANIM_DURATION, .Sine_In_Out)
 	if background.a > 0 do fx.draw_rect(hit_bounds, background, 4)
 	fx.draw_text_faded(text, bounds, font_size, color, false, true)
 
@@ -225,13 +234,39 @@ link :: proc(link_id: ID, bounds: fx.Rect, text: string, font_size := f32(13), s
 	return hit.clicked
 }
 
-button :: proc( button_id: ID, bounds: fx.Rect, label: string, style: Style = BUTTON_STYLE, disabled := false,) -> bool {
-	hit := interact(button_id, bounds, disabled)
-	state := style_state(style, hit, disabled)
-	background := animate(id("background", button_id), state.bg, HOVER_DURATION, .Sine_In_Out)
-	text := animate(id("text", button_id), state.text, HOVER_DURATION, .Sine_In_Out)
+button :: proc(
+	button_id: ID,
+	bounds: fx.Rect,
+	label: string,
+	style: Style = BUTTON_STYLE,
+	disabled := false,
+	selected := false,
+	icon: Icon = .None,
+	center_x := true,
+	font_size := f32(12),
+	right_padding := f32(7),
+	icon_size := f32(20),
+	overlay := false,
+) -> bool {
+	hit := interact(button_id, bounds, disabled, overlay)
+	state := style_state(style, hit, disabled, selected)
+	background := animate(id("background", button_id), state.bg, ANIM_DURATION, .Sine_In_Out)
+	text := animate(id("text", button_id), state.text, ANIM_DURATION, .Sine_In_Out)
 	fx.draw_rect(bounds, background, 7)
-	fx.draw_text_faded(label, bounds, 12, text, true, true)
+	if icon == .None {
+		text_bounds := center_x ? bounds : fx.Rect{bounds.x + 7, bounds.y, max(bounds.w - 7 - right_padding, 0), bounds.h}
+		fx.draw_text_faded(label, text_bounds, font_size, text, center_x, true)
+	} else if center_x {
+		label_width := fx.measure_text(label, font_size).x
+		content_width := icon_size + 8 + label_width
+		content_x := bounds.x + (bounds.w - content_width) * .5
+		draw_icon(icon, {content_x, bounds.y, icon_size, bounds.h}, text)
+		fx.draw_text_faded(label, {content_x + icon_size + 8, bounds.y, label_width, bounds.h}, font_size, text, false, true)
+	} else {
+		draw_icon(icon, {bounds.x + 7, bounds.y, icon_size, bounds.h}, text)
+		text_x := bounds.x + 7 + icon_size + 8
+		fx.draw_text_faded(label, {text_x, bounds.y, max(bounds.x + bounds.w - right_padding - text_x, 0), bounds.h}, font_size, text, false, true)
+	}
 
 	if hit.hovered && !disabled {
 		fx.set_cursor(.Hand)
@@ -251,8 +286,8 @@ icon_button :: proc(
 ) -> bool {
 	hit := interact(button_id, bounds, disabled)
 	state := style_state(style, hit, disabled, selected)
-	background := animate(id("background", button_id), state.bg, HOVER_DURATION, .Sine_In_Out)
-	tint := animate(id("text", button_id), state.text, HOVER_DURATION, .Sine_In_Out)
+	background := animate(id("background", button_id), state.bg, ANIM_DURATION, .Sine_In_Out)
+	tint := animate(id("text", button_id), state.text, ANIM_DURATION, .Sine_In_Out)
 	circle := square_bounds(bounds)
 
 	fx.draw_circle(
@@ -288,11 +323,11 @@ slider :: proc(slider_id: ID, bounds: fx.Rect, value: ^f32, low, high: f32, styl
 		h = 3.5,
 	}
 
-	track_color := animate(id("background", slider_id), state.bg, HOVER_DURATION, .Sine_In_Out)
-	fill_color := animate(id("text", slider_id), state.text, HOVER_DURATION, .Sine_In_Out)
+	track_color := animate(id("background", slider_id), state.bg, ANIM_DURATION, .Sine_In_Out)
+	fill_color := animate(id("text", slider_id), state.text, ANIM_DURATION, .Sine_In_Out)
 	fx.draw_rect(track, track_color, 2)
 	fx.draw_rect({track.x, track.y, track.w * ratio, track.h}, fill_color, 2)
-	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3), HOVER_DURATION, .Sine_In_Out)
+	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3), ANIM_DURATION, .Sine_In_Out)
 	fx.draw_circle({bounds.x + bounds.w * ratio, center_y}, thumb_size, fill_color)
 
 	if hit.hovered || hit.held {

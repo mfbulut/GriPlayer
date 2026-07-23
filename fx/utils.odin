@@ -6,8 +6,11 @@ import "core:math/linalg"
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
-Rectangle :: [4]f32
 Color :: [4]byte
+
+Rect :: struct {
+	x, y, w, h: f32,
+}
 
 LIGHTGRAY  :: Color{200, 200, 200, 255}
 GRAY       :: Color{130, 130, 130, 255}
@@ -83,10 +86,6 @@ color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
 	return
 }
 
-Rect :: struct {
-	x, y, w, h: f32,
-}
-
 point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
 	return 	p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
@@ -98,10 +97,18 @@ rect_overlaps :: proc(a, b: Rect) -> bool {
 	       a.y + a.h > b.y
 }
 
+rect_overlap :: proc(a, b: Rect) -> Rect {
+	x1 := max(a.x, b.x)
+	y1 := max(a.y, b.y)
+	x2 := min(a.x + a.w, b.x + b.w)
+	y2 := min(a.y + a.h, b.y + b.h)
+	return {x1, y1, max(0, x2 - x1), max(0, y2 - y1)}
+}
+
 rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return { r.x + x, r.y + y, r.w - x * 2, r.h - y * 2 }
+	return {r.x + x, r.y + y, r.w - x * 2, r.h - y * 2}
 }
 
 rect_expand :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return { r.x - x, r.y - y, r.w + x * 2, r.h + y * 2 }
+	return {r.x - x, r.y - y, r.w + x * 2, r.h + y * 2}
 }

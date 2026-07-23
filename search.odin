@@ -107,20 +107,24 @@ update_search :: proc() {
 	if textbox.focused() {
 		search.active = true
 	}
+
 	if textbox.pressed(.Escape) {
 		textbox.blur()
 		return
 	}
+
 	if textbox.pressed(.Backspace_On_Empty) {
 		search.filter_artist = ""
 		search.filter_album = ""
 		search.initialized = false
 	}
+
 	query_text := textbox.text()
 	if textbox.pressed(.Enter) && len(search.results) > 0 {
 		player_start_playlist(search.results[:], 0)
 		textbox.blur()
 	}
+	
 	if query_text == search.last_query && search.initialized do return
 	search.initialized = true
 	clear(&search.results)
@@ -154,6 +158,7 @@ update_search :: proc() {
 			}
 		}
 	}
+
 	slice.sort_by(matches[:], proc(a, b: Search_Match) -> bool {return a.score > b.score})
 	for match in matches do append(&search.results, match.music)
 	search.active = true
@@ -165,10 +170,10 @@ draw_search_box :: proc(bounds: fx.Rect) {
 	show_close := len(query) > 0 || search.active
 	filter := search.filter_artist != "" ? search.filter_artist : search.filter_album
 	badge_width := f32(0)
-	if filter != "" do badge_width = min(fx.measure_text(filter, 10).x + 31, bounds.w * .48)
+	if filter != "" do badge_width = min(fx.measure_text(filter, 10).x + 31, bounds.w * 0.48)
 	hovered := queue_drag.song == nil && (mouse_visible(bounds) || textbox.hovered())
 	target := search.active || textbox.focused() ? COLOR_HOVER : hovered ? COLOR_HOVER : COLOR_SURFACE
-	background := animate(id("search-background"), target, HOVER_DURATION, .Sine_In_Out)
+	background := animate(id("search-background"), target, ANIM_DURATION, .Sine_In_Out)
 	if textbox.focused() {
 		fx.draw_rect(bounds, COLOR_ACCENT_BRIGHT, 8)
 		fx.draw_rect(fx.rect_shrink(bounds, 1, 1), background, 7)
@@ -188,16 +193,17 @@ draw_search_box :: proc(bounds: fx.Rect) {
 		}
 	}
 
-	if layout(bounds, .Row, { px(18), px(badge_width > 0 ? badge_width + 16 : 8), fr(), px(show_close ? 22 : 0)}, pad = pad_all(10)) {
+	if layout(bounds, .Row, {px(18), px(badge_width > 0 ? badge_width + 16 : 8), fr(), px(show_close ? 22 : 0)}, pad = pad_all(10)) {
 		draw_icon(.Search, next(), COLOR_MUTED)
 		badge_slot := next()
 		if badge_width > 0 {
 			badge := fx.Rect{badge_slot.x + 8, badge_slot.y - .5, badge_width, 23}
-			fx.draw_rect(badge, fx.color_opacity(COLOR_ACCENT, .30), 6)
+			fx.draw_rect(badge, fx.color_opacity(COLOR_ACCENT, 0.30), 6)
 			filter_icon: Icon = search.filter_artist != "" ? .Artist : .Album
 			draw_icon(filter_icon, {badge.x + 4, badge.y, 19, badge.h}, COLOR_TEXT, 2)
 			fx.draw_text_faded(filter, {badge.x + 26, badge.y, badge.w - 31, badge.h}, 10, COLOR_TEXT)
 		}
+
 		text_area := next()
 		textbox.set_colors(COLOR_TEXT, background)
 		textbox.set_bounds(text_area.x, text_area.y, text_area.w, text_area.h + 6)
