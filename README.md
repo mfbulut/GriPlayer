@@ -33,5 +33,5 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **Compiler:** [Odin Compiler](https://odin-lang.org/docs/install/)
 
 ```bash
-odin build src -o:speed -subsystem:windows -resource:assets/resource.rc
+odin build . -o:speed -subsystem:windows -resource:assets/resource.rc
 ```
