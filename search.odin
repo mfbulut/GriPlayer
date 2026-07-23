@@ -166,7 +166,7 @@ draw_search_box :: proc(bounds: fx.Rect) {
 	filter := search.filter_artist != "" ? search.filter_artist : search.filter_album
 	badge_width := f32(0)
 	if filter != "" do badge_width = min(fx.measure_text(filter, 10).x + 31, bounds.w * .48)
-	hovered := mouse_visible(bounds) || textbox.hovered()
+	hovered := queue_drag.song == nil && (mouse_visible(bounds) || textbox.hovered())
 	target := search.active || textbox.focused() ? COLOR_HOVER : hovered ? COLOR_HOVER : COLOR_SURFACE
 	background := animate(id("search-background"), target, HOVER_DURATION, .Sine_In_Out)
 	if textbox.focused() {

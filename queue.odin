@@ -216,7 +216,7 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 }
 
 draw_queue_song :: proc(song: ^Music, row: fx.Rect, section: Queue_Section, index: int, entry_id: ID, overlay := false) -> Queue_Action {
-	hovered := !overlay && mouse_visible(row)
+	hovered := !overlay && queue_drag.song == nil && mouse_visible(row)
 	background := overlay ? COLOR_HOVER : animate(id("background", entry_id), hovered ? COLOR_HOVER : fx.Color{}, HOVER_DURATION, .Sine_In_Out)
 	if overlay {
 		fx.draw_rect({row.x + 2, row.y + 5, row.w, row.h}, fx.color_opacity(COLOR_BACKGROUND, .55), 8)
