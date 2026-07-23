@@ -5,7 +5,7 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 
 ## Features
 
-- **UI:** Modern, dark-themed interface with playlists, context menus, and search.
+- **UI:** Modern, dark-themed interface with playlists, queue, and search.
 - **Playback:** Gapless playback with a built-in frequency visualizer.
 - **Lyrics:** Search View synchronized lyrics using `.lrc` files.
 - **SMTC:** Full Windows System Media Transport Controls integration.
@@ -14,8 +14,8 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 
 ## Screenshots
 
-<img src="https://github.com/user-attachments/assets/d6477ecc-e0ae-43cc-b2d4-c6e215616377" />
-<img src="https://github.com/user-attachments/assets/e4a92605-fa0d-40d5-8435-586da8f1c706" />
+<img src="https://github.com/user-attachments/assets/aa094b43-3a5f-4049-9fec-81bb8541a2f6" />
+<img src="https://github.com/user-attachments/assets/f7e86e30-c689-4171-8d6e-abd47466d240" />
 
 ## Roadmap
 
