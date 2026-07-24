@@ -259,6 +259,7 @@ layout :: proc(
 	scroll_duration := f32(.16),
 ) -> bool {
 	scroll_index := -1
+	has_scrollbar := false
 	if can_scroll {
 		scroll_id := id("scroll", layout_id)
 		for index in 0 ..< len(ui_ctx.scrolls) {
@@ -274,6 +275,7 @@ layout :: proc(
 		state := &ui_ctx.scrolls[scroll_index]
 		state.last_touched = ui_ctx.frame
 		maximum := max(state.content_size - state.viewport, 0)
+		has_scrollbar = maximum > 0 && bounds.h >= 32
 		if maximum > 0 {
 			state.target = clamp(state.target, 0, maximum)
 			if state.thumb_held {
@@ -289,12 +291,18 @@ layout :: proc(
 		}
 	}
 
-	inner := fx.Rect{
-		x = bounds.x + pad.left,
-		y = bounds.y + pad.top,
-		w = max(0, bounds.w - pad.left - pad.right),
-		h = max(0, bounds.h - pad.top - pad.bottom),
+	padding := pad
+	if has_scrollbar {
+		padding.right += 6
 	}
+
+	inner := fx.Rect{
+		x = bounds.x + padding.left,
+		y = bounds.y + padding.top,
+		w = max(0, bounds.w - padding.left - padding.right),
+		h = max(0, bounds.h - padding.top - padding.bottom),
+	}
+
 	axis_length := direction == .Row ? inner.w : inner.h
 	gap_length := gap * f32(max(len(sizes) - 1, 0))
 	available := max(0, axis_length - gap_length)
