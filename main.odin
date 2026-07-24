@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:time"
 
 import "fx"
 import "fx/audio"
@@ -38,6 +39,11 @@ frame :: proc() {
 	player_update()
 	if player.playing && player.music != nil {
 		player.music.playtime += fx.frame_time()
+	}
+
+	if fx.window_is_minimized() {
+		time.sleep(6 * time.Millisecond)
+		return
 	}
 
 	begin_frame()

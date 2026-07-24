@@ -72,7 +72,7 @@ init_wasapi :: proc(sample_rate: u32) {
 
     stream_flags := cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_AUTOCONVERTPCM | cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY
 
-    state.client->Initialize(.SHARED, stream_flags, 1000000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
+    state.client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
     state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
     state.client->GetBufferSize(&state.buffer_size)
     state.sample_rate = sample_rate

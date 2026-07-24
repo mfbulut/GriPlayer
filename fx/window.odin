@@ -173,10 +173,6 @@ update :: proc(poll_msg := true) -> bool {
 		}
 	}
 
-	if window_is_minimized() {
-		time.sleep(10 * time.Millisecond)
-	}
-
 	window.cursor = .Arrow
 
 	begin_frame()
