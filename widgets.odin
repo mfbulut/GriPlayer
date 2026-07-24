@@ -257,10 +257,11 @@ button :: proc(
 		fx.draw_text_faded(label, text_bounds, font_size, text, center_x, true)
 	} else if center_x {
 		label_width := fx.measure_text(label, font_size).x
-		content_width := icon_size + 8 + label_width
+		icon_gap := label == "" ? f32(0) : f32(8)
+		content_width := icon_size + icon_gap + label_width
 		content_x := bounds.x + (bounds.w - content_width) * .5
 		draw_icon(icon, {content_x, bounds.y, icon_size, bounds.h}, text)
-		fx.draw_text_faded(label, {content_x + icon_size + 8, bounds.y, label_width, bounds.h}, font_size, text, false, true)
+		fx.draw_text_faded(label, {content_x + icon_size + icon_gap, bounds.y, label_width, bounds.h}, font_size, text, false, true)
 	} else {
 		draw_icon(icon, {bounds.x + 7, bounds.y, icon_size, bounds.h}, text)
 		text_x := bounds.x + 7 + icon_size + 8

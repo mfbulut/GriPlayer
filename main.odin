@@ -162,16 +162,17 @@ draw_playlist_header :: proc(bounds: fx.Rect, playlist: ^Playlist) {
 
 		icon_bounds := next()
 		sort_icon := sort_icons[playlist.sort_reversed ? 1 : 0][playlist.sort]
-		if button(id("playlist-direction", id(playlist.name)), icon_bounds, "") {
+		if button(
+			id("playlist-direction", id(playlist.name)),
+			icon_bounds,
+			"",
+			icon = sort_icon,
+			icon_size = 16,
+		) {
 			playlist.sort_reversed = !playlist.sort_reversed
 			playlist_sort(playlist)
 			scroll_to(id("songs", id(playlist.name)), 0)
 		}
-		icon_color := animate(
-			id("playlist-direction-icon", id(playlist.name)),
-			mouse_visible(icon_bounds) ? COLOR_TEXT : COLOR_MUTED,
-		)
-		fx.draw_texture(icons[sort_icon], square_bounds(icon_bounds, 7), icon_color)
 	}
 }
 
@@ -189,6 +190,7 @@ draw_songs :: proc(bounds: fx.Rect) {
 		songs = search.results[:]
 		list_id = id("search-results")
 	}
+
 	active_marker := f32(-1)
 	if player.music != nil {
 		for song, index in songs {
@@ -227,10 +229,12 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	play_bounds := fx.Rect{bounds.x, bounds.y, max(bounds.w - 55, 0), bounds.h}
 	hit := interact(row_id, play_bounds)
 	active := player.music == song
+
 	row_style := active ? ACTIVE_BUTTON_STYLE : ICON_BUTTON_STYLE
 	row_colors := style_state(row_style, hit)
 	background := animate(id("background", row_id), row_colors.bg)
 	text_color := animate(id("text", row_id), row_colors.text)
+
 	fx.draw_rect(bounds, background, 6)
 	if hit.clicked do player_start_playlist(songs, index)
 	if hit.hovered && fx.key_is_pressed(.Mouse_Right) do open_context_menu(song)
@@ -279,6 +283,7 @@ draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, background := COLOR_BOR
 
 draw_player :: proc(bounds: fx.Rect) {
 	fx.draw_rect(bounds, COLOR_SURFACE, 8)
+	
 	if len(visualizer_palette) > 0 {
 		tint_height := min(bounds.h, f32(280))
 		top := visualizer_color_at(0)
