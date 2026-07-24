@@ -170,8 +170,6 @@ draw_playlist_header :: proc(bounds: fx.Rect, playlist: ^Playlist) {
 		icon_color := animate(
 			id("playlist-direction-icon", id(playlist.name)),
 			mouse_visible(icon_bounds) ? COLOR_TEXT : COLOR_MUTED,
-			ANIM_DURATION,
-			.Sine_In_Out,
 		)
 		fx.draw_texture(icons[sort_icon], square_bounds(icon_bounds, 7), icon_color)
 	}
@@ -231,22 +229,20 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	active := player.music == song
 	row_style := active ? ACTIVE_BUTTON_STYLE : ICON_BUTTON_STYLE
 	row_colors := style_state(row_style, hit)
-	background := animate(id("background", row_id), row_colors.bg, ANIM_DURATION, .Sine_In_Out)
-	text_color := animate(id("text", row_id), row_colors.text, ANIM_DURATION, .Sine_In_Out)
+	background := animate(id("background", row_id), row_colors.bg)
+	text_color := animate(id("text", row_id), row_colors.text)
 	fx.draw_rect(bounds, background, 6)
 	if hit.clicked do player_start_playlist(songs, index)
 	if hit.hovered && fx.key_is_pressed(.Mouse_Right) do open_context_menu(song)
 	if hit.hovered do fx.set_cursor(.Hand)
 
 	if layout(bounds, .Row, {px(42), fr(), px(36)}, pad = pad_xy(6, 6), gap = 10) {
-		background := animate(
+		cover_bg := animate(
 			id("placeholder-bg", row_id),
 			active || hit.held ? fx.Color{72, 80, 94, 255} : COLOR_BORDER,
-			ANIM_DURATION,
-			.Sine_In_Out,
 		)
 
-		draw_cover(song.thumbnail, next(), background = background)
+		draw_cover(song.thumbnail, next(), cover_bg)
 
 		if layout(next(), .Col, {px(25), px(17)}) {
 			label(next(), song.title, 14, text_style(text_color))
@@ -268,7 +264,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, radius := f32(6), background := COLOR_BORDER) {
+draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
 	if texture.srv != nil {
 		size := fx.Vec2(texture.size)
 		crop := min(size.x, size.y)
@@ -319,7 +315,7 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 	}
 
 	if layout(bounds, .Row, {px(160), fr()}, pad = pad_all(16), gap = 18) {
-		draw_cover(player.cover, next(), 8)
+		draw_cover(player.cover, next(), radius = 8)
 
 		if layout(next(), .Col, {px(48), px(28), fr()}) {
 			title_row := next()
@@ -484,7 +480,10 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 				.Quadratic_Out,
 			)
 
-			hover_amount := smooth_f32(id("hover", row_id), hit.hovered ? f32(1) : f32(0), 15)
+			hover_amount := animate(
+				id("hover", row_id),
+				hit.hovered ? f32(1) : f32(0),
+			)
 			color := fx.color_lerp(COLOR_MUTED, COLOR_TEXT, max(active_amount, hover_amount))
 			if lyric.text == "" {
 				icon_size := 24 + 4 * active_amount

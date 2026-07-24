@@ -501,8 +501,8 @@ end_layout :: proc() {
 		thumb.y = track.y + position
 	}
 	colors := style_state(style, hit)
-	track_color := animate(id("track-color", state.id), colors.bg, ANIM_DURATION, .Sine_In_Out)
-	thumb_color := animate(id("thumb-color", state.id), colors.text, ANIM_DURATION, .Sine_In_Out)
+	track_color := animate(id("track-color", state.id), colors.bg)
+	thumb_color := animate(id("thumb-color", state.id), colors.text)
 	if track_color.a > 0 do fx.draw_rect(track, track_color, track.w * .5)
 	if thumb_color.a > 0 {
 		fx.draw_rect(thumb, thumb_color, thumb.w * .5)

@@ -11,7 +11,6 @@ COLOR_ACCENT        :: fx.Color{70, 111, 190, 255}
 COLOR_ACCENT_BRIGHT :: fx.Color{96, 145, 230, 255}
 COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
 COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
-ANIM_DURATION      :: f32(0.08)
 
 Icon :: enum {
 	None,
@@ -216,9 +215,9 @@ link :: proc(link_id: ID, bounds: fx.Rect, text: string, font_size := f32(13), s
 	hit_bounds := fx.Rect{bounds.x, bounds.y, width, bounds.h}
 	hit := interact(link_id, hit_bounds, disabled)
 	state := style_state(style, hit, disabled)
-	background := animate(id("background", link_id), state.bg, ANIM_DURATION, .Sine_In_Out)
-	color := animate(id("text", link_id), state.text, ANIM_DURATION, .Sine_In_Out)
-	amount := animate(id("hover", link_id), hit.hovered ? f32(1) : f32(0), ANIM_DURATION, .Sine_In_Out)
+	background := animate(id("background", link_id), state.bg)
+	color := animate(id("text", link_id), state.text)
+	amount := animate(id("hover", link_id), hit.hovered ? f32(1) : f32(0))
 	if background.a > 0 do fx.draw_rect(hit_bounds, background, 4)
 	fx.draw_text_faded(text, bounds, font_size, color, false, true)
 
@@ -250,8 +249,8 @@ button :: proc(
 ) -> bool {
 	hit := interact(button_id, bounds, disabled, overlay)
 	state := style_state(style, hit, disabled, selected)
-	background := animate(id("background", button_id), state.bg, ANIM_DURATION, .Sine_In_Out)
-	text := animate(id("text", button_id), state.text, ANIM_DURATION, .Sine_In_Out)
+	background := animate(id("background", button_id), state.bg)
+	text := animate(id("text", button_id), state.text)
 	fx.draw_rect(bounds, background, 7)
 	if icon == .None {
 		text_bounds := center_x ? bounds : fx.Rect{bounds.x + 7, bounds.y, max(bounds.w - 7 - right_padding, 0), bounds.h}
@@ -286,8 +285,8 @@ icon_button :: proc(
 ) -> bool {
 	hit := interact(button_id, bounds, disabled)
 	state := style_state(style, hit, disabled, selected)
-	background := animate(id("background", button_id), state.bg, ANIM_DURATION, .Sine_In_Out)
-	tint := animate(id("text", button_id), state.text, ANIM_DURATION, .Sine_In_Out)
+	background := animate(id("background", button_id), state.bg)
+	tint := animate(id("text", button_id), state.text)
 	circle := square_bounds(bounds)
 
 	fx.draw_circle(
@@ -323,11 +322,11 @@ slider :: proc(slider_id: ID, bounds: fx.Rect, value: ^f32, low, high: f32, styl
 		h = 3.5,
 	}
 
-	track_color := animate(id("background", slider_id), state.bg, ANIM_DURATION, .Sine_In_Out)
-	fill_color := animate(id("text", slider_id), state.text, ANIM_DURATION, .Sine_In_Out)
+	track_color := animate(id("background", slider_id), state.bg)
+	fill_color := animate(id("text", slider_id), state.text)
 	fx.draw_rect(track, track_color, 2)
 	fx.draw_rect({track.x, track.y, track.w * ratio, track.h}, fill_color, 2)
-	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3), ANIM_DURATION, .Sine_In_Out)
+	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3))
 	fx.draw_circle({bounds.x + bounds.w * ratio, center_y}, thumb_size, fill_color)
 
 	if hit.hovered || hit.held {

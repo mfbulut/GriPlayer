@@ -173,7 +173,7 @@ draw_search_box :: proc(bounds: fx.Rect) {
 	if filter != "" do badge_width = min(fx.measure_text(filter, 10).x + 31, bounds.w * 0.48)
 	hovered := queue_drag.song == nil && (mouse_visible(bounds) || textbox.hovered())
 	target := search.active || textbox.focused() ? COLOR_HOVER : hovered ? COLOR_HOVER : COLOR_SURFACE
-	background := animate(id("search-background"), target, ANIM_DURATION, .Sine_In_Out)
+	background := animate(id("search-background"), target)
 	if textbox.focused() {
 		fx.draw_rect(bounds, COLOR_ACCENT_BRIGHT, 8)
 		fx.draw_rect(fx.rect_shrink(bounds, 1, 1), background, 7)
