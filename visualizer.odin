@@ -5,14 +5,20 @@ import "core:math"
 import "core:slice"
 
 import "fx"
+import "fx/audio"
 
 FFT_SIZE       :: 2048
 FFT_BITS       :: 11
-SPECTRUM_BANDS :: 64
+SPECTRUM_BANDS :: 96
+SPECTRUM_MIN_FREQUENCY :: f32(40)
+SPECTRUM_MAX_FREQUENCY :: f32(16000)
 
 SPECTRUM_RISE_SPEED :: f32(8)
 SPECTRUM_FALL_SPEED :: f32(6)
 SPECTRUM_PEAK_FALL  :: f32(1)
+SPECTRUM_GAIN_DB    :: f32(20)
+SPECTRUM_LOG_SENSITIVITY :: f32(24)
+SPECTRUM_TILT_DB_PER_OCTAVE :: f32(3)
 
 fft_work: [FFT_SIZE]complex64
 fft_hann: [FFT_SIZE]f32
@@ -76,10 +82,23 @@ visualizer_update :: proc() {
 
 	fft_run()
 
-	min_bin := 1
-	max_bin := FFT_SIZE / 2 - 1
+	sample_rate := max(f32(audio.sample_rate()), 1)
+	nyquist := sample_rate * 0.5
+	max_frequency := min(SPECTRUM_MAX_FREQUENCY, nyquist * 0.95)
+	min_bin := clamp(
+		int(SPECTRUM_MIN_FREQUENCY / sample_rate * FFT_SIZE + 0.5),
+		1,
+		FFT_SIZE / 2 - 2,
+	)
+	max_bin := clamp(
+		int(max_frequency / sample_rate * FFT_SIZE),
+		min_bin + 1,
+		FFT_SIZE / 2 - 1,
+	)
+
 	log_min := math.log(f32(min_bin), 2)
 	log_max := math.log(f32(max_bin), 2)
+
 	for &current, band in spectrum {
 		t0 := f32(band) / f32(SPECTRUM_BANDS)
 		t1 := f32(band + 1) / f32(SPECTRUM_BANDS)
@@ -96,12 +115,19 @@ visualizer_update :: proc() {
 		}
 
 		magnitude := sum / f32(bin_high - bin_low + 1)
-		target := clamp(math.log(1 + magnitude * 8, 2) / 8, 0, 1)
+		normalized := magnitude * (4.0 / f32(FFT_SIZE))
+		band_center := (t0 + t1) * 0.5
+		octave_offset := (band_center - 0.5) * (log_max - log_min)
+		gain_db := SPECTRUM_GAIN_DB + octave_offset * SPECTRUM_TILT_DB_PER_OCTAVE
+		weighted := normalized * math.pow(10, gain_db / 20) * SPECTRUM_LOG_SENSITIVITY
+		log_level := math.log(1 + weighted, 2)
+		target := log_level / (1 + log_level)
 		if target > current {
 			current = min(current + dt * SPECTRUM_RISE_SPEED, target)
 		} else {
 			current = max(current - dt * SPECTRUM_FALL_SPEED, target)
 		}
+
 		spectrum_peak[band] = max(spectrum_peak[band] - SPECTRUM_PEAK_FALL * dt, current)
 	}
 }
@@ -112,7 +138,7 @@ draw_visualizer :: proc(bounds: fx.Rect) {
 	content := fx.Rect{bounds.x, bounds.y + top_space, bounds.w, bounds.h - top_space}
 	if content.h <= 0 do return
 
-	gap := f32(2)
+	gap := f32(1)
 	bar_width := max((content.w - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS, 1)
 	for level, index in spectrum {
 		height := max(content.h * level, 1)
@@ -139,7 +165,7 @@ visualizer_palette: [dynamic; 8]fx.Color
 PALETTE_NEUTRAL_CHROMA        :: f32(.045)
 PALETTE_NEUTRAL_MAX           :: 2
 PALETTE_NEUTRAL_LIGHTNESS_GAP :: f32(.25)
-PALETTE_SURFACE_DISTANCE      :: f32(.12)
+PALETTE_SURFACE_DISTANCE      :: f32(.15)
 PALETTE_HUE_GAP               :: f32(.42)
 PALETTE_LIGHTNESS_GAP         :: f32(.34)
 PALETTE_CHROMA_GAP            :: f32(.10)
@@ -179,6 +205,7 @@ visualizer_palette_accepts :: proc(color: fx.Color) -> bool {
 visualizer_create_palette :: proc(pixels: []fx.Color) {
 	clear(&visualizer_palette)
 	if len(pixels) == 0 do return
+
 	buckets: [512]Palette_Bucket
 	for color in pixels {
 		lightness, chroma, _ := fx.color_to_oklch(color)
@@ -189,7 +216,9 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 		bucket.count += 1
 		bucket.score += lightness * 0.55 + chroma * 0.8
 	}
+
 	slice.sort_by(buckets[:], proc(a, b: Palette_Bucket) -> bool {return a.score > b.score})
+	
 	for bucket in buckets {
 		if bucket.count == 0 do break
 		color := cast(fx.Color)(bucket.sum / bucket.count)
