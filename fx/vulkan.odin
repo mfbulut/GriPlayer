@@ -8,13 +8,13 @@ import "base:runtime"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
-MAX_TEXTURES :: 256
+MAX_TEXTURES :: 1024
 MAX_INSTANCES :: 1024 * 16
 
 vks: struct {
 	physical_device: vk.PhysicalDevice,
 	device: vk.Device,
-	graphics_queue: vk.Queue,
+	gpu_queue: vk.Queue,
 
 	surface: vk.SurfaceKHR,
 	swapchain: vk.SwapchainKHR,
@@ -31,8 +31,7 @@ vks: struct {
 	in_flight_fence: vk.Fence,
 
 	pipeline_layout: vk.PipelineLayout,
-	vert_shader: vk.ShaderEXT,
-	frag_shader: vk.ShaderEXT,
+	pipeline: vk.Pipeline,
 	sampler: vk.Sampler,
 
 	descriptor_set: vk.DescriptorSet,
@@ -59,15 +58,17 @@ check_vk :: proc(result: vk.Result) {
 	}
 }
 
-debug_callback :: proc "system" (
-	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-	messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
-	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-	pUserData: rawptr,
-) -> b32 {
-	context = runtime.default_context()
-	fmt.eprintf("Vulkan Validation: %s\n", pCallbackData.pMessage)
-	return false
+when ODIN_DEBUG {	
+	debug_callback :: proc "system" (
+		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+		messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
+		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+		pUserData: rawptr,
+	) -> b32 {
+		context = runtime.default_context()
+		fmt.eprintf("Vulkan Validation: %s\n", pCallbackData.pMessage)
+		return false
+	}
 }
 
 vk_init :: proc() {
@@ -83,30 +84,32 @@ vk_init :: proc() {
 	app_info := vk.ApplicationInfo {
 		sType = .APPLICATION_INFO,
 		pApplicationName = "GriPlayer",
-		applicationVersion = vk.MAKE_VERSION(1, 0, 0),
-		pEngineName = "No Engine",
-		engineVersion = vk.MAKE_VERSION(1, 0, 0),
 		apiVersion = vk.API_VERSION_1_3,
 	}
 
-	extensions := [?]cstring {
-		vk.KHR_SURFACE_EXTENSION_NAME,
-		vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-		vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
-	}
-
-	layer_count: u32
-	layer_names: ^cstring
 	when ODIN_DEBUG {
-		layer_count = 1
-		val_layer: cstring = "VK_LAYER_KHRONOS_validation"
+		layer_count := u32(1)
+		val_layer := cstring("VK_LAYER_KHRONOS_validation")
 		layer_names = &val_layer
+
+		extensions := [?]cstring {
+			vk.KHR_SURFACE_EXTENSION_NAME,
+			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
+		}
+	} else {
+		layer_count: u32
+		layer_names: ^cstring
+		extensions := [?]cstring {
+			vk.KHR_SURFACE_EXTENSION_NAME,
+			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+		}
 	}
 
 	create_info := vk.InstanceCreateInfo {
 		sType = .INSTANCE_CREATE_INFO,
 		pApplicationInfo = &app_info,
-		enabledExtensionCount = u32(len(extensions)),
+		enabledExtensionCount =  u32(len(extensions)),
 		ppEnabledExtensionNames = &extensions[0],
 		enabledLayerCount = layer_count,
 		ppEnabledLayerNames = layer_names,
@@ -128,7 +131,7 @@ vk_init :: proc() {
 	
 	when ODIN_DEBUG {
 		debug_messenger: vk.DebugUtilsMessengerEXT
-		vk.CreateDebugUtilsMessengerEXT(instance, &debug_info, nil, &debug_messenger)
+		check_vk(vk.CreateDebugUtilsMessengerEXT(instance, &debug_info, nil, &debug_messenger))
 	}
 
 	// Create Surface
@@ -145,7 +148,17 @@ vk_init :: proc() {
 	devices := make([]vk.PhysicalDevice, device_count)
 	defer delete(devices)
 	vk.EnumeratePhysicalDevices(instance, &device_count, &devices[0])
+
 	vks.physical_device = devices[0]
+	for d in devices {
+		props: vk.PhysicalDeviceProperties
+		vk.GetPhysicalDeviceProperties(d, &props)
+		if props.deviceType == .DISCRETE_GPU {
+			vks.physical_device = d
+			break
+		}
+	}
+
 
 	// Find Queue Family
 	queue_count: u32
@@ -173,12 +186,9 @@ vk_init :: proc() {
 
 	device_extensions := [?]cstring {
 		vk.KHR_SWAPCHAIN_EXTENSION_NAME,
-		vk.EXT_SHADER_OBJECT_EXTENSION_NAME,
 	}
 
-	features := vk.PhysicalDeviceFeatures {
-		samplerAnisotropy = true,
-	}
+	features := vk.PhysicalDeviceFeatures {}
 
 	features_13 := vk.PhysicalDeviceVulkan13Features {
 		sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -186,15 +196,9 @@ vk_init :: proc() {
 		synchronization2 = true,
 	}
 
-	features_shader_obj := vk.PhysicalDeviceShaderObjectFeaturesEXT {
-		sType = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
-		pNext = &features_13,
-		shaderObject = true,
-	}
-
 	features_12 := vk.PhysicalDeviceVulkan12Features {
 		sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		pNext = &features_shader_obj,
+		pNext = &features_13,
 		descriptorIndexing = true,
 		descriptorBindingPartiallyBound = true,
 		descriptorBindingSampledImageUpdateAfterBind = true,
@@ -215,7 +219,7 @@ vk_init :: proc() {
 	check_vk(vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device))
 	vk.load_proc_addresses_device(vks.device)
 
-	vk.GetDeviceQueue(vks.device, graphics_family, 0, &vks.graphics_queue)
+	vk.GetDeviceQueue(vks.device, graphics_family, 0, &vks.gpu_queue)
 
 	// Command Pool
 	pool_info := vk.CommandPoolCreateInfo {
@@ -259,11 +263,9 @@ vk_init :: proc() {
 		addressModeU = .CLAMP_TO_EDGE,
 		addressModeV = .CLAMP_TO_EDGE,
 		addressModeW = .CLAMP_TO_EDGE,
-		anisotropyEnable = true,
-		maxAnisotropy = 16,
 		maxLod = vk.LOD_CLAMP_NONE,
 	}
-	vk.CreateSampler(vks.device, &sampler_info, nil, &vks.sampler)
+	check_vk(vk.CreateSampler(vks.device, &sampler_info, nil, &vks.sampler))
 
 	// Bindless Descriptor Setup
 	bindings := [?]vk.DescriptorSetLayoutBinding {
@@ -362,46 +364,130 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 
 	check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
 
-	vert_create_info := vk.ShaderCreateInfoEXT {
-		sType = .SHADER_CREATE_INFO_EXT,
-		flags = {.LINK_STAGE},
-		stage = {.VERTEX},
-		nextStage = {.FRAGMENT},
-		codeType = .SPIRV,
+	vert_module_info := vk.ShaderModuleCreateInfo{
+		sType = .SHADER_MODULE_CREATE_INFO,
 		codeSize = len(vert_spv) * 4,
-		pCode = raw_data(vert_spv),
-		pName = "main",
-		setLayoutCount = 1,
-		pSetLayouts = &desc_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
+		pCode = cast(^u32)raw_data(vert_spv),
 	}
-
-	frag_create_info := vk.ShaderCreateInfoEXT {
-		sType = .SHADER_CREATE_INFO_EXT,
-		flags = {.LINK_STAGE},
-		stage = {.FRAGMENT},
-		codeType = .SPIRV,
+	frag_module_info := vk.ShaderModuleCreateInfo{
+		sType = .SHADER_MODULE_CREATE_INFO,
 		codeSize = len(frag_spv) * 4,
-		pCode = raw_data(frag_spv),
-		pName = "main",
-		setLayoutCount = 1,
-		pSetLayouts = &desc_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
+		pCode = cast(^u32)raw_data(frag_spv),
+	}
+	vert_module, frag_module: vk.ShaderModule
+	check_vk(vk.CreateShaderModule(vks.device, &vert_module_info, nil, &vert_module))
+	check_vk(vk.CreateShaderModule(vks.device, &frag_module_info, nil, &frag_module))
+	defer {
+		vk.DestroyShaderModule(vks.device, vert_module, nil)
+		vk.DestroyShaderModule(vks.device, frag_module, nil)
 	}
 
-	create_infos := [?]vk.ShaderCreateInfoEXT{vert_create_info, frag_create_info}
-	shaders: [2]vk.ShaderEXT
-	
-	check_vk(vk.CreateShadersEXT(vks.device, 2, &create_infos[0], nil, &shaders[0]))
-	
-	vks.vert_shader = shaders[0]
-	vks.frag_shader = shaders[1]
+	shader_stages := [?]vk.PipelineShaderStageCreateInfo{
+		{
+			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			stage = {.VERTEX},
+			module = vert_module,
+			pName = "main",
+		},
+		{
+			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			stage = {.FRAGMENT},
+			module = frag_module,
+			pName = "main",
+		},
+	}
+
+	vertex_input_info := vk.PipelineVertexInputStateCreateInfo{
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+	}
+
+	input_assembly := vk.PipelineInputAssemblyStateCreateInfo{
+		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		topology = .TRIANGLE_STRIP,
+		primitiveRestartEnable = false,
+	}
+
+	viewport_state := vk.PipelineViewportStateCreateInfo{
+		sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		viewportCount = 1,
+		scissorCount = 1,
+	}
+
+	rasterizer := vk.PipelineRasterizationStateCreateInfo{
+		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		depthClampEnable = false,
+		rasterizerDiscardEnable = false,
+		polygonMode = .FILL,
+		lineWidth = 1.0,
+		cullMode = {},
+		frontFace = .CLOCKWISE,
+		depthBiasEnable = false,
+	}
+
+	multisampling := vk.PipelineMultisampleStateCreateInfo{
+		sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		sampleShadingEnable = false,
+		rasterizationSamples = {._1},
+	}
+
+	color_blend_attachment := vk.PipelineColorBlendAttachmentState{
+		colorWriteMask = {.R, .G, .B, .A},
+		blendEnable = true,
+		srcColorBlendFactor = .SRC_ALPHA,
+		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
+		colorBlendOp = .ADD,
+		srcAlphaBlendFactor = .ONE,
+		dstAlphaBlendFactor = .ONE_MINUS_SRC_ALPHA,
+		alphaBlendOp = .ADD,
+	}
+
+	color_blending := vk.PipelineColorBlendStateCreateInfo{
+		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		logicOpEnable = false,
+		attachmentCount = 1,
+		pAttachments = &color_blend_attachment,
+	}
+
+	dynamic_states := [?]vk.DynamicState{.VIEWPORT, .SCISSOR}
+	dynamic_state_info := vk.PipelineDynamicStateCreateInfo{
+		sType = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		dynamicStateCount = len(dynamic_states),
+		pDynamicStates = &dynamic_states[0],
+	}
+
+	format_count: u32
+	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, nil))
+	formats := make([]vk.SurfaceFormatKHR, format_count)
+	defer delete(formats)
+	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, &formats[0]))
+
+	color_attachment_format := formats[0].format
+	pipeline_rendering_info := vk.PipelineRenderingCreateInfo{
+		sType = .PIPELINE_RENDERING_CREATE_INFO,
+		colorAttachmentCount = 1,
+		pColorAttachmentFormats = &color_attachment_format,
+	}
+
+	pipeline_info := vk.GraphicsPipelineCreateInfo{
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pNext = &pipeline_rendering_info,
+		stageCount = 2,
+		pStages = &shader_stages[0],
+		pVertexInputState = &vertex_input_info,
+		pInputAssemblyState = &input_assembly,
+		pViewportState = &viewport_state,
+		pRasterizationState = &rasterizer,
+		pMultisampleState = &multisampling,
+		pColorBlendState = &color_blending,
+		pDynamicState = &dynamic_state_info,
+		layout = vks.pipeline_layout,
+	}
+
+	check_vk(vk.CreateGraphicsPipelines(vks.device, 0, 1, &pipeline_info, nil, &vks.pipeline))
 }
 
 vk_recreate_swapchain :: proc(w, h: u32) {
-	vk.DeviceWaitIdle(vks.device)
+	check_vk(vk.DeviceWaitIdle(vks.device))
 
 	if vks.swapchain != 0 {
 		for view in vks.swapchain_image_views {
@@ -416,13 +502,13 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 	}
 
 	capabilities: vk.SurfaceCapabilitiesKHR
-	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.physical_device, vks.surface, &capabilities)
+	check_vk(vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.physical_device, vks.surface, &capabilities))
 
 	format_count: u32
-	vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, nil)
+	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, nil))
 	formats := make([]vk.SurfaceFormatKHR, format_count)
 	defer delete(formats)
-	vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, &formats[0])
+	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, &formats[0]))
 
 	vks.swapchain_format = formats[0].format
 	vks.swapchain_extent = {w, h}
@@ -452,9 +538,9 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 	vks.swapchain = new_swapchain
 
 	image_count: u32
-	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, nil)
+	check_vk(vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, nil))
 	vks.swapchain_images = make([]vk.Image, image_count)
-	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0])
+	check_vk(vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0]))
 
 	vks.swapchain_image_views = make([]vk.ImageView, image_count)
 	vks.render_finished_semaphores = make([]vk.Semaphore, image_count)
@@ -467,13 +553,13 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 			format = vks.swapchain_format,
 			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 		}
-		vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain_image_views[i])
+		check_vk(vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain_image_views[i]))
 		check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.render_finished_semaphores[i]))
 	}
 }
 
 vk_begin_frame :: proc() -> bool {
-	vk.WaitForFences(vks.device, 1, &vks.in_flight_fence, true, max(u64))
+	check_vk(vk.WaitForFences(vks.device, 1, &vks.in_flight_fence, true, max(u64)))
 
 	res := vk.AcquireNextImageKHR(
 		vks.device, vks.swapchain, max(u64),
@@ -484,17 +570,17 @@ vk_begin_frame :: proc() -> bool {
 		return false
 	}
 
-	vk.ResetFences(vks.device, 1, &vks.in_flight_fence)
+	check_vk(vk.ResetFences(vks.device, 1, &vks.in_flight_fence))
 
 	cmd := vks.command_buffer
-	vk.ResetCommandBuffer(cmd, {})
+	check_vk(vk.ResetCommandBuffer(cmd, {}))
 	vks.instance_count = 0
 
 	begin_info := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
 		flags = {.ONE_TIME_SUBMIT},
 	}
-	vk.BeginCommandBuffer(cmd, &begin_info)
+	check_vk(vk.BeginCommandBuffer(cmd, &begin_info))
 
 	barrier := vk.ImageMemoryBarrier2 {
 		sType = .IMAGE_MEMORY_BARRIER_2,
@@ -533,49 +619,14 @@ vk_begin_frame :: proc() -> bool {
 
 	vk.CmdBeginRendering(cmd, &rendering_info)
 
-	stages := [?]vk.ShaderStageFlags{{.VERTEX}, {.FRAGMENT}}
-	shaders := [?]vk.ShaderEXT{vks.vert_shader, vks.frag_shader}
-	vk.CmdBindShadersEXT(cmd, 2, &stages[0], &shaders[0])
-
-	vk.CmdSetVertexInputEXT(cmd, 0, nil, 0, nil)
-	vk.CmdSetRasterizerDiscardEnable(cmd, false)
-	vk.CmdSetPolygonModeEXT(cmd, .FILL)
-	vk.CmdSetCullMode(cmd, {})
-	vk.CmdSetFrontFace(cmd, .CLOCKWISE)
-	vk.CmdSetPrimitiveTopology(cmd, .TRIANGLE_STRIP)
-	vk.CmdSetPrimitiveRestartEnable(cmd, false)
-	vk.CmdSetDepthTestEnable(cmd, false)
-	vk.CmdSetDepthWriteEnable(cmd, false)
-	vk.CmdSetDepthBoundsTestEnable(cmd, false)
-	vk.CmdSetDepthBiasEnable(cmd, false)
-	vk.CmdSetStencilTestEnable(cmd, false)
-	vk.CmdSetRasterizationSamplesEXT(cmd, {._1})
-	sample_mask: vk.SampleMask = 0xFFFFFFFF
-	vk.CmdSetSampleMaskEXT(cmd, {._1}, &sample_mask)
-	vk.CmdSetAlphaToCoverageEnableEXT(cmd, false)
-	
-	blend_enable: b32 = true
-	vk.CmdSetColorBlendEnableEXT(cmd, 0, 1, &blend_enable)
-	
-	blend_eq := vk.ColorBlendEquationEXT {
-		srcColorBlendFactor = .SRC_ALPHA,
-		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
-		colorBlendOp = .ADD,
-		srcAlphaBlendFactor = .ONE,
-		dstAlphaBlendFactor = .ONE_MINUS_SRC_ALPHA,
-		alphaBlendOp = .ADD,
-	}
-	vk.CmdSetColorBlendEquationEXT(cmd, 0, 1, &blend_eq)
-	
-	color_mask := vk.ColorComponentFlags{.R, .G, .B, .A}
-	vk.CmdSetColorWriteMaskEXT(cmd, 0, 1, &color_mask)
+	vk.CmdBindPipeline(cmd, .GRAPHICS, vks.pipeline)
 
 	viewport := vk.Viewport {
 		width = f32(vks.swapchain_extent.width),
 		height = f32(vks.swapchain_extent.height),
 		minDepth = 0.0, maxDepth = 1.0,
 	}
-	vk.CmdSetViewportWithCount(cmd, 1, &viewport)
+	vk.CmdSetViewport(cmd, 0, 1, &viewport)
 
 	screen_size := [2]f32 {
 		f32(vks.swapchain_extent.width),
@@ -605,7 +656,7 @@ vk_draw_instances :: proc(instances: []Instance) {
 		extent = {u32(vks.scissor[2]), u32(vks.scissor[3])},
 	}
 
-	vk.CmdSetScissorWithCount(cmd, 1, &rect)
+	vk.CmdSetScissor(cmd, 0, 1, &rect)
 	vk.CmdDraw(cmd, 4, u32(len(instances)), 0, vks.instance_count)
 
 	vks.instance_count += u32(len(instances))
@@ -659,7 +710,7 @@ vk_end_frame :: proc() {
 		signalSemaphoreInfoCount = 1,
 		pSignalSemaphoreInfos = &signal_info,
 	}
-	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
+	check_vk(vk.QueueSubmit2(vks.gpu_queue, 1, &submit_info, vks.in_flight_fence))
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,
@@ -669,7 +720,7 @@ vk_end_frame :: proc() {
 		pSwapchains = &vks.swapchain,
 		pImageIndices = &vks.image_index,
 	}
-	vk.QueuePresentKHR(vks.graphics_queue, &present_info)
+	vk.QueuePresentKHR(vks.gpu_queue, &present_info)
 }
 
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
@@ -731,13 +782,17 @@ vk_cmd_end :: proc(cmd: vk.CommandBuffer) {
 	cmd := cmd
 	check_vk(vk.EndCommandBuffer(cmd))
 
-	submit_info := vk.SubmitInfo {
-		sType = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers = &cmd,
+	cmd_info := vk.CommandBufferSubmitInfo {
+		sType = .COMMAND_BUFFER_SUBMIT_INFO,
+		commandBuffer = cmd,
 	}
-	check_vk(vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, 0))
-	vk.QueueWaitIdle(vks.graphics_queue)
+	submit_info := vk.SubmitInfo2 {
+		sType = .SUBMIT_INFO_2,
+		commandBufferInfoCount = 1,
+		pCommandBufferInfos = &cmd_info,
+	}
+	check_vk(vk.QueueSubmit2(vks.gpu_queue, 1, &submit_info, 0))
+	check_vk(vk.QueueWaitIdle(vks.gpu_queue))
 
 	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 }
@@ -848,7 +903,7 @@ texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 		format = .R8G8B8A8_UNORM,
 		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 	}
-	vk.CreateImageView(vks.device, &view_info, nil, &tex.view)
+	check_vk(vk.CreateImageView(vks.device, &view_info, nil, &tex.view))
 
 	// Update descriptor set
 	image_info_desc := vk.DescriptorImageInfo {
@@ -934,7 +989,7 @@ texture_free :: proc(tex: ^Texture) {
 
 texture_release_deferred :: proc() {
 	if len(textures_to_free) == 0 do return
-	vk.DeviceWaitIdle(vks.device)
+	check_vk(vk.DeviceWaitIdle(vks.device))
 	
 	for idx in textures_to_free {
 		if !textures[idx].used do continue
