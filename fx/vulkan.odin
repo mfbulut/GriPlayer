@@ -710,16 +710,16 @@ create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, propertie
 	vk.BindBufferMemory(vks.device, buffer^, buffer_memory^, 0)
 }
 
-texture_load :: proc(data: []u8, mipmaps: bool = false) -> Texture {
+texture_load :: proc(data: []u8) -> Texture {
 	w, h, channels: i32
 	pixels := stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
 	defer stbi.image_free(pixels)
 	if pixels == nil do return {}
 
-	return texture_load_raw((cast([^]Color)pixels)[:w*h], int(w), int(h), mipmaps)
+	return texture_load_raw((cast([^]Color)pixels)[:w*h], int(w), int(h))
 }
 
-texture_load_raw :: proc(pixels: []Color, w, h: int, mipmaps: bool = false) -> Texture {
+texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 	size := vk.DeviceSize(w * h * 4)
 
 	staging_buffer: vk.Buffer
@@ -860,7 +860,7 @@ texture_load_raw :: proc(pixels: []Color, w, h: int, mipmaps: bool = false) -> T
 	return Texture{ index = int(idx), size = {w, h} }
 }
 
-texture_update_raw :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
+texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	if tex.index < 0 || tex.index >= MAX_TEXTURES do return
 	internal_tex := &textures[tex.index]
 

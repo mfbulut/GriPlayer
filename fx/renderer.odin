@@ -64,7 +64,7 @@ renderer_init :: proc() {
 		panic("[ERROR] Failed to parse MSDF JSON")
 	}
 
-	font.atlas = texture_load(#load("../assets/Inter.png"), false)
+	font.atlas = texture_load(#load("../assets/Inter.png"))
 	font.metrics = msdf_data.metrics
 
 	for glyph in msdf_data.glyphs {
