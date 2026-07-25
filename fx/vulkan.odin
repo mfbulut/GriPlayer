@@ -8,7 +8,7 @@ import "base:runtime"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
-MAX_TEXTURES :: 1024
+MAX_TEXTURES :: 256
 MAX_INSTANCES :: 1024 * 16
 
 vks: struct {
@@ -50,7 +50,7 @@ textures: [MAX_TEXTURES]struct {
 	used: bool,
 }
 
-textures_to_free: [dynamic]int
+textures_to_free: [dynamic; MAX_TEXTURES]int
 
 check_vk :: proc(result: vk.Result) {
 	if result != .SUCCESS {
@@ -343,13 +343,8 @@ vk_init :: proc() {
 
 init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 	desc_layout := desc_layout
-	vert_spv_raw := #load("shader/shader.vert.spv")
-	frag_spv_raw := #load("shader/shader.frag.spv")
-	vert_spv := make([]u8, len(vert_spv_raw))
-	frag_spv := make([]u8, len(frag_spv_raw))
-	defer { delete(vert_spv); delete(frag_spv) }
-	mem.copy(raw_data(vert_spv), raw_data(vert_spv_raw), len(vert_spv_raw))
-	mem.copy(raw_data(frag_spv), raw_data(frag_spv_raw), len(frag_spv_raw))
+	vert_spv := #load("shader/shader.vert.spv", []u32)
+	frag_spv := #load("shader/shader.frag.spv", []u32)
 
 	push_constant_range := vk.PushConstantRange {
 		stageFlags = {.VERTEX},
@@ -364,6 +359,7 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 		pushConstantRangeCount = 1,
 		pPushConstantRanges = &push_constant_range,
 	}
+
 	check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
 
 	vert_create_info := vk.ShaderCreateInfoEXT {
@@ -372,7 +368,7 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 		stage = {.VERTEX},
 		nextStage = {.FRAGMENT},
 		codeType = .SPIRV,
-		codeSize = len(vert_spv),
+		codeSize = len(vert_spv) * 4,
 		pCode = raw_data(vert_spv),
 		pName = "main",
 		setLayoutCount = 1,
@@ -386,7 +382,7 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 		flags = {.LINK_STAGE},
 		stage = {.FRAGMENT},
 		codeType = .SPIRV,
-		codeSize = len(frag_spv),
+		codeSize = len(frag_spv) * 4,
 		pCode = raw_data(frag_spv),
 		pName = "main",
 		setLayoutCount = 1,
@@ -623,7 +619,7 @@ vk_end_frame :: proc() {
 		sType = .IMAGE_MEMORY_BARRIER_2,
 		srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
 		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		dstStageMask = {.BOTTOM_OF_PIPE},
+		dstStageMask = {.ALL_COMMANDS},
 		dstAccessMask = {},
 		oldLayout = .COLOR_ATTACHMENT_OPTIMAL,
 		newLayout = .PRESENT_SRC_KHR,
@@ -710,11 +706,47 @@ create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, propertie
 	vk.BindBufferMemory(vks.device, buffer^, buffer_memory^, 0)
 }
 
+@(deferred_out=vk_cmd_end)
+vk_cmd_begin :: proc() -> vk.CommandBuffer {
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+		level = .PRIMARY,
+		commandPool = vks.command_pool,
+		commandBufferCount = 1,
+	}
+
+	cmd: vk.CommandBuffer
+	check_vk(vk.AllocateCommandBuffers(vks.device, &alloc_info, &cmd))
+
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+	check_vk(vk.BeginCommandBuffer(cmd, &begin_info))
+
+	return cmd
+}
+
+vk_cmd_end :: proc(cmd: vk.CommandBuffer) {
+	cmd := cmd
+	check_vk(vk.EndCommandBuffer(cmd))
+
+	submit_info := vk.SubmitInfo {
+		sType = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers = &cmd,
+	}
+	check_vk(vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, 0))
+	vk.QueueWaitIdle(vks.graphics_queue)
+
+	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
+}
+
 texture_load :: proc(data: []u8) -> Texture {
 	w, h, channels: i32
 	pixels := stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
 	defer stbi.image_free(pixels)
-	if pixels == nil do return {}
+	if pixels == nil do return {index = -1}
 
 	return texture_load_raw((cast([^]Color)pixels)[:w*h], int(w), int(h))
 }
@@ -770,64 +802,42 @@ texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 	check_vk(vk.AllocateMemory(vks.device, &alloc_info, nil, &tex.memory))
 	vk.BindImageMemory(vks.device, tex.image, tex.memory, 0)
 
-	// Execute copy
-	alloc_cmd_info := vk.CommandBufferAllocateInfo {
-		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-		level = .PRIMARY,
-		commandPool = vks.command_pool,
-		commandBufferCount = 1,
+	if cmd := vk_cmd_begin(); cmd != nil {
+		barrier := vk.ImageMemoryBarrier2 {
+			sType = .IMAGE_MEMORY_BARRIER_2,
+			srcStageMask = {.TOP_OF_PIPE},
+			srcAccessMask = {},
+			dstStageMask = {.TRANSFER},
+			dstAccessMask = {.TRANSFER_WRITE},
+			oldLayout = .UNDEFINED,
+			newLayout = .TRANSFER_DST_OPTIMAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = tex.image,
+			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
+		}
+		dep_info := vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &barrier,
+		}
+		vk.CmdPipelineBarrier2(cmd, &dep_info)
+
+		region := vk.BufferImageCopy {
+			imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
+			imageExtent = { u32(w), u32(h), 1 },
+		}
+		vk.CmdCopyBufferToImage(cmd, staging_buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
+
+		barrier.oldLayout = .TRANSFER_DST_OPTIMAL
+		barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
+		barrier.srcStageMask = {.TRANSFER}
+		barrier.srcAccessMask = {.TRANSFER_WRITE}
+		barrier.dstStageMask = {.FRAGMENT_SHADER}
+		barrier.dstAccessMask = {.SHADER_READ}
+		vk.CmdPipelineBarrier2(cmd, &dep_info)
 	}
-	cmd: vk.CommandBuffer
-	vk.AllocateCommandBuffers(vks.device, &alloc_cmd_info, &cmd)
 
-	begin_info := vk.CommandBufferBeginInfo { sType = .COMMAND_BUFFER_BEGIN_INFO, flags = {.ONE_TIME_SUBMIT} }
-	vk.BeginCommandBuffer(cmd, &begin_info)
-
-	barrier := vk.ImageMemoryBarrier2 {
-		sType = .IMAGE_MEMORY_BARRIER_2,
-		srcStageMask = {.TOP_OF_PIPE},
-		srcAccessMask = {},
-		dstStageMask = {.TRANSFER},
-		dstAccessMask = {.TRANSFER_WRITE},
-		oldLayout = .UNDEFINED,
-		newLayout = .TRANSFER_DST_OPTIMAL,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = tex.image,
-		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
-	}
-	dep_info := vk.DependencyInfo {
-		sType = .DEPENDENCY_INFO,
-		imageMemoryBarrierCount = 1,
-		pImageMemoryBarriers = &barrier,
-	}
-	vk.CmdPipelineBarrier2(cmd, &dep_info)
-
-	region := vk.BufferImageCopy {
-		imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
-		imageExtent = { u32(w), u32(h), 1 },
-	}
-	vk.CmdCopyBufferToImage(cmd, staging_buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
-
-	barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-	barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
-	barrier.srcStageMask = {.TRANSFER}
-	barrier.srcAccessMask = {.TRANSFER_WRITE}
-	barrier.dstStageMask = {.FRAGMENT_SHADER}
-	barrier.dstAccessMask = {.SHADER_READ}
-	vk.CmdPipelineBarrier2(cmd, &dep_info)
-
-	vk.EndCommandBuffer(cmd)
-
-	submit_info := vk.SubmitInfo {
-		sType = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers = &cmd,
-	}
-	vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, 0)
-	vk.QueueWaitIdle(vks.graphics_queue)
-
-	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 	vk.DestroyBuffer(vks.device, staging_buffer, nil)
 	vk.FreeMemory(vks.device, staging_buffer_memory, nil)
 
@@ -875,64 +885,43 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	mem.copy(data, raw_data(pixels), int(size))
 	vk.UnmapMemory(vks.device, staging_buffer_memory)
 
-	alloc_cmd_info := vk.CommandBufferAllocateInfo {
-		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-		level = .PRIMARY,
-		commandPool = vks.command_pool,
-		commandBufferCount = 1,
+	if cmd := vk_cmd_begin(); cmd != nil {
+		barrier := vk.ImageMemoryBarrier2 {
+			sType = .IMAGE_MEMORY_BARRIER_2,
+			srcStageMask = {.TOP_OF_PIPE},
+			srcAccessMask = {},
+			dstStageMask = {.TRANSFER},
+			dstAccessMask = {.TRANSFER_WRITE},
+			oldLayout = .SHADER_READ_ONLY_OPTIMAL,
+			newLayout = .TRANSFER_DST_OPTIMAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = internal_tex.image,
+			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
+		}
+		dep_info := vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &barrier,
+		}
+		vk.CmdPipelineBarrier2(cmd, &dep_info)
+
+		region := vk.BufferImageCopy {
+			imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
+			imageOffset = { i32(x), i32(y), 0 },
+			imageExtent = { u32(w), u32(h), 1 },
+		}
+		vk.CmdCopyBufferToImage(cmd, staging_buffer, internal_tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
+
+		barrier.oldLayout = .TRANSFER_DST_OPTIMAL
+		barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
+		barrier.srcStageMask = {.TRANSFER}
+		barrier.srcAccessMask = {.TRANSFER_WRITE}
+		barrier.dstStageMask = {.FRAGMENT_SHADER}
+		barrier.dstAccessMask = {.SHADER_READ}
+		vk.CmdPipelineBarrier2(cmd, &dep_info)
 	}
-	cmd: vk.CommandBuffer
-	vk.AllocateCommandBuffers(vks.device, &alloc_cmd_info, &cmd)
 
-	begin_info := vk.CommandBufferBeginInfo { sType = .COMMAND_BUFFER_BEGIN_INFO, flags = {.ONE_TIME_SUBMIT} }
-	vk.BeginCommandBuffer(cmd, &begin_info)
-
-	barrier := vk.ImageMemoryBarrier2 {
-		sType = .IMAGE_MEMORY_BARRIER_2,
-		srcStageMask = {.TOP_OF_PIPE},
-		srcAccessMask = {},
-		dstStageMask = {.TRANSFER},
-		dstAccessMask = {.TRANSFER_WRITE},
-		oldLayout = .SHADER_READ_ONLY_OPTIMAL,
-		newLayout = .TRANSFER_DST_OPTIMAL,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = internal_tex.image,
-		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
-	}
-	dep_info := vk.DependencyInfo {
-		sType = .DEPENDENCY_INFO,
-		imageMemoryBarrierCount = 1,
-		pImageMemoryBarriers = &barrier,
-	}
-	vk.CmdPipelineBarrier2(cmd, &dep_info)
-
-	region := vk.BufferImageCopy {
-		imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
-		imageOffset = { i32(x), i32(y), 0 },
-		imageExtent = { u32(w), u32(h), 1 },
-	}
-	vk.CmdCopyBufferToImage(cmd, staging_buffer, internal_tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
-
-	barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-	barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
-	barrier.srcStageMask = {.TRANSFER}
-	barrier.srcAccessMask = {.TRANSFER_WRITE}
-	barrier.dstStageMask = {.FRAGMENT_SHADER}
-	barrier.dstAccessMask = {.SHADER_READ}
-	vk.CmdPipelineBarrier2(cmd, &dep_info)
-
-	vk.EndCommandBuffer(cmd)
-
-	submit_info := vk.SubmitInfo {
-		sType = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers = &cmd,
-	}
-	vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, 0)
-	vk.QueueWaitIdle(vks.graphics_queue)
-
-	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 	vk.DestroyBuffer(vks.device, staging_buffer, nil)
 	vk.FreeMemory(vks.device, staging_buffer_memory, nil)
 }
