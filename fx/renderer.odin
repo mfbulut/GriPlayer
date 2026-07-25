@@ -30,8 +30,6 @@ Font :: struct {
 	glyphs:  map[rune]Glyph,
 }
 
-font: Font
-
 MSDF_Metrics :: struct {
 	emSize:             f32,
 	lineHeight:         f32,
@@ -57,6 +55,9 @@ MSDF_File :: struct {
 	glyphs:  []MSDF_Glyph,
 }
 
+font: Font
+instances: [dynamic; MAX_INSTANCES]Instance
+
 renderer_init :: proc() {
 	msdf_data: MSDF_File
 	if err := json.unmarshal(#load("../assets/Inter.json"), &msdf_data, allocator = context.temp_allocator); err != nil {
@@ -74,8 +75,6 @@ renderer_init :: proc() {
 		}
 	}
 }
-
-instances: [dynamic; MAX_INSTANCES]Instance
 
 clear_window :: proc(color: Color) {
 	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() do return
