@@ -2,7 +2,6 @@
 
 layout(push_constant) uniform PushConstants {
     vec2 screen_size;
-    uint instance_offset;
 };
 
 struct Instance {
@@ -37,7 +36,7 @@ vec4 unpack_color(uint packed) {
 }
 
 void main() {
-    Instance inst = instances[gl_InstanceIndex + instance_offset];
+    Instance inst = instances[gl_InstanceIndex];
     uint vid = gl_VertexIndex & 3u;
 
     // Corner: 0=TL, 1=TR, 2=BL, 3=BR

@@ -10,7 +10,6 @@ import stbi "vendor:stb/image"
 
 MAX_TEXTURES :: 1024
 MAX_INSTANCES :: 1024 * 16
-FRAMES_IN_FLIGHT :: 2
 
 vks: struct {
 	physical_device: vk.PhysicalDevice,
@@ -25,12 +24,10 @@ vks: struct {
 	swapchain_image_views: []vk.ImageView,
 
 	command_pool: vk.CommandPool,
-	command_buffers: [FRAMES_IN_FLIGHT]vk.CommandBuffer,
-	image_available_semaphores: [FRAMES_IN_FLIGHT]vk.Semaphore,
-	render_finished_semaphores: [FRAMES_IN_FLIGHT]vk.Semaphore,
-	in_flight_fences: [FRAMES_IN_FLIGHT]vk.Fence,
-	current_frame: int,
-	clear_color: [4]f32,
+	command_buffer: vk.CommandBuffer,
+	image_available_semaphore: vk.Semaphore,
+	render_finished_semaphores: []vk.Semaphore,
+	in_flight_fence: vk.Fence,
 
 	pipeline_layout: vk.PipelineLayout,
 	vert_shader: vk.ShaderEXT,
@@ -39,6 +36,7 @@ vks: struct {
 	descriptor_set: vk.DescriptorSet,
 	instance_buffer_mapped: rawptr,
 	
+	clear_color: [4]f32,
 	sampler: vk.Sampler,
 	instance_count: u32,
 	image_index: u32,
@@ -234,21 +232,17 @@ vk_init :: proc() {
 		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
 		commandPool = vks.command_pool,
 		level = .PRIMARY,
-		commandBufferCount = FRAMES_IN_FLIGHT,
+		commandBufferCount = 1,
 	}
-	check_vk(vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffers[0]))
-
-	for i in 0..<FRAMES_IN_FLIGHT {
-		check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.image_available_semaphores[i]))
-		check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.render_finished_semaphores[i]))
-		check_vk(vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fences[i]))
-	}
+	check_vk(vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffer))
+	check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.image_available_semaphore))
+	check_vk(vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fence))
 
 	// Instance Buffer
 	instance_buffer: vk.Buffer
 	instance_buffer_memory: vk.DeviceMemory
 	create_buffer(
-		vk.DeviceSize(FRAMES_IN_FLIGHT * MAX_INSTANCES * size_of(Instance)),
+		vk.DeviceSize(MAX_INSTANCES * size_of(Instance)),
 		{.STORAGE_BUFFER},
 		{.HOST_VISIBLE, .HOST_COHERENT},
 		&instance_buffer,
@@ -359,7 +353,7 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 	push_constant_range := vk.PushConstantRange {
 		stageFlags = {.VERTEX},
 		offset = 0,
-		size = 16,
+		size = size_of([2]f32),
 	}
 
 	pipeline_layout_info := vk.PipelineLayoutCreateInfo {
@@ -416,8 +410,12 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 		for view in vks.swapchain_image_views {
 			vk.DestroyImageView(vks.device, view, nil)
 		}
+		for semaphore in vks.render_finished_semaphores {
+			vk.DestroySemaphore(vks.device, semaphore, nil)
+		}
 		delete(vks.swapchain_images)
 		delete(vks.swapchain_image_views)
+		delete(vks.render_finished_semaphores)
 	}
 
 	capabilities: vk.SurfaceCapabilitiesKHR
@@ -462,6 +460,8 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0])
 
 	vks.swapchain_image_views = make([]vk.ImageView, image_count)
+	vks.render_finished_semaphores = make([]vk.Semaphore, image_count)
+	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
 	for i in 0..<image_count {
 		view_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
@@ -471,24 +471,25 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 		}
 		vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain_image_views[i])
+		check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.render_finished_semaphores[i]))
 	}
 }
 
 vk_begin_frame :: proc() -> bool {
-	vk.WaitForFences(vks.device, 1, &vks.in_flight_fences[vks.current_frame], true, max(u64))
+	vk.WaitForFences(vks.device, 1, &vks.in_flight_fence, true, max(u64))
 
 	res := vk.AcquireNextImageKHR(
 		vks.device, vks.swapchain, max(u64),
-		vks.image_available_semaphores[vks.current_frame],
+		vks.image_available_semaphore,
 		0, &vks.image_index,
 	)
 	if res == .ERROR_OUT_OF_DATE_KHR {
 		return false
 	}
 
-	vk.ResetFences(vks.device, 1, &vks.in_flight_fences[vks.current_frame])
+	vk.ResetFences(vks.device, 1, &vks.in_flight_fence)
 
-	cmd := vks.command_buffers[vks.current_frame]
+	cmd := vks.command_buffer
 	vk.ResetCommandBuffer(cmd, {})
 	vks.instance_count = 0
 
@@ -579,15 +580,11 @@ vk_begin_frame :: proc() -> bool {
 	}
 	vk.CmdSetViewportWithCount(cmd, 1, &viewport)
 
-	push := struct {
-		screen_size: [2]f32,
-		instance_offset: u32,
-		pad: u32,
-	} {
-		screen_size = {f32(vks.swapchain_extent.width), f32(vks.swapchain_extent.height)},
-		instance_offset = u32(vks.current_frame * MAX_INSTANCES),
+	screen_size := [2]f32 {
+		f32(vks.swapchain_extent.width),
+		f32(vks.swapchain_extent.height),
 	}
-	vk.CmdPushConstants(cmd, vks.pipeline_layout, {.VERTEX}, 0, size_of(push), &push)
+	vk.CmdPushConstants(cmd, vks.pipeline_layout, {.VERTEX}, 0, size_of(screen_size), &screen_size)
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
 
 	return true
@@ -600,11 +597,11 @@ vk_draw_instances :: proc(instances: []Instance, scissor: [4]i32) {
 		panic("Instance buffer overflow")
 	}
 
-	offset := uintptr(u32(vks.current_frame) * MAX_INSTANCES + vks.instance_count) * size_of(Instance)
+	offset := uintptr(vks.instance_count) * size_of(Instance)
 	dst := cast(rawptr)(uintptr(vks.instance_buffer_mapped) + offset)
 	mem.copy(dst, raw_data(instances), len(instances) * size_of(Instance))
 
-	cmd := vks.command_buffers[vks.current_frame]
+	cmd := vks.command_buffer
 
 	rect := vk.Rect2D {
 		offset = {scissor[0], scissor[1]},
@@ -618,7 +615,7 @@ vk_draw_instances :: proc(instances: []Instance, scissor: [4]i32) {
 }
 
 vk_end_frame :: proc() {
-	cmd := vks.command_buffers[vks.current_frame]
+	cmd := vks.command_buffer
 	vk.CmdEndRendering(cmd)
 
 	barrier := vk.ImageMemoryBarrier2 {
@@ -641,29 +638,28 @@ vk_end_frame :: proc() {
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 	vk.EndCommandBuffer(cmd)
 
+	render_finished_semaphore := &vks.render_finished_semaphores[vks.image_index]
 	submit_info := vk.SubmitInfo {
 		sType = .SUBMIT_INFO,
 		waitSemaphoreCount = 1,
-		pWaitSemaphores = &vks.image_available_semaphores[vks.current_frame],
+		pWaitSemaphores = &vks.image_available_semaphore,
 		pWaitDstStageMask = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 		commandBufferCount = 1,
 		pCommandBuffers = &cmd,
 		signalSemaphoreCount = 1,
-		pSignalSemaphores = &vks.render_finished_semaphores[vks.current_frame],
+		pSignalSemaphores = render_finished_semaphore,
 	}
-	vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, vks.in_flight_fences[vks.current_frame])
+	vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,
 		waitSemaphoreCount = 1,
-		pWaitSemaphores = &vks.render_finished_semaphores[vks.current_frame],
+		pWaitSemaphores = render_finished_semaphore,
 		swapchainCount = 1,
 		pSwapchains = &vks.swapchain,
 		pImageIndices = &vks.image_index,
 	}
 	vk.QueuePresentKHR(vks.graphics_queue, &present_info)
-
-	vks.current_frame = (vks.current_frame + 1) % FRAMES_IN_FLIGHT
 }
 
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
@@ -865,7 +861,6 @@ texture_update_raw :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	mem.copy(data, raw_data(pixels), int(size))
 	vk.UnmapMemory(vks.device, staging_buffer_memory)
 
-	// Execute copy
 	alloc_cmd_info := vk.CommandBufferAllocateInfo {
 		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
 		level = .PRIMARY,

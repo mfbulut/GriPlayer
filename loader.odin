@@ -118,6 +118,7 @@ loader_start :: proc() {
 			   extension != ".flac" && extension != ".wav" {
 				continue
 			}
+
 			music := load_music(info.fullpath)
 			sync.lock(&loader_mutex)
 			append(&loader_queue, music)
@@ -163,6 +164,7 @@ loader_poll :: proc() {
 				atlas_cursor_y += THUMBNAIL_SIZE
 			}
 		}
+
 		if music.liked {
 			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
