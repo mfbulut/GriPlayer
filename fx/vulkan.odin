@@ -14,12 +14,11 @@ MAX_INSTANCES :: 1024 * 16
 vks: struct {
 	physical_device: vk.PhysicalDevice,
 	device: vk.Device,
-	gpu_queue: vk.Queue,
+	device_queue: vk.Queue,
 
 	surface: vk.SurfaceKHR,
 	swapchain: vk.SwapchainKHR,
 	swapchain_format: vk.Format,
-	swapchain_extent: vk.Extent2D,
 	swapchain_images: []vk.Image,
 	swapchain_image_views: []vk.ImageView,
 	image_index: u32,
@@ -168,10 +167,10 @@ vk_init :: proc() {
 	defer delete(queue_families)
 	vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, &queue_families[0])
 
-	graphics_family: u32
-	for i in 0..<queue_count {
-		if .GRAPHICS in queue_families[i].queueFlags {
-			graphics_family = i
+	queue_family_index: u32
+	for queue_family, i in queue_families {
+		if .GRAPHICS in queue_family.queueFlags {
+			queue_family_index = u32(i)
 			break
 		}
 	}
@@ -180,7 +179,7 @@ vk_init :: proc() {
 	queue_priority := f32(1.0)
 	queue_create_info := vk.DeviceQueueCreateInfo {
 		sType = .DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = graphics_family,
+		queueFamilyIndex = queue_family_index,
 		queueCount = 1,
 		pQueuePriorities = &queue_priority,
 	}
@@ -189,8 +188,6 @@ vk_init :: proc() {
 		vk.KHR_SWAPCHAIN_EXTENSION_NAME,
 		vk.EXT_SHADER_OBJECT_EXTENSION_NAME,
 	}
-
-	features := vk.PhysicalDeviceFeatures {}
 
 	shader_object_features := vk.PhysicalDeviceShaderObjectFeaturesEXT {
 		sType = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
@@ -221,19 +218,18 @@ vk_init :: proc() {
 		pQueueCreateInfos = &queue_create_info,
 		enabledExtensionCount = len(device_extensions),
 		ppEnabledExtensionNames = &device_extensions[0],
-		pEnabledFeatures = &features,
 	}
 
 	check_vk(vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device))
 	vk.load_proc_addresses_device(vks.device)
 
-	vk.GetDeviceQueue(vks.device, graphics_family, 0, &vks.gpu_queue)
+	vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.device_queue)
 
 	// Command Pool
 	pool_info := vk.CommandPoolCreateInfo {
 		sType = .COMMAND_POOL_CREATE_INFO,
 		flags = {.RESET_COMMAND_BUFFER},
-		queueFamilyIndex = graphics_family,
+		queueFamilyIndex = queue_family_index,
 	}
 	check_vk(vk.CreateCommandPool(vks.device, &pool_info, nil, &vks.command_pool))
 
@@ -407,7 +403,7 @@ init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
 	vks.frag_shader = shaders[1]
 }
 
-vk_recreate_swapchain :: proc(w, h: u32) {
+vk_recreate_swapchain :: proc() {
 	check_vk(vk.DeviceWaitIdle(vks.device))
 
 	if vks.swapchain != 0 {
@@ -432,7 +428,6 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, &formats[0]))
 
 	vks.swapchain_format = formats[0].format
-	vks.swapchain_extent = {w, h}
 
 	create_info := vk.SwapchainCreateInfoKHR {
 		sType = .SWAPCHAIN_CREATE_INFO_KHR,
@@ -440,7 +435,7 @@ vk_recreate_swapchain :: proc(w, h: u32) {
 		minImageCount = max(capabilities.minImageCount, 2),
 		imageFormat = vks.swapchain_format,
 		imageColorSpace = formats[0].colorSpace,
-		imageExtent = vks.swapchain_extent,
+		imageExtent = {window.size.x, window.size.y},
 		imageArrayLayers = 1,
 		imageUsage = {.COLOR_ATTACHMENT},
 		imageSharingMode = .EXCLUSIVE,
@@ -521,7 +516,7 @@ vk_begin_frame :: proc() -> bool {
 
 	rendering_info := vk.RenderingInfo {
 		sType = .RENDERING_INFO,
-		renderArea = { extent = vks.swapchain_extent },
+		renderArea = { extent = {window.size.x, window.size.y} },
 		layerCount = 1,
 		colorAttachmentCount = 1,
 		pColorAttachments = &color_attachment,
@@ -534,8 +529,8 @@ vk_begin_frame :: proc() -> bool {
 	vk.CmdBindShadersEXT(cmd, 2, &stages[0], &shaders[0])
 
 	viewport := vk.Viewport {
-		width = f32(vks.swapchain_extent.width),
-		height = f32(vks.swapchain_extent.height),
+		width = f32(window.size.x),
+		height = f32(window.size.y),
 		minDepth = 0.0, maxDepth = 1.0,
 	}
 	vk.CmdSetViewportWithCount(cmd, 1, &viewport)
@@ -574,8 +569,8 @@ vk_begin_frame :: proc() -> bool {
 	vk.CmdSetColorWriteMaskEXT(cmd, 0, 1, &color_write_mask[0])
 
 	screen_size := [2]f32 {
-		f32(vks.swapchain_extent.width),
-		f32(vks.swapchain_extent.height),
+		f32(window.size.x),
+		f32(window.size.y),
 	}
 	vk.CmdPushConstants(cmd, vks.pipeline_layout, {.VERTEX}, 0, size_of(screen_size), &screen_size)
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
@@ -643,7 +638,7 @@ vk_end_frame :: proc() {
 		signalSemaphoreInfoCount = 1,
 		pSignalSemaphoreInfos = &signal_info,
 	}
-	check_vk(vk.QueueSubmit2(vks.gpu_queue, 1, &submit_info, vks.in_flight_fence))
+	check_vk(vk.QueueSubmit2(vks.device_queue, 1, &submit_info, vks.in_flight_fence))
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,
@@ -653,7 +648,7 @@ vk_end_frame :: proc() {
 		pSwapchains = &vks.swapchain,
 		pImageIndices = &vks.image_index,
 	}
-	vk.QueuePresentKHR(vks.gpu_queue, &present_info)
+	vk.QueuePresentKHR(vks.device_queue, &present_info)
 }
 
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
@@ -751,8 +746,8 @@ vk_cmd_end :: proc(cmd: vk.CommandBuffer) {
 		commandBufferInfoCount = 1,
 		pCommandBufferInfos = &cmd_info,
 	}
-	check_vk(vk.QueueSubmit2(vks.gpu_queue, 1, &submit_info, 0))
-	check_vk(vk.QueueWaitIdle(vks.gpu_queue))
+	check_vk(vk.QueueSubmit2(vks.device_queue, 1, &submit_info, 0))
+	check_vk(vk.QueueWaitIdle(vks.device_queue))
 
 	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 }

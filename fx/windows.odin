@@ -18,7 +18,7 @@ Key_States :: [256]bit_set[Key_State]
 
 window: struct {
 	hwnd:           win.HWND,
-	size:           [2]i32,
+	size:           [2]u32,
 	is_resized:     bool,
 	should_close:   bool,
 	key_state:      Key_States,
@@ -31,7 +31,7 @@ window: struct {
 	frame_callback: proc(),
 }
 
-init :: proc(title: string, size := [2]i32{1280, 720}) {
+init :: proc(title: string, size := [2]u32{1280, 720}) {
 	win.SetProcessDPIAware()
 
 	hInstance := cast(win.HINSTANCE)win.GetModuleHandleW(nil)
@@ -48,8 +48,8 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	win.RegisterClassW(&wndclass)
 
 	window_rect: win.RECT = {
-		right  = size.x,
-		bottom = size.y,
+		right  = i32(size.x),
+		bottom = i32(size.y),
 	}
 
 	dw_style := win.WS_OVERLAPPEDWINDOW | win.WS_CLIPCHILDREN
@@ -81,6 +81,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 
 	window.prev_time = time.now()
 	window.mouse_pos = {-1, -1}
+	window.size = size
 
 	value := win.TRUE
 	win.DwmSetWindowAttribute(window.hwnd, u32(win.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE), &value, size_of(value))
@@ -169,7 +170,7 @@ update :: proc(poll_msg := true) -> bool {
 
 	if window.size.x > 0 && window.size.y > 0 && !window_is_minimized() {
 		if window.is_resized {
-			vk_recreate_swapchain(u32(window.size.x), u32(window.size.y))
+			vk_recreate_swapchain()
 			window.is_resized = false
 		}
 		vk_begin_frame()
@@ -236,8 +237,8 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		}
 
 	case win.WM_SIZE:
-		window.size.x = cast(i32)win.LOWORD(lparam)
-		window.size.y = cast(i32)win.HIWORD(lparam)
+		window.size.x = cast(u32)win.LOWORD(lparam)
+		window.size.y = cast(u32)win.HIWORD(lparam)
 		window.is_resized = true
 	case win.WM_SETFOCUS:
 	case win.WM_KILLFOCUS:
@@ -273,7 +274,7 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		x := win.GET_X_LPARAM(lparam)
 		y := win.GET_Y_LPARAM(lparam)
 		window.mouse_pos = {f32(x), f32(y)} / dpi_scale()
-		inside := x >= 0 && y >= 0 && x < window.size.x && y < window.size.y
+		inside := x >= 0 && y >= 0 && x < i32(window.size.x) && y < i32(window.size.y)
 		if inside && !window.mouse_inside {
 			window.mouse_inside = true
 			track := win.TRACKMOUSEEVENT{
