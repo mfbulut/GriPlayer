@@ -22,6 +22,7 @@ vks: struct {
 	swapchain_extent: vk.Extent2D,
 	swapchain_images: []vk.Image,
 	swapchain_image_views: []vk.ImageView,
+	image_index: u32,
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
@@ -32,14 +33,14 @@ vks: struct {
 	pipeline_layout: vk.PipelineLayout,
 	vert_shader: vk.ShaderEXT,
 	frag_shader: vk.ShaderEXT,
+	sampler: vk.Sampler,
 
 	descriptor_set: vk.DescriptorSet,
 	instance_buffer_mapped: rawptr,
 	
+	scissor: [4]i32,
 	clear_color: [4]f32,
-	sampler: vk.Sampler,
 	instance_count: u32,
-	image_index: u32,
 }
 
 textures: [MAX_TEXTURES]struct {
@@ -590,7 +591,7 @@ vk_begin_frame :: proc() -> bool {
 	return true
 }
 
-vk_draw_instances :: proc(instances: []Instance, scissor: [4]i32) {
+vk_draw_instances :: proc(instances: []Instance) {
 	if len(instances) == 0 do return
 
 	if vks.instance_count + u32(len(instances)) > MAX_INSTANCES {
@@ -604,8 +605,8 @@ vk_draw_instances :: proc(instances: []Instance, scissor: [4]i32) {
 	cmd := vks.command_buffer
 
 	rect := vk.Rect2D {
-		offset = {scissor[0], scissor[1]},
-		extent = {u32(scissor[2]), u32(scissor[3])},
+		offset = {vks.scissor[0], vks.scissor[1]},
+		extent = {u32(vks.scissor[2]), u32(vks.scissor[3])},
 	}
 
 	vk.CmdSetScissorWithCount(cmd, 1, &rect)
@@ -639,17 +640,30 @@ vk_end_frame :: proc() {
 	vk.EndCommandBuffer(cmd)
 
 	render_finished_semaphore := &vks.render_finished_semaphores[vks.image_index]
-	submit_info := vk.SubmitInfo {
-		sType = .SUBMIT_INFO,
-		waitSemaphoreCount = 1,
-		pWaitSemaphores = &vks.image_available_semaphore,
-		pWaitDstStageMask = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
-		commandBufferCount = 1,
-		pCommandBuffers = &cmd,
-		signalSemaphoreCount = 1,
-		pSignalSemaphores = render_finished_semaphore,
+	cmd_info := vk.CommandBufferSubmitInfo {
+		sType = .COMMAND_BUFFER_SUBMIT_INFO,
+		commandBuffer = cmd,
 	}
-	vk.QueueSubmit(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
+	wait_info := vk.SemaphoreSubmitInfo {
+		sType = .SEMAPHORE_SUBMIT_INFO,
+		semaphore = vks.image_available_semaphore,
+		stageMask = {.COLOR_ATTACHMENT_OUTPUT},
+	}
+	signal_info := vk.SemaphoreSubmitInfo {
+		sType = .SEMAPHORE_SUBMIT_INFO,
+		semaphore = render_finished_semaphore^,
+		stageMask = {.COLOR_ATTACHMENT_OUTPUT},
+	}
+	submit_info := vk.SubmitInfo2 {
+		sType = .SUBMIT_INFO_2,
+		waitSemaphoreInfoCount = 1,
+		pWaitSemaphoreInfos = &wait_info,
+		commandBufferInfoCount = 1,
+		pCommandBufferInfos = &cmd_info,
+		signalSemaphoreInfoCount = 1,
+		pSignalSemaphoreInfos = &signal_info,
+	}
+	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,

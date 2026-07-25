@@ -7,9 +7,8 @@ layout(push_constant) uniform PushConstants {
 struct Instance {
     vec4 dst;        // x0, y0, x1, y1 in pixels
     vec4 src;        // u0, v0, u1, v1 in UV
-    uvec4 colors;    // 4 packed RGBA colors (TL, TR, BL, BR)
+    uvec4 colors;    // TL, TR, BL, BR
     float radius;
-    float _pad0;
     uint kind;
     uint tex_idx;
 };

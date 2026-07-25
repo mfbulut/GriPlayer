@@ -182,7 +182,7 @@ update :: proc(poll_msg := true) -> bool {
 
 present :: proc(sync := u32(1)) {
 	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
-		clear(&batch.instances)
+		clear(&instances)
 		return
 	}
 	flush()

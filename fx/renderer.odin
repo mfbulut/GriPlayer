@@ -7,12 +7,11 @@ Texture :: struct {
 	size:   [2]int,
 }
 
-Instance :: struct {
+Instance :: struct #align(16) {
 	dest:   Rect,      // x0, y0, x1, y1
 	src:    Rect,      // u0, v0, u1, v1
 	color:  [4]Color,  // TL, TR, BL, BR
 	radius: f32,
-	_pad:   f32,
 	kind:   enum u32 { Rect, Texture, Text },
 	tex_idx: u32,
 }
@@ -76,10 +75,7 @@ renderer_init :: proc() {
 	}
 }
 
-batch: struct {
-	instances: [dynamic; MAX_INSTANCES]Instance,
-	scissor:   [4]i32,
-}
+instances: [dynamic; MAX_INSTANCES]Instance
 
 clear_window :: proc(color: Color) {
 	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() do return
@@ -87,13 +83,16 @@ clear_window :: proc(color: Color) {
 }
 
 set_scissor :: proc(rect: Rect) {
-	flush()
 	scale := dpi_scale()
-	batch.scissor = {
+	new_scissor := [4]i32 {
 		cast(i32)(rect.x * scale),
 		cast(i32)(rect.y * scale),
 		cast(i32)(rect.w * scale),
 		cast(i32)(rect.h * scale),
+	}
+	if new_scissor != vks.scissor {
+		flush()
+		vks.scissor = new_scissor
 	}
 }
 
@@ -102,21 +101,14 @@ reset_scissor :: proc() {
 	set_scissor({0, 0, ws.x, ws.y})
 }
 
-add_instance :: proc(inst: Instance) {
-	if len(batch.instances) >= MAX_INSTANCES {
-		flush()
-	}
-	append(&batch.instances, inst)
-}
-
 flush :: proc() {
-	if len(batch.instances) == 0 do return
-	vk_draw_instances(batch.instances[:], batch.scissor)
-	clear(&batch.instances)
+	if len(instances) == 0 do return
+	vk_draw_instances(instances[:])
+	clear(&instances)
 }
 
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
-	add_instance(
+	append(&instances,
 		Instance{
 			dest   = {r.x, r.y, r.x + r.w, r.y + r.h},
 			src    = {},
@@ -149,7 +141,7 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Col
 		(src.y + src.h) / th,
 	}
 
-	add_instance(
+	append(&instances,
 		Instance{
 			src     = src_uv,
 			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
@@ -208,7 +200,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 			1 - (glyph.atlasBounds.bottom / atlas_h),
 		}
 
-		add_instance(
+		append(&instances,
 			Instance{
 				dest    = dest,
 				src     = src,
@@ -320,7 +312,7 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 			1 - (glyph.atlasBounds.bottom / atlas_h),
 		}
 
-		add_instance(
+		append(&instances,
 			Instance{
 				dest    = dest,
 				src     = src,
