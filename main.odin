@@ -66,8 +66,18 @@ frame :: proc() {
 			tabs := next()
 			fx.draw_rect(tabs, COLOR_SURFACE, 8)
 			if layout(tabs, .Row, {fr(), fr()}, pad = pad_all(4), gap = 6) {
-				if button(id("tab-library"), next(), "Library") do compact_tab = .Library
-				if button(id("tab-player"), next(), "Player") do compact_tab = .Player
+				lib_bounds := next()
+				play_bounds := next()
+				if button(id("tab-library"), lib_bounds, "Library", style = compact_tab == .Library ? BUTTON_STYLE : MENU_BUTTON_STYLE, font_size = 14) do compact_tab = .Library
+				if button(id("tab-player"), play_bounds, "Player", style = compact_tab == .Player ? BUTTON_STYLE : MENU_BUTTON_STYLE, font_size = 14) do compact_tab = .Player
+
+				bar_target_x := compact_tab == .Library ? lib_bounds.x : play_bounds.x
+				bar_target_w := compact_tab == .Library ? lib_bounds.w : play_bounds.w
+				
+				highlight_w := min(f32(60), bar_target_w)
+				highlight_x := bar_target_x + (bar_target_w - highlight_w) * 0.5
+
+				fx.draw_rect({highlight_x, lib_bounds.y + lib_bounds.h - 2, highlight_w, 2}, COLOR_ACCENT, 1)
 			}
 
 			draw_app(next())
