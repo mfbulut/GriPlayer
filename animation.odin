@@ -15,31 +15,15 @@ Animation :: struct {
 	target:       fx.Vec4,
 }
 
-animation_find :: proc(animation_id: ID) -> int {
-	for index in 0 ..< len(ui_ctx.animations) {
-		if ui_ctx.animations[index].id == animation_id {
-			return index
-		}
-	}
-	return -1
-}
+animations: map[ID]Animation
 
 animation_cancel :: proc(animation_id: ID) {
-	index := animation_find(animation_id)
-	if index < 0 {
-		return
-	}
-
-	last := pop(&ui_ctx.animations)
-	if index < len(ui_ctx.animations) {
-		ui_ctx.animations[index] = last
-	}
+	delete_key(&animations, animation_id)
 }
 
 animation_to :: proc(animation_id: ID, target: fx.Vec4, duration: f32, curve: easing.Ease) -> fx.Vec4 {
-	index := animation_find(animation_id)
-	if index < 0 {
-		append(&ui_ctx.animations, Animation{
+	if animation_id not_in animations {
+		animations[animation_id] = Animation{
 			id = animation_id,
 			last_touched = ui_ctx.frame,
 			progress = 1,
@@ -48,11 +32,11 @@ animation_to :: proc(animation_id: ID, target: fx.Vec4, duration: f32, curve: ea
 			initial = target,
 			current = target,
 			target = target,
-		})
+		}
 		return target
 	}
 
-	item := &ui_ctx.animations[index]
+	item := &animations[animation_id]
 	item.last_touched = ui_ctx.frame
 	amount := easing.ease(item.easing, clamp(item.progress, 0, 1))
 	item.current = item.initial + (item.target - item.initial) * amount
@@ -110,8 +94,8 @@ animate_color :: proc(
 	curve := easing.Ease.Sine_In_Out,
 ) -> fx.Color {
 	value := fx.color_to_vec4(target)
-	if index := animation_find(animation_id); index >= 0 {
-		item := &ui_ctx.animations[index]
+	if animation_id in animations {
+		item := &animations[animation_id]
 		if item.current.a == 0 {
 			item.initial.rgb = value.rgb
 			item.current.rgb = value.rgb
@@ -131,17 +115,18 @@ animate :: proc {
 }
 
 animation_update_all :: proc() {
-	for index := len(ui_ctx.animations) - 1; index >= 0; index -= 1 {
-		item := &ui_ctx.animations[index]
+	keys_to_delete := make([dynamic]ID, context.temp_allocator)
+	for key, &item in animations {
 		if ui_ctx.frame - item.last_touched > 600 {
-			last := pop(&ui_ctx.animations)
-			if index < len(ui_ctx.animations) {
-				ui_ctx.animations[index] = last
-			}
+			append(&keys_to_delete, key)
 			continue
 		}
 		if item.progress < 1 {
 			item.progress = min(item.progress + fx.frame_time() / max(item.duration, 0.0001), 1)
 		}
+	}
+	
+	for key in keys_to_delete {
+		delete_key(&animations, key)
 	}
 }

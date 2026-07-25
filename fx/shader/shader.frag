@@ -51,7 +51,6 @@ void main() {
         tex_color = vec4(1.0, 1.0, 1.0, opacity);
     }
 
-    // SDF rect clipping for rect and textured quads with radius
     if (in_kind == KIND_RECT || (in_kind == KIND_TEX2D && in_radius > 0.0)) {
         if (in_radius > 0.0) {
             float safe_radius = min(in_radius, min(in_half_size.x, in_half_size.y));

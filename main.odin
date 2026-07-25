@@ -126,7 +126,7 @@ draw_playlists :: proc(bounds: fx.Rect) {
 				row := next_size(px(30))
 				if !is_visible(row) do continue
 				count := index == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
-				row_id := id(fmt.tprintf("playlist-%d", index))
+				row_id := id(playlist.name, index)
 				selected := index == selected_playlist
 				if button(
 					row_id,
@@ -488,7 +488,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 		for lyric, index in player.music.lyrics {
 			row := next_size(px(60))
 			if !is_visible(row) do continue
-			row_id := id(fmt.tprintf("lyric-%d", index), lyrics_id)
+			row_id := id(lyrics_id, index)
 			hit := interact(row_id, row)
 			is_active := found && index == active
 			active_amount := animate(

@@ -144,7 +144,7 @@ vk_init :: proc() {
 	devices := make([]vk.PhysicalDevice, device_count)
 	defer delete(devices)
 	vk.EnumeratePhysicalDevices(instance, &device_count, &devices[0])
-	vks.physical_device = devices[0] // Just pick first for simplicity
+	vks.physical_device = devices[0]
 
 	// Find Queue Family
 	queue_count: u32

@@ -39,7 +39,7 @@ void main() {
     Instance inst = instances[gl_InstanceIndex];
     uint vid = gl_VertexIndex & 3u;
 
-    // Corner: 0=TL, 1=TR, 2=BL, 3=BR
+    // Corner: TL, TR, BL, BR
     vec2 corner = vec2(
         (vid & 1u) != 0u ? 1.0 : 0.0,
         (vid & 2u) != 0u ? 1.0 : 0.0

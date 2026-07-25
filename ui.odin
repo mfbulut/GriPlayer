@@ -85,8 +85,6 @@ Context :: struct {
 	layouts: [dynamic]Layout,
 	clips:   [dynamic]fx.Rect,
 	scrolls: [dynamic]Scroll_State,
-
-	animations: [dynamic]Animation,
 }
 
 ui_ctx: Context
@@ -111,12 +109,26 @@ pad_xy :: proc(x, y: f32) -> Padding {
 	return {x, y, x, y}
 }
 
-id :: proc(value: string, child_id := ID_NONE) -> ID {
-	hash := u64(xxhash.XXH64(transmute([]u8)value, xxhash.XXH64_hash(child_id)))
+id_string :: proc(value: string, child_id := ID_NONE) -> ID {
+	hash := xxhash.XXH64(transmute([]u8)value, u64(child_id))
 	if hash == 0 {
 		hash = 1
 	}
 	return ID(hash)
+}
+
+id_int :: proc(value: int, child_id := ID_NONE) -> ID {
+	bytes := transmute([16]u8)[2]int{value, child_id}
+	hash := xxhash.XXH64(bytes[:], 0)
+	if hash == 0 {
+		hash = 1
+	}
+	return ID(hash)
+}
+
+id :: proc {
+	id_string,
+	id_int,
 }
 
 scroll_to :: proc(layout_id: ID, offset: f32) {
