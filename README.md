@@ -9,7 +9,7 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **Playback:** Gapless playback with a built-in frequency visualizer.
 - **Lyrics:** Search View synchronized lyrics using `.lrc` files.
 - **SMTC:** Full Windows System Media Transport Controls integration.
-- **DirectX 11 & WASAPI:** Built from scratch, low latency, fast performance.
+- **Vulkan & WASAPI:** Built from scratch, low latency, fast performance.
 - **Supported Formats:** mp3, flac, wav, opus, ogg
 
 ## Screenshots

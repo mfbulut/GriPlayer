@@ -1,9 +1,7 @@
 package fx
 
 import "base:runtime"
-
 import "core:time"
-
 import win "core:sys/windows"
 
 Cursor :: enum {
@@ -20,13 +18,13 @@ Key_States :: [256]bit_set[Key_State]
 
 window: struct {
 	hwnd:           win.HWND,
-	size:      		[2]i32,
+	size:           [2]i32,
 	is_resized:     bool,
 	should_close:   bool,
 	key_state:      Key_States,
-	cursor:       	Cursor,
-	mouse_pos: 		Vec2,
-	mouse_inside:  bool,
+	cursor:         Cursor,
+	mouse_pos:      Vec2,
+	mouse_inside:   bool,
 	mouse_scroll:   Vec2,
 	prev_time:      time.Time,
 	frame_time:     f32,
@@ -37,14 +35,14 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	win.SetProcessDPIAware()
 
 	hInstance := cast(win.HINSTANCE)win.GetModuleHandleW(nil)
-	wndclass := win.WNDCLASSW {
+	wndclass := win.WNDCLASSW{
 		lpfnWndProc   = window_proc,
 		style         = win.CS_VREDRAW | win.CS_HREDRAW | win.CS_OWNDC,
 		hInstance     = hInstance,
 		hIcon         = win.LoadIconW(hInstance, cast(win.LPCWSTR)win.MAKEINTRESOURCEW(1)),
 		hCursor       = win.LoadCursorA(nil, win.IDC_ARROW),
 		hbrBackground = cast(win.HBRUSH)win.GetStockObject(win.BLACK_BRUSH),
-		lpszClassName = "fMusic",
+		lpszClassName = win.L("GriPlayer"),
 	}
 
 	win.RegisterClassW(&wndclass)
@@ -65,7 +63,7 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	ypos := (win.GetSystemMetrics(win.SM_CYSCREEN) - window_h) / 2
 
 	title16 := win.utf8_to_wstring(title, context.temp_allocator)
-	window.hwnd = win.CreateWindowExW(ex_style, "fMusic", title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, hInstance, nil)
+	window.hwnd = win.CreateWindowExW(ex_style, win.L("GriPlayer"), title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, hInstance, nil)
 
 	scale := dpi_scale()
 	if scale != 1.0 {
@@ -92,8 +90,8 @@ init :: proc(title: string, size := [2]i32{1280, 720}) {
 	win.ShowWindow(window.hwnd, win.SW_SHOW)
 	win.UpdateWindow(window.hwnd)
 
-	d3d11_initialize()
-	font_initialize()
+	vk_init()
+	renderer_init()
 }
 
 mouse_pos :: proc() -> Vec2 {
@@ -149,12 +147,6 @@ window_is_minimized :: proc() -> bool {
 }
 
 update :: proc(poll_msg := true) -> bool {
-	if poll_msg {
-		if !window_is_minimized() {
-			win.WaitForSingleObject(state.swapchain.waitable_handle, win.INFINITE)
-		}
-	}
-
 	for &state in window.key_state {
 		state -= {.Pressed, .Released, .Repeat}
 	}
@@ -175,9 +167,27 @@ update :: proc(poll_msg := true) -> bool {
 
 	window.cursor = .Arrow
 
-	begin_frame()
+	if window.size.x > 0 && window.size.y > 0 && !window_is_minimized() {
+		if window.is_resized {
+			vk_recreate_swapchain(u32(window.size.x), u32(window.size.y))
+			window.is_resized = false
+		}
+		vk_begin_frame()
+	}
+
+	reset_scissor()
 
 	return !window.should_close
+}
+
+present :: proc(sync := u32(1)) {
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
+		clear(&batch.instances)
+		return
+	}
+	flush()
+	vk_end_frame()
+	texture_release_deferred()
 }
 
 window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM) -> win.LRESULT {
@@ -202,18 +212,12 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		if (lparam & 0xFFFF) == 1 {
 			hc: win.HCURSOR
 			switch window.cursor {
-			case .Arrow:
-				hc = win.LoadCursorA(nil, win.IDC_ARROW)
-			case .Hand:
-				hc = win.LoadCursorA(nil, win.IDC_HAND)
-			case .IBeam:
-				hc = win.LoadCursorA(nil, win.IDC_IBEAM)
-			case .SizeNS:
-				hc = win.LoadCursorA(nil, win.IDC_SIZENS)
-			case .SizeWE:
-				hc = win.LoadCursorA(nil, win.IDC_SIZEWE)
-			case .SizeAll:
-				hc = win.LoadCursorA(nil, win.IDC_SIZEALL)
+			case .Arrow:   hc = win.LoadCursorA(nil, win.IDC_ARROW)
+			case .Hand:    hc = win.LoadCursorA(nil, win.IDC_HAND)
+			case .IBeam:   hc = win.LoadCursorA(nil, win.IDC_IBEAM)
+			case .SizeNS:  hc = win.LoadCursorA(nil, win.IDC_SIZENS)
+			case .SizeWE:  hc = win.LoadCursorA(nil, win.IDC_SIZEWE)
+			case .SizeAll: hc = win.LoadCursorA(nil, win.IDC_SIZEALL)
 			}
 			win.SetCursor(hc)
 			result = 1
@@ -268,16 +272,13 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	case win.WM_MOUSEMOVE:
 		x := win.GET_X_LPARAM(lparam)
 		y := win.GET_Y_LPARAM(lparam)
-		window.mouse_pos = {
-			f32(x),
-			f32(y),
-		} / dpi_scale()
+		window.mouse_pos = {f32(x), f32(y)} / dpi_scale()
 		inside := x >= 0 && y >= 0 && x < window.size.x && y < window.size.y
 		if inside && !window.mouse_inside {
 			window.mouse_inside = true
-			track := win.TRACKMOUSEEVENT {
-				cbSize = size_of(win.TRACKMOUSEEVENT),
-				dwFlags = win.TME_LEAVE,
+			track := win.TRACKMOUSEEVENT{
+				cbSize    = size_of(win.TRACKMOUSEEVENT),
+				dwFlags   = win.TME_LEAVE,
 				hwndTrack = hwnd,
 			}
 			win.TrackMouseEvent(&track)
@@ -306,7 +307,7 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		fallthrough
 	case win.WM_SYSKEYUP, win.WM_KEYUP, win.WM_KEYDOWN:
 		is_down := (lparam & (1 << 31)) == 0
-		vkcode := cast(Key) wparam
+		vkcode := cast(Key)wparam
 
 		if vkcode != .Null {
 			was_down := .Held in window.key_state[vkcode]
@@ -351,43 +352,14 @@ Key :: enum u8 {
 	Mouse_Right   = 0x02,
 	Mouse_Middle  = 0x04,
 
-	N0            = '0',
-	N1            = '1',
-	N2            = '2',
-	N3            = '3',
-	N4            = '4',
-	N5            = '5',
-	N6            = '6',
-	N7            = '7',
-	N8            = '8',
-	N9            = '9',
+	N0 = '0', N1 = '1', N2 = '2', N3 = '3', N4 = '4',
+	N5 = '5', N6 = '6', N7 = '7', N8 = '8', N9 = '9',
 
-	A             = 'A',
-	B             = 'B',
-	C             = 'C',
-	D             = 'D',
-	E             = 'E',
-	F             = 'F',
-	G             = 'G',
-	H             = 'H',
-	I             = 'I',
-	J             = 'J',
-	K             = 'K',
-	L             = 'L',
-	M             = 'M',
-	N             = 'N',
-	O             = 'O',
-	P             = 'P',
-	Q             = 'Q',
-	R             = 'R',
-	S             = 'S',
-	T             = 'T',
-	U             = 'U',
-	V             = 'V',
-	W             = 'W',
-	X             = 'X',
-	Y             = 'Y',
-	Z             = 'Z',
+	A = 'A', B = 'B', C = 'C', D = 'D', E = 'E', F = 'F',
+	G = 'G', H = 'H', I = 'I', J = 'J', K = 'K', L = 'L',
+	M = 'M', N = 'N', O = 'O', P = 'P', Q = 'Q', R = 'R',
+	S = 'S', T = 'T', U = 'U', V = 'V', W = 'W', X = 'X',
+	Y = 'Y', Z = 'Z',
 
 	Backspace     = 0x08,
 	Tab           = 0x09,
@@ -409,68 +381,34 @@ Key :: enum u8 {
 	Left_Super    = 0x5B,
 	Right_Super   = 0x5C,
 
-	P0            = 0x60,
-	P1            = 0x61,
-	P2            = 0x62,
-	P3            = 0x63,
-	P4            = 0x64,
-	P5            = 0x65,
-	P6            = 0x66,
-	P7            = 0x67,
-	P8            = 0x68,
-	P9            = 0x69,
+	P0 = 0x60, P1 = 0x61, P2 = 0x62, P3 = 0x63, P4 = 0x64,
+	P5 = 0x65, P6 = 0x66, P7 = 0x67, P8 = 0x68, P9 = 0x69,
 
-	NumStar       = 0x6A,
-	NumPlus       = 0x6B,
-	NumMinus      = 0x6D,
-	NumPeriod     = 0x6E,
-	NumSlash      = 0x6F,
+	NumStar   = 0x6A, NumPlus  = 0x6B, NumMinus = 0x6D,
+	NumPeriod = 0x6E, NumSlash = 0x6F,
 
-	F1            = 0x70,
-	F2            = 0x71,
-	F3            = 0x72,
-	F4            = 0x73,
-	F5            = 0x74,
-	F6            = 0x75,
-	F7            = 0x76,
-	F8            = 0x77,
-	F9            = 0x78,
-	F10           = 0x79,
-	F11           = 0x7A,
-	F12           = 0x7B,
-	F13           = 0x7C,
-	F14           = 0x7D,
-	F15           = 0x7E,
-	F16           = 0x7F,
-	F17           = 0x80,
-	F18           = 0x81,
-	F19           = 0x82,
-	F20           = 0x83,
+	F1  = 0x70, F2  = 0x71, F3  = 0x72, F4  = 0x73,
+	F5  = 0x74, F6  = 0x75, F7  = 0x76, F8  = 0x77,
+	F9  = 0x78, F10 = 0x79, F11 = 0x7A, F12 = 0x7B,
+	F13 = 0x7C, F14 = 0x7D, F15 = 0x7E, F16 = 0x7F,
+	F17 = 0x80, F18 = 0x81, F19 = 0x82, F20 = 0x83,
 
-	Left_Shift    = 0xA0,
-	Right_Shift   = 0xA1,
-	Left_Ctrl     = 0xA2,
-	Right_Ctrl    = 0xA3,
-	Left_Alt      = 0xA4,
-	Right_Alt     = 0xA5,
+	Left_Shift  = 0xA0, Right_Shift = 0xA1,
+	Left_Ctrl   = 0xA2, Right_Ctrl  = 0xA3,
+	Left_Alt    = 0xA4, Right_Alt   = 0xA5,
 
-	Next_Track    = 0xB0,
-	Prev_Track    = 0xB1,
-	Play_Pause    = 0xB3,
+	Next_Track  = 0xB0,
+	Prev_Track  = 0xB1,
+	Play_Pause  = 0xB3,
 
-	Semicolon     = 0xBA,
-	Equal         = 0xBB,
-	Comma         = 0xBC,
-	Minus         = 0xBD,
-	Period        = 0xBE,
-	Slash         = 0xBF,
-	Backtick      = 0xC0,
+	Semicolon    = 0xBA, Equal        = 0xBB,
+	Comma        = 0xBC, Minus        = 0xBD,
+	Period       = 0xBE, Slash        = 0xBF,
+	Backtick     = 0xC0,
 
-	PageUp        = 0x21,
-	PageDown      = 0x22,
+	PageUp       = 0x21,
+	PageDown     = 0x22,
 
-	LeftBracket   = 0xDB,
-	RightBracket  = 0xDD,
-	BackSlash     = 0xDC,
-	Quote         = 0xDE,
+	LeftBracket  = 0xDB, RightBracket = 0xDD,
+	BackSlash    = 0xDC, Quote        = 0xDE,
 }

@@ -17,6 +17,11 @@ import "fx"
 import "fx/audio"
 import "vendor:stb/image"
 
+AtlasRegion :: struct {
+	texture: fx.Texture,
+	source:  fx.Rect,
+}
+
 Lyric :: struct {
 	text: string,
 	time: f32,
@@ -36,7 +41,7 @@ Music :: struct {
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []fx.Color,
-	thumbnail:        fx.Texture `cbor:"-"`,
+	thumbnail:        AtlasRegion `cbor:"-"`,
 }
 
 Playlist :: struct {
@@ -71,6 +76,12 @@ playlists: [dynamic]Playlist
 loader_queue: [dynamic]^Music
 loader_mutex: sync.Mutex
 loading_finished: bool
+
+thumbnail_atlases: [dynamic]fx.Texture
+atlas_cursor_x, atlas_cursor_y: int
+
+ATLAS_SIZE :: 4096
+THUMBNAIL_SIZE :: 64
 
 loader_start :: proc() {
 	append(&playlists, Playlist{
@@ -129,7 +140,28 @@ loader_poll :: proc() {
 
 	next_music: for music in queue {
 		if len(music.thumbnail_pixels) > 0 {
-			music.thumbnail = fx.texture_load_raw(music.thumbnail_pixels, 64, 64, false)
+			if len(thumbnail_atlases) == 0 || atlas_cursor_y + THUMBNAIL_SIZE > ATLAS_SIZE {
+				empty_pixels := make([]fx.Color, ATLAS_SIZE * ATLAS_SIZE)
+				atlas_tex := fx.texture_load_raw(empty_pixels, ATLAS_SIZE, ATLAS_SIZE, false)
+				delete(empty_pixels)
+				append(&thumbnail_atlases, atlas_tex)
+				atlas_cursor_x = 0
+				atlas_cursor_y = 0
+			}
+
+			current_atlas := thumbnail_atlases[len(thumbnail_atlases) - 1]
+			fx.texture_update_raw(current_atlas, music.thumbnail_pixels, atlas_cursor_x, atlas_cursor_y, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+			
+			music.thumbnail = {
+				texture = current_atlas,
+				source = {f32(atlas_cursor_x), f32(atlas_cursor_y), f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)},
+			}
+
+			atlas_cursor_x += THUMBNAIL_SIZE
+			if atlas_cursor_x + THUMBNAIL_SIZE > ATLAS_SIZE {
+				atlas_cursor_x = 0
+				atlas_cursor_y += THUMBNAIL_SIZE
+			}
 		}
 		if music.liked {
 			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
@@ -248,15 +280,15 @@ load_thumbnail :: proc(music: ^Music) {
 	if pixels == nil do return
 	defer image.image_free(pixels)
 
-	music.thumbnail_pixels = make([]fx.Color, 64 * 64)
+	music.thumbnail_pixels = make([]fx.Color, THUMBNAIL_SIZE * THUMBNAIL_SIZE)
 	success := image.resize_uint8(
 		pixels,
 		w,
 		h,
 		0,
 		cast([^]u8)raw_data(music.thumbnail_pixels),
-		64,
-		64,
+		THUMBNAIL_SIZE,
+		THUMBNAIL_SIZE,
 		0,
 		4,
 	)

@@ -21,6 +21,8 @@ main :: proc() {
 	audio.initialize()
 	smtc.init(fx.window.hwnd)
 	fft_init()
+
+	player.cover.index = -1
 	load_icons()
 	loader_start()
 
@@ -274,12 +276,16 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 	}
 }
 
-draw_cover :: proc(texture: fx.Texture, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
-	if texture.srv != nil {
-		size := fx.Vec2(texture.size)
+draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
+	if region.texture.index != -1 && region.texture.index != 0 {
+		size := fx.Vec2{region.source.w, region.source.h}
 		crop := min(size.x, size.y)
-		source := fx.Rect{(size.x - crop) * 0.5, (size.y - crop) * 0.5, crop, crop}
-		fx.draw_texture_ex(texture, source, bounds, fx.WHITE, radius)
+		source := fx.Rect{
+			region.source.x + (size.x - crop) * 0.5,
+			region.source.y + (size.y - crop) * 0.5,
+			crop, crop,
+		}
+		fx.draw_texture_ex(region.texture, source, bounds, fx.WHITE, radius)
 		return
 	}
 
@@ -326,7 +332,8 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 	}
 
 	if layout(bounds, .Row, {px(160), fr()}, pad = pad_all(16), gap = 18) {
-		draw_cover(player.cover, next(), radius = 8)
+		cover_region := AtlasRegion{ texture = player.cover, source = {0, 0, f32(player.cover.size.x), f32(player.cover.size.y)} }
+		draw_cover(cover_region, next(), radius = 8)
 
 		if layout(next(), .Col, {px(48), px(28), fr()}) {
 			title_row := next()

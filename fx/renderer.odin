@@ -1,21 +1,99 @@
 package fx
 
-clear_window :: proc(color: Color) {
-	if state.swapchain.default_rtv == nil || window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
-		return
+import "core:encoding/json"
+
+Texture :: struct {
+	index: int,
+	size:   [2]int,
+}
+
+Instance :: struct {
+	dest:   Rect,      // x0, y0, x1, y1
+	src:    Rect,      // u0, v0, u1, v1
+	color:  [4]Color,  // TL, TR, BL, BR
+	radius: f32,
+	_pad:   f32,
+	kind:   enum u32 { Rect, Texture, Text },
+	tex_idx: u32,
+}
+
+// Font
+
+Glyph :: struct {
+	advance:     f32,
+	atlasBounds: MSDF_Bounds,
+	planeBounds: MSDF_Bounds,
+}
+
+Font :: struct {
+	atlas:   Texture,
+	metrics: MSDF_Metrics,
+	glyphs:  map[rune]Glyph,
+}
+
+font: Font
+
+MSDF_Metrics :: struct {
+	emSize:             f32,
+	lineHeight:         f32,
+	ascender:           f32,
+	descender:          f32,
+	underlineY:         f32,
+	underlineThickness: f32,
+}
+
+MSDF_Bounds :: struct {
+	left, bottom, right, top: f32,
+}
+
+MSDF_Glyph :: struct {
+	unicode:     u32,
+	advance:     f32,
+	planeBounds: MSDF_Bounds,
+	atlasBounds: MSDF_Bounds,
+}
+
+MSDF_File :: struct {
+	metrics: MSDF_Metrics,
+	glyphs:  []MSDF_Glyph,
+}
+
+renderer_init :: proc() {
+	msdf_data: MSDF_File
+	if err := json.unmarshal(#load("../assets/Inter.json"), &msdf_data, allocator = context.temp_allocator); err != nil {
+		panic("[ERROR] Failed to parse MSDF JSON")
 	}
 
-	tmp_color := color_to_vec4(color)
-	state.device_ctx->ClearRenderTargetView(state.swapchain.default_rtv, &tmp_color)
+	font.atlas = texture_load(#load("../assets/Inter.png"), false)
+	font.metrics = msdf_data.metrics
+
+	for glyph in msdf_data.glyphs {
+		font.glyphs[cast(rune)glyph.unicode] = Glyph{
+			advance     = glyph.advance,
+			atlasBounds = glyph.atlasBounds,
+			planeBounds = glyph.planeBounds,
+		}
+	}
+}
+
+batch: struct {
+	instances: [dynamic; MAX_INSTANCES]Instance,
+	scissor:   [4]i32,
+}
+
+clear_window :: proc(color: Color) {
+	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() do return
+	vks.clear_color = color_to_vec4(color)
 }
 
 set_scissor :: proc(rect: Rect) {
+	flush()
 	scale := dpi_scale()
-	state.batch.binding.scissor = {
+	batch.scissor = {
 		cast(i32)(rect.x * scale),
 		cast(i32)(rect.y * scale),
-		cast(i32)((rect.x + rect.w) * scale),
-		cast(i32)((rect.y + rect.h) * scale),
+		cast(i32)(rect.w * scale),
+		cast(i32)(rect.h * scale),
 	}
 }
 
@@ -25,39 +103,27 @@ reset_scissor :: proc() {
 }
 
 add_instance :: proc(inst: Instance) {
-	batch := &state.batch
-	if len(batch.instanced) + 1 > cap(batch.instanced) {
-		if !flush_batch() {
-			return
-		}
+	if len(batch.instances) >= MAX_INSTANCES {
+		flush()
 	}
+	append(&batch.instances, inst)
+}
 
-	needs_new_run := len(batch.runs) == 0
-	if !needs_new_run {
-		last_binding := batch.runs[len(batch.runs) - 1].binding
-		needs_new_run = last_binding != batch.binding
-	}
-	if needs_new_run && len(batch.runs) + 1 > cap(batch.runs) {
-		if !flush_batch() {
-			return
-		}
-	}
-	if needs_new_run {
-		start_index := cast(u32)len(batch.instanced)
-		append(&batch.runs, Batch_Run{binding = batch.binding, first = start_index})
-	}
-
-	append(&batch.instanced, inst)
-	batch.runs[len(batch.runs) - 1].count += 1
+flush :: proc() {
+	if len(batch.instances) == 0 do return
+	vk_draw_instances(batch.instances[:], batch.scissor)
+	clear(&batch.instances)
 }
 
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 	add_instance(
-		Instance {
-			dest = {r.x, r.y, r.x + r.w, r.y + r.h},
-			color = color,
+		Instance{
+			dest   = {r.x, r.y, r.x + r.w, r.y + r.h},
+			src    = {},
+			color  = color,
 			radius = radius,
-			kind = .Rect,
+			kind   = .Rect,
+			tex_idx = 0,
 		},
 	)
 }
@@ -71,20 +137,12 @@ draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 	draw_rect_vec(top_left, radius * 2, color, radius)
 }
 
-draw_texture_ex :: proc(
-	tex: Texture,
-	src: Rect,
-	dest: Rect,
-	tint_rect := cast([4]Color)WHITE,
-	radius := f32(0),
-) {
-	state.batch.binding.sampler_kind = .AnisotropicClamp
-	state.batch.binding.texture = tex.srv
-
+draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
+	if tex.index < 0 do return
 	tw := cast(f32)tex.size.x
 	th := cast(f32)tex.size.y
 
-	src_rect_arr := Rect {
+	src_uv := Rect{
 		src.x / tw,
 		src.y / th,
 		(src.x + src.w) / tw,
@@ -92,19 +150,22 @@ draw_texture_ex :: proc(
 	}
 
 	add_instance(
-		Instance {
-			src = src_rect_arr,
-			dest = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
-			color = tint_rect,
-			radius = radius,
-			kind = .Texture,
+		Instance{
+			src     = src_uv,
+			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
+			color   = tint,
+			radius  = radius,
+			kind    = .Texture,
+			tex_idx = u32(tex.index),
 		},
 	)
 }
 
-draw_texture :: proc(tex: Texture, rect: Rect, tint_rect := cast([4]Color)WHITE, radius := f32(0)) {
-	draw_texture_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, tint_rect, radius)
+draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
+	draw_texture_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, tint, radius)
 }
+
+// Text Rendering
 
 draw_text :: proc {
 	draw_text_vec,
@@ -113,11 +174,7 @@ draw_text :: proc {
 
 draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) {
 	if text == "" do return
-	font := default_font
-
-	state.batch.binding.sampler_kind = .BilinearClamp
-
-	state.batch.binding.texture = font.atlas.srv
+	font := font
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale
@@ -137,14 +194,14 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 
 		glyph := font.glyphs[char] or_else font.glyphs['?']
 
-		dest := Rect {
+		dest := Rect{
 			x + (glyph.planeBounds.left * font_scale),
 			y - (glyph.planeBounds.top * font_scale),
 			x + (glyph.planeBounds.right * font_scale),
 			y - (glyph.planeBounds.bottom * font_scale),
 		}
 
-		src := Rect {
+		src := Rect{
 			glyph.atlasBounds.left / atlas_w,
 			1 - (glyph.atlasBounds.top / atlas_h),
 			glyph.atlasBounds.right / atlas_w,
@@ -152,11 +209,12 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 		}
 
 		add_instance(
-			Instance {
-				dest = dest,
-				src = src,
-				color = color,
-				kind = .Text,
+			Instance{
+				dest    = dest,
+				src     = src,
+				color   = color,
+				kind    = .Text,
+				tex_idx = u32(font.atlas.index),
 			},
 		)
 
@@ -166,7 +224,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 
 draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color: [4]Color, center_x := false, center_y := true) {
 	if text == "" do return
-	font := default_font
+	font := font
 
 	x := bounds.x
 	y := bounds.y
@@ -188,15 +246,12 @@ draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color: [4]Col
 
 draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color, center_x := false, center_y := true) {
 	if text == "" || bounds.w <= 0 do return
-	font := default_font
+	font := font
 
 	if measure_text(text, font_size).x <= bounds.w {
 		draw_text_rect(text, bounds, font_size, color, center_x, center_y)
 		return
 	}
-
-	state.batch.binding.sampler_kind = .BilinearClamp
-	state.batch.binding.texture = font.atlas.srv
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale
@@ -249,16 +304,16 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 		color_tr.a = u8(f32(color.a) * alpha_r)
 		color_br := color_tr
 
-		color := [4]Color{color_tl, color_tr, color_bl, color_br}
+		c := [4]Color{color_tl, color_tr, color_bl, color_br}
 
-		dest := Rect {
+		dest := Rect{
 			left_x,
 			y - (glyph.planeBounds.top * font_scale),
 			right_x,
 			y - (glyph.planeBounds.bottom * font_scale),
 		}
 
-		src := Rect {
+		src := Rect{
 			glyph.atlasBounds.left / atlas_w,
 			1 - (glyph.atlasBounds.top / atlas_h),
 			glyph.atlasBounds.right / atlas_w,
@@ -266,11 +321,12 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 		}
 
 		add_instance(
-			Instance {
-				dest = dest,
-				src = src,
-				color = color,
-				kind = .Text,
+			Instance{
+				dest    = dest,
+				src     = src,
+				color   = c,
+				kind    = .Text,
+				tex_idx = u32(font.atlas.index),
 			},
 		)
 
@@ -279,17 +335,14 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 }
 
 measure_text :: proc(text: string, font_size: f32) -> Vec2 {
-	if text == "" {
-		return {0, 0}
-	}
-	font := default_font
+	if text == "" do return {0, 0}
+	font := font
 
 	cursor_x := f32(0)
 	max_x := f32(0)
 
 	font_scale := font_size / font.metrics.emSize
 	line_height := font.metrics.lineHeight * font_scale
-
 	total_height := line_height
 
 	for char in text {
@@ -301,7 +354,6 @@ measure_text :: proc(text: string, font_size: f32) -> Vec2 {
 		}
 
 		glyph := font.glyphs[char] or_else font.glyphs['?']
-
 		cursor_x += glyph.advance * font_scale
 	}
 

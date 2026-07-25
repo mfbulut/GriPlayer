@@ -33,7 +33,6 @@ DARKPURPLE :: Color{112, 31, 126, 255}
 BEIGE      :: Color{211, 176, 131, 255}
 BROWN      :: Color{127, 106, 79, 255}
 DARKBROWN  :: Color{76, 63, 47, 255}
-
 WHITE      :: Color{255, 255, 255, 255}
 BLACK      :: Color{0, 0, 0, 255}
 BLANK      :: Color{0, 0, 0, 0}
@@ -59,27 +58,24 @@ color_opacity :: proc(c: Color, alpha: f32) -> Color {
 	return {c.r, c.g, c.b, u8(clamp(alpha, 0, 1) * 255)}
 }
 
-LINEAR_SRGB_TO_LINEAR_LMS :: #row_major matrix[3, 3]f32{
-	0.4121764600, 0.5362739563, 0.0514403731,
-	0.2119092047, 0.6807178855, 0.1073998436,
-	0.0883448124, 0.2818539739, 0.6302808523,
-}
-
-LINEAR_LMS_TO_OKLAB :: #row_major matrix[3, 3]f32{
-	0.2104542553,  0.7936177850, -0.0040720468,
-	1.9779984951, -2.4285922050,  0.4505937099,
-	0.0259040371,  0.7827717662, -0.8086757660,
-}
-
 color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
+	LINEAR_SRGB_TO_LINEAR_LMS :: #row_major matrix[3, 3]f32{
+		0.4121764600, 0.5362739563, 0.0514403731,
+		0.2119092047, 0.6807178855, 0.1073998436,
+		0.0883448124, 0.2818539739, 0.6302808523,
+	}
+
+	LINEAR_LMS_TO_OKLAB :: #row_major matrix[3, 3]f32{
+		0.2104542553,  0.7936177850, -0.0040720468,
+		1.9779984951, -2.4285922050,  0.4505937099,
+		0.0259040371,  0.7827717662, -0.8086757660,
+	}
+
 	srgb   := color_to_vec4(color).rgb
 	linear := linalg.vector3_srgb_to_linear(srgb)
-
 	lms := LINEAR_SRGB_TO_LINEAR_LMS * linear
 	lms  = {math.cbrt(lms.x), math.cbrt(lms.y), math.cbrt(lms.z)}
-
 	oklab := LINEAR_LMS_TO_OKLAB * lms
-
 	l = oklab.x
 	c = math.hypot(oklab.y, oklab.z)
 	h = c > 1e-6 ? math.atan2(oklab.z, oklab.y) : 0.0
@@ -87,14 +83,11 @@ color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
 }
 
 point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
-	return 	p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
+	return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
 
 rect_overlaps :: proc(a, b: Rect) -> bool {
-	return a.x < b.x + b.w &&
-	       a.x + a.w > b.x &&
-	       a.y < b.y + b.h &&
-	       a.y + a.h > b.y
+	return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
 rect_overlap :: proc(a, b: Rect) -> Rect {
