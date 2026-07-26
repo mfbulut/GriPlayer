@@ -19,24 +19,23 @@ vks: struct {
 	surface: vk.SurfaceKHR,
 	swapchain: vk.SwapchainKHR,
 	swapchain_format: vk.Format,
-	swapchain_images: []vk.Image,
-	swapchain_image_views: []vk.ImageView,
+	swapchain_images: [2]vk.Image,
+	swapchain_image_views: [2]vk.ImageView,
 	image_index: u32,
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
 	image_available_semaphore: vk.Semaphore,
-	render_finished_semaphores: []vk.Semaphore,
+	render_finished_semaphores: [2]vk.Semaphore,
 	in_flight_fence: vk.Fence,
 
 	pipeline_layout: vk.PipelineLayout,
-	vert_shader: vk.ShaderEXT,
-	frag_shader: vk.ShaderEXT,
+	shaders: [2]vk.ShaderEXT,
 	sampler: vk.Sampler,
 
 	descriptor_set: vk.DescriptorSet,
 	instance_buffer_mapped: rawptr,
-	
+
 	scissor: [4]i32,
 	clear_color: [4]f32,
 	instance_count: u32,
@@ -46,6 +45,7 @@ textures: [MAX_TEXTURES]struct {
 	image: vk.Image,
 	view: vk.ImageView,
 	memory: vk.DeviceMemory,
+	layout: vk.ImageLayout,
 	used: bool,
 }
 
@@ -58,7 +58,7 @@ check_vk :: proc(result: vk.Result) {
 	}
 }
 
-when ODIN_DEBUG {	
+when ODIN_DEBUG {
 	debug_callback :: proc "system" (
 		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
 		messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -128,7 +128,7 @@ vk_init :: proc() {
 	instance: vk.Instance
 	check_vk(vk.CreateInstance(&create_info, nil, &instance))
 	vk.load_proc_addresses_instance(instance)
-	
+
 	when ODIN_DEBUG {
 		debug_messenger: vk.DebugUtilsMessengerEXT
 		check_vk(vk.CreateDebugUtilsMessengerEXT(instance, &debug_info, nil, &debug_messenger))
@@ -158,7 +158,6 @@ vk_init :: proc() {
 			break
 		}
 	}
-
 
 	// Find Queue Family
 	queue_count: u32
@@ -330,7 +329,6 @@ vk_init :: proc() {
 	// Bind SSBO to descriptor set
 	buffer_info := vk.DescriptorBufferInfo {
 		buffer = instance_buffer,
-		offset = 0,
 		range = vk.DeviceSize(vk.WHOLE_SIZE),
 	}
 	write_desc := vk.WriteDescriptorSet {
@@ -343,64 +341,60 @@ vk_init :: proc() {
 		pBufferInfo = &buffer_info,
 	}
 	vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
-
-	init_pipeline(descriptor_set_layout)
+	
+	vk_create_pipeline(&descriptor_set_layout)
+	vk_recreate_swapchain()
 }
 
-init_pipeline :: proc(desc_layout: vk.DescriptorSetLayout) {
-	desc_layout := desc_layout
+vk_create_pipeline :: proc(desc_layout: ^vk.DescriptorSetLayout) {
 	vert_spv := #load("shader/shader.vert.spv", []u32)
 	frag_spv := #load("shader/shader.frag.spv", []u32)
 
 	push_constant_range := vk.PushConstantRange {
 		stageFlags = {.VERTEX},
-		offset = 0,
 		size = size_of([2]f32),
 	}
 
 	pipeline_layout_info := vk.PipelineLayoutCreateInfo {
 		sType = .PIPELINE_LAYOUT_CREATE_INFO,
 		setLayoutCount = 1,
-		pSetLayouts = &desc_layout,
+		pSetLayouts = desc_layout,
 		pushConstantRangeCount = 1,
 		pPushConstantRanges = &push_constant_range,
 	}
 
 	check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
 
-	vert_shader_info := vk.ShaderCreateInfoEXT{
-		sType = .SHADER_CREATE_INFO_EXT,
-		stage = {.VERTEX},
-		nextStage = {.FRAGMENT},
-		codeType = .SPIRV,
-		codeSize = len(vert_spv) * 4,
-		pCode = raw_data(vert_spv),
-		pName = "main",
-		setLayoutCount = 1,
-		pSetLayouts = &desc_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
+	shader_infos := [?]vk.ShaderCreateInfoEXT{
+		{
+			sType = .SHADER_CREATE_INFO_EXT,
+			stage = {.VERTEX},
+			nextStage = {.FRAGMENT},
+			codeType = .SPIRV,
+			codeSize = len(vert_spv) * 4,
+			pCode = raw_data(vert_spv),
+			pName = "main",
+			setLayoutCount = 1,
+			pSetLayouts = desc_layout,
+			pushConstantRangeCount = 1,
+			pPushConstantRanges = &push_constant_range,
+		},
+		{
+			sType = .SHADER_CREATE_INFO_EXT,
+			stage = {.FRAGMENT},
+			nextStage = {},
+			codeType = .SPIRV,
+			codeSize = len(frag_spv) * 4,
+			pCode = raw_data(frag_spv),
+			pName = "main",
+			setLayoutCount = 1,
+			pSetLayouts = desc_layout,
+			pushConstantRangeCount = 1,
+			pPushConstantRanges = &push_constant_range,
+		}
 	}
 
-	frag_shader_info := vk.ShaderCreateInfoEXT{
-		sType = .SHADER_CREATE_INFO_EXT,
-		stage = {.FRAGMENT},
-		nextStage = {},
-		codeType = .SPIRV,
-		codeSize = len(frag_spv) * 4,
-		pCode = raw_data(frag_spv),
-		pName = "main",
-		setLayoutCount = 1,
-		pSetLayouts = &desc_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
-	}
-
-	shader_infos := [?]vk.ShaderCreateInfoEXT{vert_shader_info, frag_shader_info}
-	shaders: [2]vk.ShaderEXT
-	check_vk(vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &shaders[0]))
-	vks.vert_shader = shaders[0]
-	vks.frag_shader = shaders[1]
+	check_vk(vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0]))
 }
 
 vk_recreate_swapchain :: proc() {
@@ -408,14 +402,11 @@ vk_recreate_swapchain :: proc() {
 
 	if vks.swapchain != 0 {
 		for view in vks.swapchain_image_views {
-			vk.DestroyImageView(vks.device, view, nil)
+			if view != 0 do vk.DestroyImageView(vks.device, view, nil)
 		}
 		for semaphore in vks.render_finished_semaphores {
-			vk.DestroySemaphore(vks.device, semaphore, nil)
+			if semaphore != 0 do vk.DestroySemaphore(vks.device, semaphore, nil)
 		}
-		delete(vks.swapchain_images)
-		delete(vks.swapchain_image_views)
-		delete(vks.render_finished_semaphores)
 	}
 
 	capabilities: vk.SurfaceCapabilitiesKHR
@@ -453,13 +444,9 @@ vk_recreate_swapchain :: proc() {
 	}
 	vks.swapchain = new_swapchain
 
-	image_count: u32
-	check_vk(vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, nil))
-	vks.swapchain_images = make([]vk.Image, image_count)
-	check_vk(vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0]))
+	image_count: u32 = 2
+	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0])
 
-	vks.swapchain_image_views = make([]vk.ImageView, image_count)
-	vks.render_finished_semaphores = make([]vk.Semaphore, image_count)
 	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
 	for i in 0..<image_count {
 		view_info := vk.ImageViewCreateInfo {
@@ -525,8 +512,7 @@ vk_begin_frame :: proc() -> bool {
 	vk.CmdBeginRendering(cmd, &rendering_info)
 
 	stages := [?]vk.ShaderStageFlags{{.VERTEX}, {.FRAGMENT}}
-	shaders := [?]vk.ShaderEXT{vks.vert_shader, vks.frag_shader}
-	vk.CmdBindShadersEXT(cmd, 2, &stages[0], &shaders[0])
+	vk.CmdBindShadersEXT(cmd, 2, &stages[0], &vks.shaders[0])
 
 	viewport := vk.Viewport {
 		width = f32(window.size.x),
@@ -548,7 +534,7 @@ vk_begin_frame :: proc() -> bool {
 	vk.CmdSetStencilTestEnable(cmd, false)
 	vk.CmdSetRasterizationSamplesEXT(cmd, {._1})
 	vk.CmdSetAlphaToCoverageEnableEXT(cmd, false)
-	
+
 	sample_mask := [?]vk.SampleMask{0xffffffff}
 	vk.CmdSetSampleMaskEXT(cmd, {._1}, &sample_mask[0])
 
@@ -568,10 +554,7 @@ vk_begin_frame :: proc() -> bool {
 	color_write_mask := [?]vk.ColorComponentFlags{{.R, .G, .B, .A}}
 	vk.CmdSetColorWriteMaskEXT(cmd, 0, 1, &color_write_mask[0])
 
-	screen_size := [2]f32 {
-		f32(window.size.x),
-		f32(window.size.y),
-	}
+	screen_size := window_size()
 	vk.CmdPushConstants(cmd, vks.pipeline_layout, {.VERTEX}, 0, size_of(screen_size), &screen_size)
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
 
@@ -648,6 +631,7 @@ vk_end_frame :: proc() {
 		pSwapchains = &vks.swapchain,
 		pImageIndices = &vks.image_index,
 	}
+
 	vk.QueuePresentKHR(vks.device_queue, &present_info)
 }
 
@@ -754,24 +738,29 @@ vk_cmd_end :: proc(cmd: vk.CommandBuffer) {
 
 texture_load :: proc(data: []u8) -> Texture {
 	w, h, channels: i32
-	pixels := stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
+	pixels := cast([^]Color)stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
 	defer stbi.image_free(pixels)
 	if pixels == nil do return {index = -1}
 
-	return texture_load_raw((cast([^]Color)pixels)[:w*h], int(w), int(h))
+	tex := texture_create(int(w), int(h))
+	texture_update(tex, pixels[:w*h], 0, 0, int(w), int(h))
+
+	return tex
 }
 
-texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
-	size := vk.DeviceSize(w * h * 4)
+texture_create :: proc(w, h: int) -> Texture {
+	index := -1
+	for i in 0..<MAX_TEXTURES {
+		if !textures[i].used {
+			index = i
+			textures[i].used = true
+			break
+		}
+	}
 
-	staging_buffer: vk.Buffer
-	staging_buffer_memory: vk.DeviceMemory
-	create_buffer(size, {.TRANSFER_SRC}, {.HOST_VISIBLE, .HOST_COHERENT}, &staging_buffer, &staging_buffer_memory)
+	if index == -1 do panic("Too many textures")
 
-	data: rawptr
-	vk.MapMemory(vks.device, staging_buffer_memory, 0, size, {}, &data)
-	mem.copy(data, raw_data(pixels), int(size))
-	vk.UnmapMemory(vks.device, staging_buffer_memory)
+	tex := &textures[index]
 
 	image_info := vk.ImageCreateInfo {
 		sType = .IMAGE_CREATE_INFO,
@@ -787,18 +776,6 @@ texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 		sharingMode = .EXCLUSIVE,
 	}
 
-	// Find free index
-	idx := -1
-	for i in 0..<MAX_TEXTURES {
-		if !textures[i].used {
-			idx = i
-			textures[i].used = true
-			break
-		}
-	}
-	if idx == -1 do panic("Too many textures")
-
-	tex := &textures[idx]
 	check_vk(vk.CreateImage(vks.device, &image_info, nil, &tex.image))
 
 	mem_reqs: vk.MemoryRequirements
@@ -811,31 +788,6 @@ texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 	}
 	check_vk(vk.AllocateMemory(vks.device, &alloc_info, nil, &tex.memory))
 	vk.BindImageMemory(vks.device, tex.image, tex.memory, 0)
-
-	if cmd := vk_cmd_begin(); cmd != nil {
-		image_barrier(
-			cmd, tex.image,
-			.UNDEFINED, .TRANSFER_DST_OPTIMAL,
-			{.TOP_OF_PIPE}, {.TRANSFER},
-			{}, {.TRANSFER_WRITE},
-		)
-
-		region := vk.BufferImageCopy {
-			imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
-			imageExtent = { u32(w), u32(h), 1 },
-		}
-		vk.CmdCopyBufferToImage(cmd, staging_buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
-
-		image_barrier(
-			cmd, tex.image,
-			.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
-			{.TRANSFER}, {.FRAGMENT_SHADER},
-			{.TRANSFER_WRITE}, {.SHADER_READ},
-		)
-	}
-
-	vk.DestroyBuffer(vks.device, staging_buffer, nil)
-	vk.FreeMemory(vks.device, staging_buffer_memory, nil)
 
 	view_info := vk.ImageViewCreateInfo {
 		sType = .IMAGE_VIEW_CREATE_INFO,
@@ -856,14 +808,14 @@ texture_load_raw :: proc(pixels: []Color, w, h: int) -> Texture {
 		sType = .WRITE_DESCRIPTOR_SET,
 		dstSet = vks.descriptor_set,
 		dstBinding = 0,
-		dstArrayElement = u32(idx),
+		dstArrayElement = u32(index),
 		descriptorType = .COMBINED_IMAGE_SAMPLER,
 		descriptorCount = 1,
 		pImageInfo = &image_info_desc,
 	}
 	vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
 
-	return Texture{ index = int(idx), size = {w, h} }
+	return Texture{ index = index, size = {w, h} }
 }
 
 texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
@@ -884,7 +836,7 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	if cmd := vk_cmd_begin(); cmd != nil {
 		image_barrier(
 			cmd, tex.image,
-			.SHADER_READ_ONLY_OPTIMAL, .TRANSFER_DST_OPTIMAL,
+			tex.layout, .TRANSFER_DST_OPTIMAL,
 			{.TOP_OF_PIPE}, {.TRANSFER},
 			{}, {.TRANSFER_WRITE},
 		)
@@ -904,6 +856,8 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 		)
 	}
 
+	tex.layout = .SHADER_READ_ONLY_OPTIMAL
+
 	vk.DestroyBuffer(vks.device, staging_buffer, nil)
 	vk.FreeMemory(vks.device, staging_buffer_memory, nil)
 }
@@ -917,14 +871,14 @@ texture_free :: proc(tex: ^Texture) {
 texture_release_deferred :: proc() {
 	if len(textures_to_free) == 0 do return
 	check_vk(vk.DeviceWaitIdle(vks.device))
-	
-	for idx in textures_to_free {
-		if !textures[idx].used do continue
-		vk.DestroyImageView(vks.device, textures[idx].view, nil)
-		vk.DestroyImage(vks.device, textures[idx].image, nil)
-		vk.FreeMemory(vks.device, textures[idx].memory, nil)
-		textures[idx].used = false
+
+	for i in textures_to_free {
+		if !textures[i].used do continue
+		vk.DestroyImageView(vks.device, textures[i].view, nil)
+		vk.DestroyImage(vks.device, textures[i].image, nil)
+		vk.FreeMemory(vks.device, textures[i].memory, nil)
+		textures[i] = {}
 	}
-	
+
 	clear(&textures_to_free)
 }

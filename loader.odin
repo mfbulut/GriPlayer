@@ -142,8 +142,9 @@ loader_poll :: proc() {
 	next_music: for music in queue {
 		if len(music.thumbnail_pixels) > 0 {
 			if len(thumbnail_atlases) == 0 || atlas_cursor_y + THUMBNAIL_SIZE > ATLAS_SIZE {
+				atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
 				empty_pixels := make([]fx.Color, ATLAS_SIZE * ATLAS_SIZE)
-				atlas_tex := fx.texture_load_raw(empty_pixels, ATLAS_SIZE, ATLAS_SIZE)
+				fx.texture_update(atlas_tex, empty_pixels, 0, 0, ATLAS_SIZE, ATLAS_SIZE)
 				delete(empty_pixels)
 				append(&thumbnail_atlases, atlas_tex)
 				atlas_cursor_x = 0
