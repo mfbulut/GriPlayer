@@ -3,7 +3,6 @@ package fx
 import "core:dynlib"
 import "core:fmt"
 import "core:mem"
-import "core:sys/windows"
 import "base:runtime"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
@@ -15,19 +14,19 @@ vks: struct {
 	instance: vk.Instance,
 	physical_device: vk.PhysicalDevice,
 	device: vk.Device,
-	graphics_queue: vk.Queue,
+	queue: vk.Queue,
 
 	surface: vk.SurfaceKHR,
 	swapchain: struct {
 		swapchain: vk.SwapchainKHR,
 		images: [2]vk.Image,
 		image_views: [2]vk.ImageView,
-		render_finished_semaphores: [2]vk.Semaphore,
+		present_semaphores: [2]vk.Semaphore,
 	},
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
-	image_available_semaphore: vk.Semaphore,
+	acquire_semaphore: vk.Semaphore,
 	in_flight_fence: vk.Fence,
 
 	pipeline_layout: vk.PipelineLayout,
@@ -56,9 +55,20 @@ Texture_Data :: struct {
 
 textures: #soa[MAX_TEXTURES]Texture_Data
 
+debug_callback :: proc "system" (
+	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+	messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
+	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+	pUserData: rawptr,
+) -> b32 {
+	context = runtime.default_context()
+	fmt.eprintln("Vulkan Validation:", pCallbackData.pMessage)
+	return false
+}
+
 check_vk :: proc(result: vk.Result) {
 	if result != .SUCCESS {
-		fmt.eprintf("Vulkan Error: %v\n", result)
+		fmt.eprintln("Vulkan Error:", result)
 		panic("Vulkan Error")
 	}
 }
@@ -75,19 +85,15 @@ vk_init :: proc() {
 			layer_count := u32(1)
 			val_layer := cstring("VK_LAYER_KHRONOS_validation")
 			layer_names := &val_layer
-
-			extensions := [?]cstring {
-				vk.KHR_SURFACE_EXTENSION_NAME,
-				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-				vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
-			}
 		} else {
 			layer_count: u32
 			layer_names: ^cstring
-			extensions := [?]cstring {
-				vk.KHR_SURFACE_EXTENSION_NAME,
-				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-			}
+		}
+
+		extensions := [?]cstring {
+			vk.KHR_SURFACE_EXTENSION_NAME,
+			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
 		}
 
 		app_info := vk.ApplicationInfo {
@@ -95,7 +101,14 @@ vk_init :: proc() {
 			pApplicationName = "GriPlayer",
 			apiVersion = vk.API_VERSION_1_3,
 		}
-		
+
+		debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
+			sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+			messageSeverity = {.WARNING, .ERROR},
+			messageType = {.VALIDATION, .PERFORMANCE},
+			pfnUserCallback = debug_callback,
+		}
+
 		create_info := vk.InstanceCreateInfo {
 			sType = .INSTANCE_CREATE_INFO,
 			pApplicationInfo = &app_info,
@@ -103,42 +116,17 @@ vk_init :: proc() {
 			ppEnabledExtensionNames = &extensions[0],
 			enabledLayerCount = layer_count,
 			ppEnabledLayerNames = layer_names,
-		}
-
-		when ODIN_DEBUG {
-			debug_callback :: proc "system" (
-				messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-				messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
-				pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-				pUserData: rawptr,
-			) -> b32 {
-				context = runtime.default_context()
-				fmt.eprintf("Vulkan Validation: %s\n", pCallbackData.pMessage)
-				return false
-			}
-
-			debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
-				sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-				messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
-				messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
-				pfnUserCallback = debug_callback,
-			}
-			create_info.pNext = &debug_info
+			pNext = &debug_info
 		}
 
 		vk.CreateInstance(&create_info, nil, &vks.instance)
 		vk.load_proc_addresses(vks.instance)
-
-		when ODIN_DEBUG {
-			debug_messenger: vk.DebugUtilsMessengerEXT
-			vk.CreateDebugUtilsMessengerEXT(vks.instance, &debug_info, nil, &debug_messenger)
-		}
 	}
 
 	{	// Create Surface
 		surface_create_info := vk.Win32SurfaceCreateInfoKHR {
 			sType = .WIN32_SURFACE_CREATE_INFO_KHR,
-			hinstance = cast(windows.HINSTANCE)windows.GetModuleHandleW(nil),
+			hinstance = window.hInstance,
 			hwnd = window.hwnd,
 		}
 		vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
@@ -174,7 +162,7 @@ vk_init :: proc() {
 				queue_family_index = u32(i)
 				break
 			}
-		}	
+		}
 
 		queue_priority := f32(1.0)
 		queue_create_info := vk.DeviceQueueCreateInfo {
@@ -222,7 +210,7 @@ vk_init :: proc() {
 
 		vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device)
 		vk.load_proc_addresses(vks.device)
-		vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.graphics_queue)
+		vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.queue)
 
 		pool_info := vk.CommandPoolCreateInfo {
 			sType = .COMMAND_POOL_CREATE_INFO,
@@ -243,12 +231,12 @@ vk_init :: proc() {
 			commandBufferCount = 1,
 		}
 		vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffer)
-		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.image_available_semaphore)
+		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.acquire_semaphore)
 		vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fence)
 	}
 
 	{	// Sampler
-		
+
 		sampler_info := vk.SamplerCreateInfo {
 			sType = .SAMPLER_CREATE_INFO,
 			magFilter = .LINEAR,
@@ -263,7 +251,7 @@ vk_init :: proc() {
 	}
 
 	{	// Bindless Descriptor Setup
-		
+
 		binding_flags := [?]vk.DescriptorBindingFlags {
 			{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
 			{},
@@ -407,7 +395,7 @@ vk_recreate_swapchain :: proc() {
 		for view in vks.swapchain.image_views {
 			if view != 0 do vk.DestroyImageView(vks.device, view, nil)
 		}
-		for semaphore in vks.swapchain.render_finished_semaphores {
+		for semaphore in vks.swapchain.present_semaphores {
 			if semaphore != 0 do vk.DestroySemaphore(vks.device, semaphore, nil)
 		}
 	}
@@ -453,7 +441,7 @@ vk_recreate_swapchain :: proc() {
 			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 		}
 		vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain.image_views[i])
-		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.swapchain.render_finished_semaphores[i])
+		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.swapchain.present_semaphores[i])
 	}
 }
 
@@ -463,7 +451,7 @@ vk_render :: proc() {
 	image_index: u32
 	res := vk.AcquireNextImageKHR(
 		vks.device, vks.swapchain.swapchain, max(u64),
-		vks.image_available_semaphore,
+		vks.acquire_semaphore,
 		0, &image_index,
 	)
 
@@ -585,14 +573,14 @@ vk_render :: proc() {
 	)
 	vk.EndCommandBuffer(cmd)
 
-	render_finished_semaphore := &vks.swapchain.render_finished_semaphores[image_index]
+	render_finished_semaphore := &vks.swapchain.present_semaphores[image_index]
 	cmd_info := vk.CommandBufferSubmitInfo {
 		sType = .COMMAND_BUFFER_SUBMIT_INFO,
 		commandBuffer = cmd,
 	}
 	wait_info := vk.SemaphoreSubmitInfo {
 		sType = .SEMAPHORE_SUBMIT_INFO,
-		semaphore = vks.image_available_semaphore,
+		semaphore = vks.acquire_semaphore,
 		stageMask = {.COLOR_ATTACHMENT_OUTPUT},
 	}
 	signal_info := vk.SemaphoreSubmitInfo {
@@ -609,7 +597,7 @@ vk_render :: proc() {
 		signalSemaphoreInfoCount = 1,
 		pSignalSemaphoreInfos = &signal_info,
 	}
-	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
+	vk.QueueSubmit2(vks.queue, 1, &submit_info, vks.in_flight_fence)
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,
@@ -620,7 +608,7 @@ vk_render :: proc() {
 		pImageIndices = &image_index,
 	}
 
-	vk.QueuePresentKHR(vks.graphics_queue, &present_info)
+	vk.QueuePresentKHR(vks.queue, &present_info)
 
 	clear(&instances)
 	clear(&batches)
@@ -717,6 +705,7 @@ texture_create :: proc(w, h: int, mipmaps := false) -> Texture {
 	}
 
 	if index == 0 {
+		fmt.eprintln("Texture Pool Is Full")
 		return {}
 	}
 
@@ -914,8 +903,8 @@ texture_upload :: proc(tex: Texture, pixels: []Color, x, y, w, h: int, mipmaps :
 		commandBufferInfoCount = 1,
 		pCommandBufferInfos = &cmd_info,
 	}
-	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, 0)
-	vk.QueueWaitIdle(vks.graphics_queue)
+	vk.QueueSubmit2(vks.queue, 1, &submit_info, 0)
+	vk.QueueWaitIdle(vks.queue)
 
 	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 
@@ -928,7 +917,7 @@ texture_upload :: proc(tex: Texture, pixels: []Color, x, y, w, h: int, mipmaps :
 texture_destroy :: proc(tex: ^Texture) {
 	if tex.index == 0 do return
 	tex_data := &textures[tex.index]
-	
+
 	vk.DeviceWaitIdle(vks.device)
 	if tex_data.used {
 		vk.DestroyImageView(vks.device, tex_data.view, nil)

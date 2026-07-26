@@ -15,6 +15,7 @@ Key_State :: enum { Held, Pressed, Released, Repeat }
 Key_States :: [256]bit_set[Key_State]
 
 window: struct {
+	hInstance:      win.HINSTANCE,
 	hwnd:           win.HWND,
 	size:           [2]u32,
 	is_resized:     bool,
@@ -32,15 +33,15 @@ window: struct {
 init :: proc(title: string, size := [2]u32{1280, 720}) {
 	win.SetProcessDPIAware()
 
-	hInstance := cast(win.HINSTANCE)win.GetModuleHandleW(nil)
+	window.hInstance = cast(win.HINSTANCE)win.GetModuleHandleW(nil)
 	wndclass := win.WNDCLASSW{
 		lpfnWndProc   = window_proc,
 		style         = win.CS_VREDRAW | win.CS_HREDRAW | win.CS_OWNDC,
-		hInstance     = hInstance,
-		hIcon         = win.LoadIconW(hInstance, cast(win.LPCWSTR)win.MAKEINTRESOURCEW(1)),
+		hInstance     = window.hInstance,
+		hIcon         = win.LoadIconW(window.hInstance, cast(win.LPCWSTR)win.MAKEINTRESOURCEW(1)),
 		hCursor       = win.LoadCursorA(nil, win.IDC_ARROW),
 		hbrBackground = cast(win.HBRUSH)win.GetStockObject(win.BLACK_BRUSH),
-		lpszClassName = win.L("GriPlayer"),
+		lpszClassName = "GriPlayer",
 	}
 
 	win.RegisterClassW(&wndclass)
@@ -61,7 +62,7 @@ init :: proc(title: string, size := [2]u32{1280, 720}) {
 	ypos := (win.GetSystemMetrics(win.SM_CYSCREEN) - window_h) / 2
 
 	title16 := win.utf8_to_wstring(title, context.temp_allocator)
-	window.hwnd = win.CreateWindowExW(ex_style, win.L("GriPlayer"), title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, hInstance, nil)
+	window.hwnd = win.CreateWindowExW(ex_style, "GriPlayer", title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, window.hInstance, nil)
 
 	scale := dpi_scale()
 	if scale != 1.0 {
@@ -155,14 +156,14 @@ update :: proc(poll_msg := true) {
 		}
 	}
 
-	window.cursor = .Arrow		
+	window.cursor = .Arrow
 
 	cur_time := time.now()
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
 	window.prev_time = cur_time
 
 	if window.frame_callback != nil {
-		window.frame_callback()	
+		window.frame_callback()
 	}
 
 	flush()

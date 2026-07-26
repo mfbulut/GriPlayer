@@ -92,6 +92,7 @@ set_scissor :: proc(rect: Rect) {
 		cast(i32)(rect.w * scale),
 		cast(i32)(rect.h * scale),
 	}
+	
 	if new_scissor != scissor {
 		flush()
 		scissor = new_scissor
