@@ -8,8 +8,6 @@ Cursor :: enum {
 	Arrow,
 	Hand,
 	IBeam,
-	SizeNS,
-	SizeWE,
 	SizeAll,
 }
 
@@ -127,10 +125,6 @@ set_cursor :: proc(cursor: Cursor) {
 	window.cursor = cursor
 }
 
-set_frame_callback :: proc(cb: proc()) {
-	window.frame_callback = cb
-}
-
 dpi_scale :: proc() -> f32 {
 	return f32(win.GetDpiForWindow(window.hwnd)) / f32(96.0)
 }
@@ -147,16 +141,11 @@ window_is_minimized :: proc() -> bool {
 	return cast(bool)win.IsIconic(window.hwnd)
 }
 
-update :: proc(poll_msg := true) -> bool {
+update :: proc(poll_msg := true) {
+	window.mouse_scroll = {0, 0}
 	for &state in window.key_state {
 		state -= {.Pressed, .Released, .Repeat}
 	}
-
-	window.mouse_scroll = {0, 0}
-
-	cur_time := time.now()
-	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
-	window.prev_time = cur_time
 
 	if poll_msg {
 		msg: win.MSG
@@ -166,29 +155,32 @@ update :: proc(poll_msg := true) -> bool {
 		}
 	}
 
-	window.cursor = .Arrow
+	window.cursor = .Arrow		
 
-	if window.size.x > 0 && window.size.y > 0 && !window_is_minimized() {
-		if window.is_resized {
-			vk_recreate_swapchain()
-			window.is_resized = false
-		}
-		vk_begin_frame()
+	cur_time := time.now()
+	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
+	window.prev_time = cur_time
+
+	if window.frame_callback != nil {
+		window.frame_callback()	
 	}
 
-	reset_scissor()
+	flush()
 
-	return !window.should_close
+	if window.is_resized {
+		vk_recreate_swapchain()
+		window.is_resized = false
+	}
+
+	vk_render()
 }
 
-present :: proc(sync := u32(1)) {
-	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() {
-		clear(&instances)
-		return
+run :: proc(cb: proc()) {
+	window.frame_callback = cb
+
+	for !window.should_close {
+		update()
 	}
-	flush()
-	vk_end_frame()
-	texture_release_deferred()
 }
 
 window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM) -> win.LRESULT {
@@ -216,8 +208,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 			case .Arrow:   hc = win.LoadCursorA(nil, win.IDC_ARROW)
 			case .Hand:    hc = win.LoadCursorA(nil, win.IDC_HAND)
 			case .IBeam:   hc = win.LoadCursorA(nil, win.IDC_IBEAM)
-			case .SizeNS:  hc = win.LoadCursorA(nil, win.IDC_SIZENS)
-			case .SizeWE:  hc = win.LoadCursorA(nil, win.IDC_SIZEWE)
 			case .SizeAll: hc = win.LoadCursorA(nil, win.IDC_SIZEALL)
 			}
 			win.SetCursor(hc)
@@ -231,10 +221,7 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	case win.WM_EXITSIZEMOVE:
 		win.KillTimer(hwnd, 1)
 	case win.WM_TIMER:
-		if wparam == 1 && window.frame_callback != nil {
-			update(false)
-			window.frame_callback()
-		}
+		if wparam == 1 do update(false)
 
 	case win.WM_SIZE:
 		window.size.x = cast(u32)win.LOWORD(lparam)

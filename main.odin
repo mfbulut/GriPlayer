@@ -26,10 +26,7 @@ main :: proc() {
 	load_icons()
 	loader_start()
 
-	fx.set_frame_callback(frame)
-	for fx.update() {
-		frame()
-	}
+	fx.run(frame)
 
 	cache_save()
 }
@@ -91,8 +88,6 @@ frame :: proc() {
 
 	draw_context_menu()
 	end_frame()
-
-	fx.present()
 	free_all(context.temp_allocator)
 }
 

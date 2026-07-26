@@ -18,6 +18,9 @@ player: struct {
 	session:  int,
 }
 
+texture_to_free := fx.Texture{index = -1}
+
+
 player_start_playlist :: proc(songs: []^Music, song_index: int) {
 	if len(songs) == 0 || song_index < 0 || song_index >= len(songs) {
 		return
@@ -52,7 +55,11 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	record_listen(song)
 	visualizer_create_palette(song.thumbnail_pixels)
 
-	fx.texture_free(&player.cover)
+	if player.cover.index != -1 {
+		texture_to_free = player.cover
+		player.cover.index = -1
+	}
+	
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
 	if len(cover_bytes) > 0 {
@@ -165,6 +172,10 @@ current_lyric :: proc() -> (index: int, found: bool) {
 }
 
 player_update :: proc() {
+	if texture_to_free.index != -1 {
+		fx.texture_free(&texture_to_free)
+	}
+
 	if player.music == nil {
 		return
 	}

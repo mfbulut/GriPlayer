@@ -55,8 +55,16 @@ MSDF_File :: struct {
 	glyphs:  []MSDF_Glyph,
 }
 
+Batch :: struct {
+	offset: u32,
+	count:  u32,
+	scissor: [4]i32,
+}
+
 font: Font
 instances: [dynamic; MAX_INSTANCES]Instance
+batches: [dynamic; 256]Batch
+current_scissor: [4]i32
 
 renderer_init :: proc() {
 	msdf_data: MSDF_File
@@ -89,9 +97,9 @@ set_scissor :: proc(rect: Rect) {
 		cast(i32)(rect.w * scale),
 		cast(i32)(rect.h * scale),
 	}
-	if new_scissor != vks.scissor {
+	if new_scissor != current_scissor {
 		flush()
-		vks.scissor = new_scissor
+		current_scissor = new_scissor
 	}
 }
 
@@ -102,8 +110,21 @@ reset_scissor :: proc() {
 
 flush :: proc() {
 	if len(instances) == 0 do return
-	vk_draw_instances(instances[:])
-	clear(&instances)
+
+	last_count: u32 = 0
+	for b in batches {
+		last_count += b.count
+	}
+
+	count := u32(len(instances)) - last_count
+
+	if count == 0 do return
+	
+	append(&batches, Batch{
+		offset = last_count,
+		count  = count,
+		scissor = current_scissor,
+	})
 }
 
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {

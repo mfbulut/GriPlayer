@@ -12,33 +12,33 @@ MAX_TEXTURES :: 1024
 MAX_INSTANCES :: 1024 * 16
 
 vks: struct {
+	instance: vk.Instance,
 	physical_device: vk.PhysicalDevice,
 	device: vk.Device,
-	device_queue: vk.Queue,
+	graphics_queue: vk.Queue,
 
 	surface: vk.SurfaceKHR,
-	swapchain: vk.SwapchainKHR,
-	swapchain_format: vk.Format,
-	swapchain_images: [2]vk.Image,
-	swapchain_image_views: [2]vk.ImageView,
-	image_index: u32,
+	swapchain: struct {
+		swapchain: vk.SwapchainKHR,
+		images: [2]vk.Image,
+		image_views: [2]vk.ImageView,
+		render_finished_semaphores: [2]vk.Semaphore,
+	},
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
+
 	image_available_semaphore: vk.Semaphore,
-	render_finished_semaphores: [2]vk.Semaphore,
 	in_flight_fence: vk.Fence,
 
 	pipeline_layout: vk.PipelineLayout,
 	shaders: [2]vk.ShaderEXT,
 	sampler: vk.Sampler,
 
+	descriptor_set_layout: vk.DescriptorSetLayout,
 	descriptor_set: vk.DescriptorSet,
 	instance_buffer_mapped: rawptr,
-
-	scissor: [4]i32,
 	clear_color: [4]f32,
-	instance_count: u32,
 }
 
 textures: [MAX_TEXTURES]struct {
@@ -49,8 +49,6 @@ textures: [MAX_TEXTURES]struct {
 	used: bool,
 }
 
-textures_to_free: [dynamic; MAX_TEXTURES]int
-
 check_vk :: proc(result: vk.Result) {
 	if result != .SUCCESS {
 		fmt.eprintf("Vulkan Error: %v\n", result)
@@ -58,374 +56,363 @@ check_vk :: proc(result: vk.Result) {
 	}
 }
 
-when ODIN_DEBUG {
-	debug_callback :: proc "system" (
-		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-		messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
-		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-		pUserData: rawptr,
-	) -> b32 {
-		context = runtime.default_context()
-		fmt.eprintf("Vulkan Validation: %s\n", pCallbackData.pMessage)
-		return false
-	}
-}
-
 vk_init :: proc() {
-	lib, ok := dynlib.load_library("vulkan-1.dll")
-	if !ok {
-		panic("Failed to load vulkan-1.dll")
+	{	// Load vulkan-1.dll
+		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load vulkan-1.dll")
+		vkGetInstanceProcAddr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr")
+		vk.load_proc_addresses(vkGetInstanceProcAddr)
 	}
 
-	vkGetInstanceProcAddr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr")
-	vk.load_proc_addresses(vkGetInstanceProcAddr)
-
-	// Create Instance
-	app_info := vk.ApplicationInfo {
-		sType = .APPLICATION_INFO,
-		pApplicationName = "GriPlayer",
-		apiVersion = vk.API_VERSION_1_3,
-	}
-
-	when ODIN_DEBUG {
-		layer_count := u32(1)
-		val_layer := cstring("VK_LAYER_KHRONOS_validation")
-		layer_names := &val_layer
-
-		extensions := [?]cstring {
-			vk.KHR_SURFACE_EXTENSION_NAME,
-			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
+	{	// Create Instance
+		app_info := vk.ApplicationInfo {
+			sType = .APPLICATION_INFO,
+			pApplicationName = "GriPlayer",
+			apiVersion = vk.API_VERSION_1_3,
 		}
-	} else {
-		layer_count: u32
-		layer_names: ^cstring
-		extensions := [?]cstring {
-			vk.KHR_SURFACE_EXTENSION_NAME,
-			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+
+		when ODIN_DEBUG {
+			layer_count := u32(1)
+			val_layer := cstring("VK_LAYER_KHRONOS_validation")
+			layer_names := &val_layer
+
+			extensions := [?]cstring {
+				vk.KHR_SURFACE_EXTENSION_NAME,
+				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+				vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
+			}
+		} else {
+			layer_count: u32
+			layer_names: ^cstring
+			extensions := [?]cstring {
+				vk.KHR_SURFACE_EXTENSION_NAME,
+				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+			}
 		}
-	}
 
-	create_info := vk.InstanceCreateInfo {
-		sType = .INSTANCE_CREATE_INFO,
-		pApplicationInfo = &app_info,
-		enabledExtensionCount =  u32(len(extensions)),
-		ppEnabledExtensionNames = &extensions[0],
-		enabledLayerCount = layer_count,
-		ppEnabledLayerNames = layer_names,
-	}
-
-	when ODIN_DEBUG {
-		debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
-			sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-			messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
-			messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
-			pfnUserCallback = debug_callback,
+		create_info := vk.InstanceCreateInfo {
+			sType = .INSTANCE_CREATE_INFO,
+			pApplicationInfo = &app_info,
+			enabledExtensionCount =  u32(len(extensions)),
+			ppEnabledExtensionNames = &extensions[0],
+			enabledLayerCount = layer_count,
+			ppEnabledLayerNames = layer_names,
 		}
-		create_info.pNext = &debug_info
-	}
 
-	instance: vk.Instance
-	check_vk(vk.CreateInstance(&create_info, nil, &instance))
-	vk.load_proc_addresses_instance(instance)
+		when ODIN_DEBUG {
+			debug_callback :: proc "system" (
+				messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+				messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
+				pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+				pUserData: rawptr,
+			) -> b32 {
+				context = runtime.default_context()
+				fmt.eprintf("Vulkan Validation: %s\n", pCallbackData.pMessage)
+				return false
+			}
 
-	when ODIN_DEBUG {
-		debug_messenger: vk.DebugUtilsMessengerEXT
-		check_vk(vk.CreateDebugUtilsMessengerEXT(instance, &debug_info, nil, &debug_messenger))
-	}
+			debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
+				sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
+				messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+				pfnUserCallback = debug_callback,
+			}
+			create_info.pNext = &debug_info
+		}
 
-	// Create Surface
-	surface_create_info := vk.Win32SurfaceCreateInfoKHR {
-		sType = .WIN32_SURFACE_CREATE_INFO_KHR,
-		hinstance = cast(windows.HINSTANCE)windows.GetModuleHandleW(nil),
-		hwnd = window.hwnd,
-	}
-	check_vk(vk.CreateWin32SurfaceKHR(instance, &surface_create_info, nil, &vks.surface))
+		vk.CreateInstance(&create_info, nil, &vks.instance)
+		vk.load_proc_addresses(vks.instance)
 
-	// Pick Physical Device
-	device_count: u32
-	vk.EnumeratePhysicalDevices(instance, &device_count, nil)
-	devices := make([]vk.PhysicalDevice, device_count)
-	defer delete(devices)
-	vk.EnumeratePhysicalDevices(instance, &device_count, &devices[0])
-
-	vks.physical_device = devices[0]
-	for d in devices {
-		props: vk.PhysicalDeviceProperties
-		vk.GetPhysicalDeviceProperties(d, &props)
-		if props.deviceType == .DISCRETE_GPU {
-			vks.physical_device = d
-			break
+		when ODIN_DEBUG {
+			debug_messenger: vk.DebugUtilsMessengerEXT
+			vk.CreateDebugUtilsMessengerEXT(vks.instance, &debug_info, nil, &debug_messenger)
 		}
 	}
 
-	// Find Queue Family
-	queue_count: u32
-	vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, nil)
-	queue_families := make([]vk.QueueFamilyProperties, queue_count)
-	defer delete(queue_families)
-	vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, &queue_families[0])
+	{	// Create Surface
+		surface_create_info := vk.Win32SurfaceCreateInfoKHR {
+			sType = .WIN32_SURFACE_CREATE_INFO_KHR,
+			hinstance = cast(windows.HINSTANCE)windows.GetModuleHandleW(nil),
+			hwnd = window.hwnd,
+		}
+		vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
+	}
 
-	queue_family_index: u32
-	for queue_family, i in queue_families {
-		if .GRAPHICS in queue_family.queueFlags {
-			queue_family_index = u32(i)
-			break
+	{	// Pick Physical Device
+		device_count: u32
+		vk.EnumeratePhysicalDevices(vks.instance, &device_count, nil)
+		devices := make([]vk.PhysicalDevice, device_count)
+		defer delete(devices)
+		vk.EnumeratePhysicalDevices(vks.instance, &device_count, &devices[0])
+
+		vks.physical_device = devices[0]
+		for d in devices {
+			props: vk.PhysicalDeviceProperties
+			vk.GetPhysicalDeviceProperties(d, &props)
+			if props.deviceType == .DISCRETE_GPU {
+				vks.physical_device = d
+				break
+			}
 		}
 	}
 
-	// Create Logical Device
-	queue_priority := f32(1.0)
-	queue_create_info := vk.DeviceQueueCreateInfo {
-		sType = .DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = queue_family_index,
-		queueCount = 1,
-		pQueuePriorities = &queue_priority,
+	{	// Create Logical Device
+		queue_count: u32
+		vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, nil)
+		queue_families := make([]vk.QueueFamilyProperties, queue_count)
+		defer delete(queue_families)
+		vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, &queue_families[0])
+		queue_family_index: u32
+		for queue_family, i in queue_families {
+			if .GRAPHICS in queue_family.queueFlags {
+				queue_family_index = u32(i)
+				break
+			}
+		}	
+
+		queue_priority := f32(1.0)
+		queue_create_info := vk.DeviceQueueCreateInfo {
+			sType = .DEVICE_QUEUE_CREATE_INFO,
+			queueFamilyIndex = queue_family_index,
+			queueCount = 1,
+			pQueuePriorities = &queue_priority,
+		}
+
+		shader_object_features := vk.PhysicalDeviceShaderObjectFeaturesEXT {
+			sType = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
+			shaderObject = true,
+		}
+
+		features_13 := vk.PhysicalDeviceVulkan13Features {
+			sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+			pNext = &shader_object_features,
+			dynamicRendering = true,
+			synchronization2 = true,
+		}
+
+		features_12 := vk.PhysicalDeviceVulkan12Features {
+			sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+			pNext = &features_13,
+			descriptorIndexing = true,
+			descriptorBindingPartiallyBound = true,
+			descriptorBindingSampledImageUpdateAfterBind = true,
+			runtimeDescriptorArray = true,
+			shaderSampledImageArrayNonUniformIndexing = true,
+		}
+
+		device_extensions := [?]cstring {
+			vk.KHR_SWAPCHAIN_EXTENSION_NAME,
+			vk.EXT_SHADER_OBJECT_EXTENSION_NAME,
+		}
+
+		device_create_info := vk.DeviceCreateInfo {
+			sType = .DEVICE_CREATE_INFO,
+			pNext = &features_12,
+			queueCreateInfoCount = 1,
+			pQueueCreateInfos = &queue_create_info,
+			enabledExtensionCount = len(device_extensions),
+			ppEnabledExtensionNames = &device_extensions[0],
+		}
+
+		vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device)
+		vk.load_proc_addresses(vks.device)
+		vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.graphics_queue)
+
+		pool_info := vk.CommandPoolCreateInfo {
+			sType = .COMMAND_POOL_CREATE_INFO,
+			flags = {.RESET_COMMAND_BUFFER},
+			queueFamilyIndex = queue_family_index,
+		}
+		vk.CreateCommandPool(vks.device, &pool_info, nil, &vks.command_pool)
 	}
 
-	device_extensions := [?]cstring {
-		vk.KHR_SWAPCHAIN_EXTENSION_NAME,
-		vk.EXT_SHADER_OBJECT_EXTENSION_NAME,
+	{	// Sync objects
+		semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
+		fence_info := vk.FenceCreateInfo { sType = .FENCE_CREATE_INFO, flags = {.SIGNALED} }
+
+		alloc_info := vk.CommandBufferAllocateInfo {
+			sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+			level = .PRIMARY,
+			commandPool = vks.command_pool,
+			commandBufferCount = 1,
+		}
+		vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffer)
+		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.image_available_semaphore)
+		vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fence)
 	}
 
-	shader_object_features := vk.PhysicalDeviceShaderObjectFeaturesEXT {
-		sType = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
-		shaderObject = true,
+	{	// Sampler
+		
+		sampler_info := vk.SamplerCreateInfo {
+			sType = .SAMPLER_CREATE_INFO,
+			magFilter = .LINEAR,
+			minFilter = .LINEAR,
+			addressModeU = .CLAMP_TO_EDGE,
+			addressModeV = .CLAMP_TO_EDGE,
+			addressModeW = .CLAMP_TO_EDGE,
+			maxLod = vk.LOD_CLAMP_NONE,
+		}
+		vk.CreateSampler(vks.device, &sampler_info, nil, &vks.sampler)
 	}
 
-	features_13 := vk.PhysicalDeviceVulkan13Features {
-		sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-		pNext = &shader_object_features,
-		dynamicRendering = true,
-		synchronization2 = true,
+	{	// Bindless Descriptor Setup
+		
+		binding_flags := [?]vk.DescriptorBindingFlags {
+			{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
+			{},
+		}
+		layout_binding_flags := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
+			sType = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+			bindingCount = 2,
+			pBindingFlags = &binding_flags[0],
+		}
+		bindings := [?]vk.DescriptorSetLayoutBinding {
+			{
+				binding = 0,
+				descriptorType = .COMBINED_IMAGE_SAMPLER,
+				descriptorCount = MAX_TEXTURES,
+				stageFlags = {.FRAGMENT},
+			},
+			{
+				binding = 1,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.VERTEX},
+			},
+		}
+		layout_info := vk.DescriptorSetLayoutCreateInfo {
+			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			pNext = &layout_binding_flags,
+			flags = {.UPDATE_AFTER_BIND_POOL},
+			bindingCount = 2,
+			pBindings = &bindings[0],
+		}
+		check_vk(vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &vks.descriptor_set_layout))
+
+		pool_sizes := [?]vk.DescriptorPoolSize {
+			{ type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_TEXTURES },
+			{ type = .STORAGE_BUFFER, descriptorCount = 1 },
+		}
+		desc_pool_info := vk.DescriptorPoolCreateInfo {
+			sType = .DESCRIPTOR_POOL_CREATE_INFO,
+			flags = {.UPDATE_AFTER_BIND},
+			maxSets = 1,
+			poolSizeCount = 2,
+			pPoolSizes = &pool_sizes[0],
+		}
+		descriptor_pool: vk.DescriptorPool
+		check_vk(vk.CreateDescriptorPool(vks.device, &desc_pool_info, nil, &descriptor_pool))
+
+		alloc_set_info := vk.DescriptorSetAllocateInfo {
+			sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			descriptorPool = descriptor_pool,
+			descriptorSetCount = 1,
+			pSetLayouts = &vks.descriptor_set_layout,
+		}
+		check_vk(vk.AllocateDescriptorSets(vks.device, &alloc_set_info, &vks.descriptor_set))
 	}
 
-	features_12 := vk.PhysicalDeviceVulkan12Features {
-		sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		pNext = &features_13,
-		descriptorIndexing = true,
-		descriptorBindingPartiallyBound = true,
-		descriptorBindingSampledImageUpdateAfterBind = true,
-		runtimeDescriptorArray = true,
-		shaderSampledImageArrayNonUniformIndexing = true,
-	}
+	{	// Instance Buffer
+		buffer, memory := create_buffer(
+			vk.DeviceSize(MAX_INSTANCES * size_of(Instance)),
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+		)
+		vk.MapMemory(vks.device, memory, 0, vk.DeviceSize(vk.WHOLE_SIZE), {}, &vks.instance_buffer_mapped)
 
-	device_create_info := vk.DeviceCreateInfo {
-		sType = .DEVICE_CREATE_INFO,
-		pNext = &features_12,
-		queueCreateInfoCount = 1,
-		pQueueCreateInfos = &queue_create_info,
-		enabledExtensionCount = len(device_extensions),
-		ppEnabledExtensionNames = &device_extensions[0],
-	}
+		// Bind SSBO to descriptor set
+		buffer_info := vk.DescriptorBufferInfo {
+			buffer = buffer,
+			range = vk.DeviceSize(vk.WHOLE_SIZE),
+		}
 
-	check_vk(vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device))
-	vk.load_proc_addresses_device(vks.device)
-
-	vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.device_queue)
-
-	// Command Pool
-	pool_info := vk.CommandPoolCreateInfo {
-		sType = .COMMAND_POOL_CREATE_INFO,
-		flags = {.RESET_COMMAND_BUFFER},
-		queueFamilyIndex = queue_family_index,
-	}
-	check_vk(vk.CreateCommandPool(vks.device, &pool_info, nil, &vks.command_pool))
-
-	// Sync objects
-	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
-	fence_info := vk.FenceCreateInfo { sType = .FENCE_CREATE_INFO, flags = {.SIGNALED} }
-
-	alloc_info := vk.CommandBufferAllocateInfo {
-		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-		commandPool = vks.command_pool,
-		level = .PRIMARY,
-		commandBufferCount = 1,
-	}
-	check_vk(vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffer))
-	check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.image_available_semaphore))
-	check_vk(vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fence))
-
-	// Instance Buffer
-	instance_buffer: vk.Buffer
-	instance_buffer_memory: vk.DeviceMemory
-	create_buffer(
-		vk.DeviceSize(MAX_INSTANCES * size_of(Instance)),
-		{.STORAGE_BUFFER},
-		{.HOST_VISIBLE, .HOST_COHERENT},
-		&instance_buffer,
-		&instance_buffer_memory,
-	)
-	vk.MapMemory(vks.device, instance_buffer_memory, 0, vk.DeviceSize(vk.WHOLE_SIZE), {}, &vks.instance_buffer_mapped)
-
-	// Sampler
-	sampler_info := vk.SamplerCreateInfo {
-		sType = .SAMPLER_CREATE_INFO,
-		magFilter = .LINEAR,
-		minFilter = .LINEAR,
-		addressModeU = .CLAMP_TO_EDGE,
-		addressModeV = .CLAMP_TO_EDGE,
-		addressModeW = .CLAMP_TO_EDGE,
-		maxLod = vk.LOD_CLAMP_NONE,
-	}
-	check_vk(vk.CreateSampler(vks.device, &sampler_info, nil, &vks.sampler))
-
-	// Bindless Descriptor Setup
-	bindings := [?]vk.DescriptorSetLayoutBinding {
-		{
-			binding = 0,
-			descriptorType = .COMBINED_IMAGE_SAMPLER,
-			descriptorCount = MAX_TEXTURES,
-			stageFlags = {.FRAGMENT},
-		},
-		{
-			binding = 1,
+		write_desc := vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = vks.descriptor_set,
+			dstBinding = 1,
+			dstArrayElement = 0,
 			descriptorType = .STORAGE_BUFFER,
 			descriptorCount = 1,
+			pBufferInfo = &buffer_info,
+		}
+
+		vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
+	}
+
+	{	// Create Pipeline
+		vert_spv := #load("shader/shader.vert.spv", []u32)
+		frag_spv := #load("shader/shader.frag.spv", []u32)
+
+		push_constant_range := vk.PushConstantRange {
 			stageFlags = {.VERTEX},
-		},
-	}
-	binding_flags := [?]vk.DescriptorBindingFlags {
-		{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
-		{},
-	}
-	layout_binding_flags := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
-		sType = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-		bindingCount = 2,
-		pBindingFlags = &binding_flags[0],
-	}
-	layout_info := vk.DescriptorSetLayoutCreateInfo {
-		sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		pNext = &layout_binding_flags,
-		flags = {.UPDATE_AFTER_BIND_POOL},
-		bindingCount = 2,
-		pBindings = &bindings[0],
-	}
-	descriptor_set_layout: vk.DescriptorSetLayout
-	check_vk(vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &descriptor_set_layout))
+			size = size_of([2]f32),
+		}
 
-	pool_sizes := [?]vk.DescriptorPoolSize {
-		{ type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_TEXTURES },
-		{ type = .STORAGE_BUFFER, descriptorCount = 1 },
-	}
-	desc_pool_info := vk.DescriptorPoolCreateInfo {
-		sType = .DESCRIPTOR_POOL_CREATE_INFO,
-		flags = {.UPDATE_AFTER_BIND},
-		maxSets = 1,
-		poolSizeCount = 2,
-		pPoolSizes = &pool_sizes[0],
-	}
-	descriptor_pool: vk.DescriptorPool
-	check_vk(vk.CreateDescriptorPool(vks.device, &desc_pool_info, nil, &descriptor_pool))
+		pipeline_layout_info := vk.PipelineLayoutCreateInfo {
+			sType = .PIPELINE_LAYOUT_CREATE_INFO,
+			setLayoutCount = 1,
+			pSetLayouts = &vks.descriptor_set_layout,
+			pushConstantRangeCount = 1,
+			pPushConstantRanges = &push_constant_range,
+		}
 
-	alloc_set_info := vk.DescriptorSetAllocateInfo {
-		sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool = descriptor_pool,
-		descriptorSetCount = 1,
-		pSetLayouts = &descriptor_set_layout,
-	}
-	check_vk(vk.AllocateDescriptorSets(vks.device, &alloc_set_info, &vks.descriptor_set))
+		check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
 
-	// Bind SSBO to descriptor set
-	buffer_info := vk.DescriptorBufferInfo {
-		buffer = instance_buffer,
-		range = vk.DeviceSize(vk.WHOLE_SIZE),
+		shader_infos := [?]vk.ShaderCreateInfoEXT{
+			{
+				sType = .SHADER_CREATE_INFO_EXT,
+				stage = {.VERTEX},
+				nextStage = {.FRAGMENT},
+				codeType = .SPIRV,
+				codeSize = len(vert_spv) * 4,
+				pCode = raw_data(vert_spv),
+				pName = "main",
+				setLayoutCount = 1,
+				pSetLayouts = &vks.descriptor_set_layout,
+				pushConstantRangeCount = 1,
+				pPushConstantRanges = &push_constant_range,
+			},
+			{
+				sType = .SHADER_CREATE_INFO_EXT,
+				stage = {.FRAGMENT},
+				nextStage = {},
+				codeType = .SPIRV,
+				codeSize = len(frag_spv) * 4,
+				pCode = raw_data(frag_spv),
+				pName = "main",
+				setLayoutCount = 1,
+				pSetLayouts = &vks.descriptor_set_layout,
+				pushConstantRangeCount = 1,
+				pPushConstantRanges = &push_constant_range,
+			}
+		}
+
+		check_vk(vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0]))
 	}
-	write_desc := vk.WriteDescriptorSet {
-		sType = .WRITE_DESCRIPTOR_SET,
-		dstSet = vks.descriptor_set,
-		dstBinding = 1,
-		dstArrayElement = 0,
-		descriptorType = .STORAGE_BUFFER,
-		descriptorCount = 1,
-		pBufferInfo = &buffer_info,
-	}
-	vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
-	
-	vk_create_pipeline(&descriptor_set_layout)
+
 	vk_recreate_swapchain()
 }
 
-vk_create_pipeline :: proc(desc_layout: ^vk.DescriptorSetLayout) {
-	vert_spv := #load("shader/shader.vert.spv", []u32)
-	frag_spv := #load("shader/shader.frag.spv", []u32)
-
-	push_constant_range := vk.PushConstantRange {
-		stageFlags = {.VERTEX},
-		size = size_of([2]f32),
-	}
-
-	pipeline_layout_info := vk.PipelineLayoutCreateInfo {
-		sType = .PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1,
-		pSetLayouts = desc_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
-	}
-
-	check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
-
-	shader_infos := [?]vk.ShaderCreateInfoEXT{
-		{
-			sType = .SHADER_CREATE_INFO_EXT,
-			stage = {.VERTEX},
-			nextStage = {.FRAGMENT},
-			codeType = .SPIRV,
-			codeSize = len(vert_spv) * 4,
-			pCode = raw_data(vert_spv),
-			pName = "main",
-			setLayoutCount = 1,
-			pSetLayouts = desc_layout,
-			pushConstantRangeCount = 1,
-			pPushConstantRanges = &push_constant_range,
-		},
-		{
-			sType = .SHADER_CREATE_INFO_EXT,
-			stage = {.FRAGMENT},
-			nextStage = {},
-			codeType = .SPIRV,
-			codeSize = len(frag_spv) * 4,
-			pCode = raw_data(frag_spv),
-			pName = "main",
-			setLayoutCount = 1,
-			pSetLayouts = desc_layout,
-			pushConstantRangeCount = 1,
-			pPushConstantRanges = &push_constant_range,
-		}
-	}
-
-	check_vk(vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0]))
-}
-
 vk_recreate_swapchain :: proc() {
-	check_vk(vk.DeviceWaitIdle(vks.device))
+	vk.DeviceWaitIdle(vks.device)
 
-	if vks.swapchain != 0 {
-		for view in vks.swapchain_image_views {
+	if vks.swapchain.swapchain != 0 {
+		for view in vks.swapchain.image_views {
 			if view != 0 do vk.DestroyImageView(vks.device, view, nil)
 		}
-		for semaphore in vks.render_finished_semaphores {
+		for semaphore in vks.swapchain.render_finished_semaphores {
 			if semaphore != 0 do vk.DestroySemaphore(vks.device, semaphore, nil)
 		}
 	}
 
 	capabilities: vk.SurfaceCapabilitiesKHR
-	check_vk(vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.physical_device, vks.surface, &capabilities))
-
-	format_count: u32
-	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, nil))
-	formats := make([]vk.SurfaceFormatKHR, format_count)
-	defer delete(formats)
-	check_vk(vk.GetPhysicalDeviceSurfaceFormatsKHR(vks.physical_device, vks.surface, &format_count, &formats[0]))
-
-	vks.swapchain_format = formats[0].format
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.physical_device, vks.surface, &capabilities)
 
 	create_info := vk.SwapchainCreateInfoKHR {
 		sType = .SWAPCHAIN_CREATE_INFO_KHR,
 		surface = vks.surface,
 		minImageCount = max(capabilities.minImageCount, 2),
-		imageFormat = vks.swapchain_format,
-		imageColorSpace = formats[0].colorSpace,
+		imageFormat = .B8G8R8A8_UNORM,
+		imageColorSpace = .SRGB_NONLINEAR,
 		imageExtent = {window.size.x, window.size.y},
 		imageArrayLayers = 1,
 		imageUsage = {.COLOR_ATTACHMENT},
@@ -434,59 +421,61 @@ vk_recreate_swapchain :: proc() {
 		compositeAlpha = {.OPAQUE},
 		presentMode = .FIFO,
 		clipped = true,
-		oldSwapchain = vks.swapchain,
+		oldSwapchain = vks.swapchain.swapchain,
 	}
 
 	new_swapchain: vk.SwapchainKHR
-	check_vk(vk.CreateSwapchainKHR(vks.device, &create_info, nil, &new_swapchain))
-	if vks.swapchain != 0 {
-		vk.DestroySwapchainKHR(vks.device, vks.swapchain, nil)
+	vk.CreateSwapchainKHR(vks.device, &create_info, nil, &new_swapchain)
+
+	if vks.swapchain.swapchain != 0 {
+		vk.DestroySwapchainKHR(vks.device, vks.swapchain.swapchain, nil)
 	}
-	vks.swapchain = new_swapchain
+	vks.swapchain.swapchain = new_swapchain
 
 	image_count: u32 = 2
-	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain, &image_count, &vks.swapchain_images[0])
+	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain.swapchain, &image_count, &vks.swapchain.images[0])
 
 	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
 	for i in 0..<image_count {
 		view_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
-			image = vks.swapchain_images[i],
+			image = vks.swapchain.images[i],
 			viewType = .D2,
-			format = vks.swapchain_format,
+			format = .B8G8R8A8_UNORM,
 			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 		}
-		check_vk(vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain_image_views[i]))
-		check_vk(vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.render_finished_semaphores[i]))
+		vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain.image_views[i])
+		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.swapchain.render_finished_semaphores[i])
 	}
 }
 
-vk_begin_frame :: proc() -> bool {
-	check_vk(vk.WaitForFences(vks.device, 1, &vks.in_flight_fence, true, max(u64)))
+vk_render :: proc() {
+	vk.WaitForFences(vks.device, 1, &vks.in_flight_fence, true, max(u64))
 
+	image_index: u32
 	res := vk.AcquireNextImageKHR(
-		vks.device, vks.swapchain, max(u64),
+		vks.device, vks.swapchain.swapchain, max(u64),
 		vks.image_available_semaphore,
-		0, &vks.image_index,
+		0, &image_index,
 	)
+
 	if res == .ERROR_OUT_OF_DATE_KHR {
-		return false
+		return
 	}
 
-	check_vk(vk.ResetFences(vks.device, 1, &vks.in_flight_fence))
+	vk.ResetFences(vks.device, 1, &vks.in_flight_fence)
 
 	cmd := vks.command_buffer
-	check_vk(vk.ResetCommandBuffer(cmd, {}))
-	vks.instance_count = 0
+	vk.ResetCommandBuffer(cmd, {})
 
 	begin_info := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
 		flags = {.ONE_TIME_SUBMIT},
 	}
-	check_vk(vk.BeginCommandBuffer(cmd, &begin_info))
+	vk.BeginCommandBuffer(cmd, &begin_info)
 
 	image_barrier(
-		cmd, vks.swapchain_images[vks.image_index],
+		cmd, vks.swapchain.images[image_index],
 		.UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL,
 		{.TOP_OF_PIPE}, {.COLOR_ATTACHMENT_OUTPUT},
 		{}, {.COLOR_ATTACHMENT_WRITE},
@@ -494,7 +483,7 @@ vk_begin_frame :: proc() -> bool {
 
 	color_attachment := vk.RenderingAttachmentInfo {
 		sType = .RENDERING_ATTACHMENT_INFO,
-		imageView = vks.swapchain_image_views[vks.image_index],
+		imageView = vks.swapchain.image_views[image_index],
 		imageLayout = .COLOR_ATTACHMENT_OPTIMAL,
 		loadOp = .CLEAR,
 		storeOp = .STORE,
@@ -558,46 +547,37 @@ vk_begin_frame :: proc() -> bool {
 	vk.CmdPushConstants(cmd, vks.pipeline_layout, {.VERTEX}, 0, size_of(screen_size), &screen_size)
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
 
-	return true
-}
+	if len(instances) > 0 {
+		if u32(len(instances)) > MAX_INSTANCES {
+			panic("Instance buffer overflow")
+		}
 
-vk_draw_instances :: proc(instances: []Instance) {
-	if len(instances) == 0 do return
+		dst := cast(rawptr)(uintptr(vks.instance_buffer_mapped))
+		mem.copy(dst, raw_data(instances[:]), len(instances) * size_of(Instance))
 
-	if vks.instance_count + u32(len(instances)) > MAX_INSTANCES {
-		panic("Instance buffer overflow")
+		for b in batches {
+			if b.count == 0 do continue
+			rect := vk.Rect2D {
+				offset = {b.scissor[0], b.scissor[1]},
+				extent = {u32(b.scissor[2]), u32(b.scissor[3])},
+			}
+
+			vk.CmdSetScissorWithCount(cmd, 1, &rect)
+			vk.CmdDraw(cmd, 4, b.count, 0, b.offset)
+		}
 	}
 
-	offset := uintptr(vks.instance_count) * size_of(Instance)
-	dst := cast(rawptr)(uintptr(vks.instance_buffer_mapped) + offset)
-	mem.copy(dst, raw_data(instances), len(instances) * size_of(Instance))
-
-	cmd := vks.command_buffer
-
-	rect := vk.Rect2D {
-		offset = {vks.scissor[0], vks.scissor[1]},
-		extent = {u32(vks.scissor[2]), u32(vks.scissor[3])},
-	}
-
-	vk.CmdSetScissorWithCount(cmd, 1, &rect)
-	vk.CmdDraw(cmd, 4, u32(len(instances)), 0, vks.instance_count)
-
-	vks.instance_count += u32(len(instances))
-}
-
-vk_end_frame :: proc() {
-	cmd := vks.command_buffer
 	vk.CmdEndRendering(cmd)
 
 	image_barrier(
-		cmd, vks.swapchain_images[vks.image_index],
+		cmd, vks.swapchain.images[image_index],
 		.COLOR_ATTACHMENT_OPTIMAL, .PRESENT_SRC_KHR,
 		{.COLOR_ATTACHMENT_OUTPUT}, {.ALL_COMMANDS},
 		{.COLOR_ATTACHMENT_WRITE}, {},
 	)
 	vk.EndCommandBuffer(cmd)
 
-	render_finished_semaphore := &vks.render_finished_semaphores[vks.image_index]
+	render_finished_semaphore := &vks.swapchain.render_finished_semaphores[image_index]
 	cmd_info := vk.CommandBufferSubmitInfo {
 		sType = .COMMAND_BUFFER_SUBMIT_INFO,
 		commandBuffer = cmd,
@@ -621,18 +601,21 @@ vk_end_frame :: proc() {
 		signalSemaphoreInfoCount = 1,
 		pSignalSemaphoreInfos = &signal_info,
 	}
-	check_vk(vk.QueueSubmit2(vks.device_queue, 1, &submit_info, vks.in_flight_fence))
+	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, vks.in_flight_fence)
 
 	present_info := vk.PresentInfoKHR {
 		sType = .PRESENT_INFO_KHR,
 		waitSemaphoreCount = 1,
 		pWaitSemaphores = render_finished_semaphore,
 		swapchainCount = 1,
-		pSwapchains = &vks.swapchain,
-		pImageIndices = &vks.image_index,
+		pSwapchains = &vks.swapchain.swapchain,
+		pImageIndices = &image_index,
 	}
 
-	vk.QueuePresentKHR(vks.device_queue, &present_info)
+	vk.QueuePresentKHR(vks.graphics_queue, &present_info)
+
+	clear(&instances)
+	clear(&batches)
 }
 
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
@@ -643,21 +626,20 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 			return i
 		}
 	}
-
 	panic("Failed to find suitable memory type!")
 }
 
-create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags, buffer: ^vk.Buffer, buffer_memory: ^vk.DeviceMemory) {
+create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) -> (buffer: vk.Buffer, buffer_memory: vk.DeviceMemory) {
 	buffer_info := vk.BufferCreateInfo {
 		sType = .BUFFER_CREATE_INFO,
 		size = size,
 		usage = usage,
 		sharingMode = .EXCLUSIVE,
 	}
-	check_vk(vk.CreateBuffer(vks.device, &buffer_info, nil, buffer))
+	vk.CreateBuffer(vks.device, &buffer_info, nil, &buffer)
 
 	mem_requirements: vk.MemoryRequirements
-	vk.GetBufferMemoryRequirements(vks.device, buffer^, &mem_requirements)
+	vk.GetBufferMemoryRequirements(vks.device, buffer, &mem_requirements)
 
 	alloc_info := vk.MemoryAllocateInfo {
 		sType = .MEMORY_ALLOCATE_INFO,
@@ -665,8 +647,9 @@ create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, propertie
 		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, properties),
 	}
 
-	check_vk(vk.AllocateMemory(vks.device, &alloc_info, nil, buffer_memory))
-	vk.BindBufferMemory(vks.device, buffer^, buffer_memory^, 0)
+	vk.AllocateMemory(vks.device, &alloc_info, nil, &buffer_memory)
+	vk.BindBufferMemory(vks.device, buffer, buffer_memory, 0)
+	return
 }
 
 image_barrier :: proc(
@@ -694,46 +677,6 @@ image_barrier :: proc(
 		pImageMemoryBarriers = &barrier,
 	}
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
-}
-
-@(deferred_out=vk_cmd_end)
-vk_cmd_begin :: proc() -> vk.CommandBuffer {
-	alloc_info := vk.CommandBufferAllocateInfo {
-		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-		level = .PRIMARY,
-		commandPool = vks.command_pool,
-		commandBufferCount = 1,
-	}
-
-	cmd: vk.CommandBuffer
-	check_vk(vk.AllocateCommandBuffers(vks.device, &alloc_info, &cmd))
-
-	begin_info := vk.CommandBufferBeginInfo {
-		sType = .COMMAND_BUFFER_BEGIN_INFO,
-		flags = {.ONE_TIME_SUBMIT},
-	}
-	check_vk(vk.BeginCommandBuffer(cmd, &begin_info))
-
-	return cmd
-}
-
-vk_cmd_end :: proc(cmd: vk.CommandBuffer) {
-	cmd := cmd
-	check_vk(vk.EndCommandBuffer(cmd))
-
-	cmd_info := vk.CommandBufferSubmitInfo {
-		sType = .COMMAND_BUFFER_SUBMIT_INFO,
-		commandBuffer = cmd,
-	}
-	submit_info := vk.SubmitInfo2 {
-		sType = .SUBMIT_INFO_2,
-		commandBufferInfoCount = 1,
-		pCommandBufferInfos = &cmd_info,
-	}
-	check_vk(vk.QueueSubmit2(vks.device_queue, 1, &submit_info, 0))
-	check_vk(vk.QueueWaitIdle(vks.device_queue))
-
-	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
 }
 
 texture_load :: proc(data: []u8) -> Texture {
@@ -823,62 +766,82 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	tex := &textures[tex.index]
 
 	size := vk.DeviceSize(w * h * 4)
-
-	staging_buffer: vk.Buffer
-	staging_buffer_memory: vk.DeviceMemory
-	create_buffer(size, {.TRANSFER_SRC}, {.HOST_VISIBLE, .HOST_COHERENT}, &staging_buffer, &staging_buffer_memory)
+	buffer, buffer_memory := create_buffer(size, {.TRANSFER_SRC}, {.HOST_VISIBLE, .HOST_COHERENT})
 
 	data: rawptr
-	vk.MapMemory(vks.device, staging_buffer_memory, 0, size, {}, &data)
+	vk.MapMemory(vks.device, buffer_memory, 0, size, {}, &data)
 	mem.copy(data, raw_data(pixels), int(size))
-	vk.UnmapMemory(vks.device, staging_buffer_memory)
+	vk.UnmapMemory(vks.device, buffer_memory)
 
-	if cmd := vk_cmd_begin(); cmd != nil {
-		image_barrier(
-			cmd, tex.image,
-			tex.layout, .TRANSFER_DST_OPTIMAL,
-			{.TOP_OF_PIPE}, {.TRANSFER},
-			{}, {.TRANSFER_WRITE},
-		)
-
-		region := vk.BufferImageCopy {
-			imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
-			imageOffset = { i32(x), i32(y), 0 },
-			imageExtent = { u32(w), u32(h), 1 },
-		}
-		vk.CmdCopyBufferToImage(cmd, staging_buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
-
-		image_barrier(
-			cmd, tex.image,
-			.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
-			{.TRANSFER}, {.FRAGMENT_SHADER},
-			{.TRANSFER_WRITE}, {.SHADER_READ},
-		)
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+		level = .PRIMARY,
+		commandPool = vks.command_pool,
+		commandBufferCount = 1,
 	}
 
-	tex.layout = .SHADER_READ_ONLY_OPTIMAL
+	cmd: vk.CommandBuffer
+	vk.AllocateCommandBuffers(vks.device, &alloc_info, &cmd)
 
-	vk.DestroyBuffer(vks.device, staging_buffer, nil)
-	vk.FreeMemory(vks.device, staging_buffer_memory, nil)
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+	vk.BeginCommandBuffer(cmd, &begin_info)
+
+	image_barrier(
+		cmd, tex.image,
+		tex.layout, .TRANSFER_DST_OPTIMAL,
+		{.TOP_OF_PIPE}, {.TRANSFER},
+		{}, {.TRANSFER_WRITE},
+	)
+
+	region := vk.BufferImageCopy {
+		imageSubresource = { aspectMask = {.COLOR}, layerCount = 1 },
+		imageOffset = { i32(x), i32(y), 0 },
+		imageExtent = { u32(w), u32(h), 1 },
+	}
+	vk.CmdCopyBufferToImage(cmd, buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
+
+	image_barrier(
+		cmd, tex.image,
+		.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
+		{.TRANSFER}, {.FRAGMENT_SHADER},
+		{.TRANSFER_WRITE}, {.SHADER_READ},
+	)
+
+	vk.EndCommandBuffer(cmd)
+
+	cmd_info := vk.CommandBufferSubmitInfo {
+		sType = .COMMAND_BUFFER_SUBMIT_INFO,
+		commandBuffer = cmd,
+	}
+	submit_info := vk.SubmitInfo2 {
+		sType = .SUBMIT_INFO_2,
+		commandBufferInfoCount = 1,
+		pCommandBufferInfos = &cmd_info,
+	}
+	vk.QueueSubmit2(vks.graphics_queue, 1, &submit_info, 0)
+	vk.QueueWaitIdle(vks.graphics_queue)
+
+	vk.FreeCommandBuffers(vks.device, vks.command_pool, 1, &cmd)
+
+	vk.DestroyBuffer(vks.device, buffer, nil)
+	vk.FreeMemory(vks.device, buffer_memory, nil)
+
+	tex.layout = .SHADER_READ_ONLY_OPTIMAL
 }
 
 texture_free :: proc(tex: ^Texture) {
 	if tex.index < 0 || tex.index >= MAX_TEXTURES do return
-	append(&textures_to_free, tex.index)
-	tex.index = -1
-}
-
-texture_release_deferred :: proc() {
-	if len(textures_to_free) == 0 do return
-	check_vk(vk.DeviceWaitIdle(vks.device))
-
-	for i in textures_to_free {
-		if !textures[i].used do continue
-		vk.DestroyImageView(vks.device, textures[i].view, nil)
-		vk.DestroyImage(vks.device, textures[i].image, nil)
-		vk.FreeMemory(vks.device, textures[i].memory, nil)
-		textures[i] = {}
+	
+	vk.DeviceWaitIdle(vks.device)
+	if textures[tex.index].used {
+		vk.DestroyImageView(vks.device, textures[tex.index].view, nil)
+		vk.DestroyImage(vks.device, textures[tex.index].image, nil)
+		vk.FreeMemory(vks.device, textures[tex.index].memory, nil)
+		textures[tex.index] = {}
 	}
-
-	clear(&textures_to_free)
+	
+	tex.index = -1
 }
