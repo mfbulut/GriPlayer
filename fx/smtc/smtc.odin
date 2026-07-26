@@ -207,21 +207,13 @@ smtc_handler_release :: proc "system" (this: ^windows.IUnknown) -> u32 {
 
 smtc_handler_invoke :: proc "system" (this: ^ITypedEventHandler, sender: ^ISystemMediaTransportControls, args: ^ISystemMediaTransportControlsButtonPressedEventArgs) -> windows.HRESULT {
 	button: SystemMediaTransportControlsButton
-	if args->get_Button(&button) == windows.S_OK {
-		if button == .Play || button == .Pause {
-			action_pending = 0
-		} else if button == .Next {
-			action_pending = 1
-		} else if button == .Previous {
-			action_pending = 2
-		}
-	}
+	args->get_Button(&button)
+	action_pending = button
 	return windows.S_OK
 }
 
 global_handler_vtable: ITypedEventHandler_VTable
 global_handler: SMTC_Handler
-
 g_smtc: ^ISystemMediaTransportControls
 
 IRandomAccessStreamReference_UUID := &windows.IID{0x33ee3134, 0x1dd6, 0x4e3a, {0x80, 0x67, 0xd1, 0xc1, 0x62, 0xe8, 0x64, 0x2b}}
@@ -273,27 +265,25 @@ init :: proc(hwnd: windows.HWND) {
 	defer WindowsDeleteString(class_name)
 
 	interop: ^ISystemMediaTransportControlsInterop
-	hr := RoGetActivationFactory(class_name, ISystemMediaTransportControlsInterop_UUID, cast(^rawptr)&interop)
-	if hr == windows.S_OK && interop != nil {
-		hr = interop->GetForWindow(hwnd, ISystemMediaTransportControls_UUID, &g_smtc)
-		if hr == windows.S_OK && g_smtc != nil {
-			g_smtc->put_IsPlayEnabled(true)
-			g_smtc->put_IsPauseEnabled(true)
-			g_smtc->put_IsNextEnabled(true)
-			g_smtc->put_IsPreviousEnabled(true)
+	if RoGetActivationFactory(class_name, ISystemMediaTransportControlsInterop_UUID, cast(^rawptr)&interop) != windows.S_OK || interop == nil do return
+	defer interop->Release()
 
-			token: EventRegistrationToken
-			g_smtc->add_ButtonPressed(&global_handler.handler, &token)
-		}
-		interop->Release()
-	}
+	if interop->GetForWindow(hwnd, ISystemMediaTransportControls_UUID, &g_smtc) != windows.S_OK || g_smtc == nil do return
+	
+	g_smtc->put_IsPlayEnabled(true)
+	g_smtc->put_IsPauseEnabled(true)
+	g_smtc->put_IsNextEnabled(true)
+	g_smtc->put_IsPreviousEnabled(true)
+
+	token: EventRegistrationToken
+	g_smtc->add_ButtonPressed(&global_handler.handler, &token)
 }
 
-action_pending: int = -1
+action_pending := SystemMediaTransportControlsButton(-1)
 
-poll_action :: proc() -> int {
+poll_action :: proc() -> SystemMediaTransportControlsButton {
 	action := action_pending
-	action_pending = -1
+	action_pending = SystemMediaTransportControlsButton(-1)
 	return action
 }
 
@@ -301,64 +291,55 @@ update_metadata :: proc(title: string, artist: string, cover_bytes: []byte = nil
 	if g_smtc == nil do return
 
 	updater: ^ISystemMediaTransportControlsDisplayUpdater
-	if g_smtc->get_DisplayUpdater(&updater) == windows.S_OK && updater != nil {
-		updater->ClearAll()
-		updater->put_Type(.Music)
+	if g_smtc->get_DisplayUpdater(&updater) != windows.S_OK || updater == nil do return
+	defer updater->Release()
 
-		if len(cover_bytes) > 0 {
-			istream := SHCreateMemStream(raw_data(cover_bytes), u32(len(cover_bytes)))
-			if istream != nil {
-				random_access_stream: rawptr
-				hr_cras := CreateRandomAccessStreamOverStream(istream, 0, IRandomAccessStream_UUID, &random_access_stream)
-				if hr_cras == windows.S_OK {
-					ref_class_hstr := create_hstring("Windows.Storage.Streams.RandomAccessStreamReference")
-					defer if ref_class_hstr != nil do WindowsDeleteString(ref_class_hstr)
+	updater->ClearAll()
+	updater->put_Type(.Music)
 
-					ref_statics: ^IRandomAccessStreamReferenceStatics
-					if RoGetActivationFactory(ref_class_hstr, IRandomAccessStreamReferenceStatics_UUID, cast(^rawptr)&ref_statics) == windows.S_OK {
-						stream_ref: ^IRandomAccessStreamReference
-						if ref_statics->CreateFromStream(random_access_stream, &stream_ref) == windows.S_OK {
-							updater->put_Thumbnail(cast(rawptr)stream_ref)
-							stream_ref->Release()
-						}
-						ref_statics->Release()
+	if len(cover_bytes) > 0 {
+		if istream := SHCreateMemStream(raw_data(cover_bytes), u32(len(cover_bytes))); istream != nil {
+			defer (cast(^windows.IUnknown)istream)->Release()
+
+			random_access_stream: rawptr
+			if CreateRandomAccessStreamOverStream(istream, 0, IRandomAccessStream_UUID, &random_access_stream) == windows.S_OK {
+				defer (cast(^windows.IUnknown)random_access_stream)->Release()
+
+				ref_class_hstr := create_hstring("Windows.Storage.Streams.RandomAccessStreamReference")
+				defer if ref_class_hstr != nil do WindowsDeleteString(ref_class_hstr)
+
+				ref_statics: ^IRandomAccessStreamReferenceStatics
+				if RoGetActivationFactory(ref_class_hstr, IRandomAccessStreamReferenceStatics_UUID, cast(^rawptr)&ref_statics) == windows.S_OK {
+					defer ref_statics->Release()
+
+					stream_ref: ^IRandomAccessStreamReference
+					if ref_statics->CreateFromStream(random_access_stream, &stream_ref) == windows.S_OK {
+						defer stream_ref->Release()
+						updater->put_Thumbnail(cast(rawptr)stream_ref)
 					}
-
-					iunk := cast(^windows.IUnknown)random_access_stream
-					iunk->Release()
 				}
-
-				iunk_stream := cast(^windows.IUnknown)istream
-				iunk_stream->Release()
 			}
 		}
-
-		music_props: ^IMusicDisplayProperties
-		if updater->get_MusicProperties(&music_props) == windows.S_OK && music_props != nil {
-
-			title_hstr := create_hstring(title)
-			defer if title_hstr != nil do WindowsDeleteString(title_hstr)
-
-			artist_hstr := create_hstring(artist)
-			defer if artist_hstr != nil do WindowsDeleteString(artist_hstr)
-
-			music_props->put_Title(title_hstr)
-			music_props->put_Artist(artist_hstr)
-
-			music_props->Release()
-		}
-
-		updater->Update()
-		updater->Release()
 	}
+
+	music_props: ^IMusicDisplayProperties
+	if updater->get_MusicProperties(&music_props) == windows.S_OK && music_props != nil {
+		defer music_props->Release()
+
+		title_hstr := create_hstring(title)
+		defer if title_hstr != nil do WindowsDeleteString(title_hstr)
+
+		artist_hstr := create_hstring(artist)
+		defer if artist_hstr != nil do WindowsDeleteString(artist_hstr)
+
+		music_props->put_Title(title_hstr)
+		music_props->put_Artist(artist_hstr)
+	}
+
+	updater->Update()
 }
 
-update_status :: proc(status: int) {
+update_status :: proc(status: MediaPlaybackStatus) {
 	if g_smtc == nil do return
-
-	play_status := MediaPlaybackStatus.Stopped
-	if status == 1 do play_status = .Playing
-	else if status == 2 do play_status = .Paused
-
-	g_smtc->put_PlaybackStatus(play_status)
+	g_smtc->put_PlaybackStatus(status)
 }

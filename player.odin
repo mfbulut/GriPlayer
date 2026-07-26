@@ -18,8 +18,7 @@ player: struct {
 	session:  int,
 }
 
-texture_to_free := fx.Texture{index = -1}
-
+texture_to_free: fx.Texture
 
 player_start_playlist :: proc(songs: []^Music, song_index: int) {
 	if len(songs) == 0 || song_index < 0 || song_index >= len(songs) {
@@ -55,19 +54,17 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	record_listen(song)
 	visualizer_create_palette(song.thumbnail_pixels)
 
-	if player.cover.index != -1 {
-		texture_to_free = player.cover
-		player.cover.index = -1
-	}
-	
+	texture_to_free = player.cover	
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
 	if len(cover_bytes) > 0 {
 		player.cover = fx.texture_load(cover_bytes)
+	} else {
+		player.cover = nil
 	}
 
 	smtc.update_metadata(song.title, song.artist, cover_bytes)
-	smtc.update_status(paused ? 2 : 1)
+	smtc.update_status(paused ? .Paused : .Playing)
 }
 
 player_next :: proc(gapless := false) {
@@ -79,7 +76,7 @@ player_next :: proc(gapless := false) {
 	if len(player.songs) == 0 {
 		player.playing = false
 		audio.pause()
-		smtc.update_status(2)
+		smtc.update_status(.Paused)
 		return
 	}
 	player.cursor = (player.cursor + 1) %% len(player.songs)
@@ -133,10 +130,10 @@ player_toggle_pause :: proc() {
 	player.playing = !player.playing
 	if player.playing {
 		audio.resume()
-		smtc.update_status(1)
+		smtc.update_status(.Playing)
 	} else {
 		audio.pause()
-		smtc.update_status(2)
+		smtc.update_status(.Paused)
 	}
 }
 
@@ -172,22 +169,23 @@ current_lyric :: proc() -> (index: int, found: bool) {
 }
 
 player_update :: proc() {
-	if texture_to_free.index != -1 {
+	if texture_to_free != nil {
 		fx.texture_free(&texture_to_free)
 	}
 
 	if player.music == nil {
 		return
 	}
-	
-	switch smtc.poll_action() {
-	case 0:
+
+	#partial switch smtc.poll_action() {
+	case .Play, .Pause: 
 		player_toggle_pause()
-	case 1:
+	case .Next:
 		player_next()
-	case 2:
+	case .Previous:
 		player_prev()
 	}
+
 	if fx.key_is_pressed(.Play_Pause) do player_toggle_pause()
 	if fx.key_is_pressed(.Next_Track) do player_next()
 	if fx.key_is_pressed(.Prev_Track) do player_prev()

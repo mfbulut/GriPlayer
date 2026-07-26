@@ -41,13 +41,18 @@ vks: struct {
 	clear_color: [4]f32,
 }
 
-textures: [MAX_TEXTURES]struct {
+Texture_Data :: struct {
+	index: int,
+	size: [2]int,
 	image: vk.Image,
 	view: vk.ImageView,
 	memory: vk.DeviceMemory,
 	layout: vk.ImageLayout,
 	used: bool,
 }
+
+Texture :: ^Texture_Data
+textures: [MAX_TEXTURES]Texture_Data
 
 check_vk :: proc(result: vk.Result) {
 	if result != .SUCCESS {
@@ -683,7 +688,7 @@ texture_load :: proc(data: []u8) -> Texture {
 	w, h, channels: i32
 	pixels := cast([^]Color)stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
 	defer stbi.image_free(pixels)
-	if pixels == nil do return {index = -1}
+	if pixels == nil do return nil
 
 	tex := texture_create(int(w), int(h))
 	texture_update(tex, pixels[:w*h], 0, 0, int(w), int(h))
@@ -693,10 +698,10 @@ texture_load :: proc(data: []u8) -> Texture {
 
 texture_create :: proc(w, h: int) -> Texture {
 	index := -1
-	for i in 0..<MAX_TEXTURES {
-		if !textures[i].used {
+	for &tex, i in textures {
+		if !tex.used {
 			index = i
-			textures[i].used = true
+			tex.used = true
 			break
 		}
 	}
@@ -758,12 +763,13 @@ texture_create :: proc(w, h: int) -> Texture {
 	}
 	vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
 
-	return Texture{ index = index, size = {w, h} }
+	tex.index = index
+	tex.size = {w, h}
+	return tex
 }
 
 texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
-	if tex.index < 0 || tex.index >= MAX_TEXTURES do return
-	tex := &textures[tex.index]
+	if tex == nil || tex.index < 0 || tex.index >= MAX_TEXTURES do return
 
 	size := vk.DeviceSize(w * h * 4)
 	buffer, buffer_memory := create_buffer(size, {.TRANSFER_SRC}, {.HOST_VISIBLE, .HOST_COHERENT})
@@ -832,16 +838,17 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	tex.layout = .SHADER_READ_ONLY_OPTIMAL
 }
 
-texture_free :: proc(tex: ^Texture) {
-	if tex.index < 0 || tex.index >= MAX_TEXTURES do return
+texture_free :: proc(tex_ptr: ^Texture) {
+	if tex_ptr == nil || tex_ptr^ == nil do return
+	tex := tex_ptr^
 	
 	vk.DeviceWaitIdle(vks.device)
-	if textures[tex.index].used {
-		vk.DestroyImageView(vks.device, textures[tex.index].view, nil)
-		vk.DestroyImage(vks.device, textures[tex.index].image, nil)
-		vk.FreeMemory(vks.device, textures[tex.index].memory, nil)
-		textures[tex.index] = {}
+	if tex.used {
+		vk.DestroyImageView(vks.device, tex.view, nil)
+		vk.DestroyImage(vks.device, tex.image, nil)
+		vk.FreeMemory(vks.device, tex.memory, nil)
+		tex^ = {}
 	}
 	
-	tex.index = -1
+	tex_ptr^ = nil
 }

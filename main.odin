@@ -22,7 +22,6 @@ main :: proc() {
 	smtc.init(fx.window.hwnd)
 	fft_init()
 
-	player.cover.index = -1
 	load_icons()
 	loader_start()
 
@@ -282,7 +281,7 @@ draw_song_row :: proc(bounds: fx.Rect, song: ^Music, index: int, songs: []^Music
 }
 
 draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
-	if region.texture.index != -1 && region.texture.index != 0 {
+	if region.texture != nil && region.texture.index != 0 {
 		size := fx.Vec2{region.source.w, region.source.h}
 		crop := min(size.x, size.y)
 		source := fx.Rect{
@@ -466,8 +465,8 @@ draw_slider_tooltip :: proc(bounds: fx.Rect, value: f32, text: string) {
 draw_lyrics :: proc(bounds: fx.Rect) {
 	if player.music == nil || len(player.music.lyrics) == 0 {
 		icon_size := min(f32(28), bounds.w * .1)
-		fx.draw_texture(
-			icons[.Note],
+		draw_icon(
+			.Note,
 			{bounds.x + (bounds.w - icon_size) * .5, bounds.y + (bounds.h - icon_size) * .5, icon_size, icon_size},
 			fx.color_opacity(COLOR_MUTED, .25),
 		)
@@ -510,7 +509,7 @@ draw_lyrics :: proc(bounds: fx.Rect) {
 			color := fx.color_lerp(COLOR_MUTED, COLOR_TEXT, max(active_amount, hover_amount))
 			if lyric.text == "" {
 				icon_size := 24 + 4 * active_amount
-				fx.draw_texture(icons[.Note], {row.x + 3, row.y + (row.h - icon_size) * 0.5, icon_size, icon_size}, color)
+				draw_icon(.Note, {row.x + 3, row.y + (row.h - icon_size) * 0.5, icon_size, icon_size}, color)
 			} else {
 				fx.draw_text_faded(lyric.text, row, 18 + 4 * active_amount, color)
 			}

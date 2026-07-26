@@ -42,39 +42,11 @@ Icon :: enum {
 	Sort_Date_Descending,
 }
 
-icons: [Icon]fx.Texture
+icon_atlas: fx.Texture
 sort_icons: [2][Playlist_Sort]Icon
 
 load_icons :: proc() {
-	icons = {
-		.None = {},
-		.Album = fx.texture_load(#load("assets/icons/album.png")),
-		.Artist = fx.texture_load(#load("assets/icons/artist.png")),
-		.Heart = fx.texture_load(#load("assets/icons/heart.png")),
-		.Heart_Empty = fx.texture_load(#load("assets/icons/heart_empty.png")),
-		.History = fx.texture_load(#load("assets/icons/history.png")),
-		.Next = fx.texture_load(#load("assets/icons/next.png")),
-		.Note = fx.texture_load(#load("assets/icons/note.png")),
-		.Pause = fx.texture_load(#load("assets/icons/pause.png")),
-		.Play = fx.texture_load(#load("assets/icons/play.png")),
-		.Previous = fx.texture_load(#load("assets/icons/previous.png")),
-		.Queue = fx.texture_load(#load("assets/icons/queue.png")),
-		.Add_Last = fx.texture_load(#load("assets/icons/add_last.png")),
-		.Add_Next = fx.texture_load(#load("assets/icons/add_next.png")),
-		.Search = fx.texture_load(#load("assets/icons/search.png")),
-		.Shuffle = fx.texture_load(#load("assets/icons/shuffle.png")),
-		.Volume = fx.texture_load(#load("assets/icons/volume.png")),
-		.Mute = fx.texture_load(#load("assets/icons/mute.png")),
-		.Cross = fx.texture_load(#load("assets/icons/cross.png")),
-		.Sort_Alpha_Ascending = fx.texture_load(#load("assets/icons/sort_alpha_ascending.png")),
-		.Sort_Alpha_Descending = fx.texture_load(#load("assets/icons/sort_alpha_descending.png")),
-		.Sort_Number_Ascending = fx.texture_load(#load("assets/icons/sort_number_ascending.png")),
-		.Sort_Number_Descending = fx.texture_load(#load("assets/icons/sort_number_descending.png")),
-		.Sort_Time_Ascending = fx.texture_load(#load("assets/icons/sort_time_ascending.png")),
-		.Sort_Time_Descending = fx.texture_load(#load("assets/icons/sort_time_descending.png")),
-		.Sort_Date_Ascending = fx.texture_load(#load("assets/icons/sort_date_ascending.png")),
-		.Sort_Date_Descending = fx.texture_load(#load("assets/icons/sort_date_descending.png")),
-	}
+	icon_atlas = fx.texture_load(#load("assets/Icons.png"))
 	
 	sort_icons[0] = {
 		.Title = .Sort_Alpha_Ascending, .Artist = .Sort_Alpha_Ascending, .Album = .Sort_Alpha_Ascending,
@@ -185,9 +157,40 @@ square_bounds :: proc(bounds: fx.Rect, inset := f32(0)) -> fx.Rect {
 }
 
 draw_icon :: proc(icon: Icon, bounds: fx.Rect, tint := COLOR_MUTED, inset := f32(0)) {
+	if icon == .None do return
+
+	ICON_ATLAS_CELL_SIZE :: 32
+	ICON_ATLAS_COLUMNS   :: 8
+	ICON_DISTANCE_RANGE  :: f32(4)
+
 	icon_bounds := square_bounds(bounds, inset)
 	if icon_bounds.w > 0 {
-		fx.draw_texture(icons[icon], icon_bounds, tint)
+		index := int(icon) - 1
+		cell := f32(ICON_ATLAS_CELL_SIZE)
+		source := fx.Rect{
+			f32(index % ICON_ATLAS_COLUMNS) * cell,
+			f32(index / ICON_ATLAS_COLUMNS) * cell,
+			cell,
+			cell,
+		}
+
+		canvas_size := cell - ICON_DISTANCE_RANGE * 2
+		draw_size := icon_bounds.w * cell / canvas_size
+		destination := fx.Rect{
+			icon_bounds.x - (draw_size - icon_bounds.w) * .5,
+			icon_bounds.y - (draw_size - icon_bounds.h) * .5,
+			draw_size,
+			draw_size,
+		}
+		unit_range := ICON_DISTANCE_RANGE / f32(icon_atlas.size.x)
+
+		fx.draw_msdf_ex(
+			icon_atlas,
+			source,
+			destination,
+			unit_range,
+			tint,
+		)
 	}
 }
 

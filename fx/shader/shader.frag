@@ -17,8 +17,6 @@ layout(location = 0) out vec4 out_color;
 #define KIND_TEX2D 1u
 #define KIND_MSDF  2u
 
-#define MSDF_PXRANGE  8.0
-#define MSDF_TEXSIZE  548.0
 #define TEXT_THICKNESS 0.6
 
 float rect_sdf(vec2 pos, vec2 half_size, float r) {
@@ -41,7 +39,7 @@ void main() {
     if (in_kind == KIND_MSDF) {
         float sd = msdf_median(tex_color.r, tex_color.g, tex_color.b) - 0.5;
 
-        vec2 unit_range = vec2(MSDF_PXRANGE) / vec2(MSDF_TEXSIZE);
+        vec2 unit_range = vec2(in_radius);
         vec2 screen_tex_size = vec2(1.0) / fwidth(in_uv);
         float screen_px_range = max(0.5 * dot(unit_range, screen_tex_size), 1.0);
 

@@ -9,34 +9,10 @@ Vec4 :: [4]f32
 Color :: [4]byte
 
 Rect :: struct {
-	x, y, w, h: f32,
+	x, y, w, h: f32
 }
 
-LIGHTGRAY  :: Color{200, 200, 200, 255}
-GRAY       :: Color{130, 130, 130, 255}
-DARKGRAY   :: Color{80, 80, 80, 255}
-YELLOW     :: Color{253, 249, 0, 255}
-GOLD       :: Color{255, 203, 0, 255}
-ORANGE     :: Color{255, 161, 0, 255}
-PINK       :: Color{255, 109, 194, 255}
-RED        :: Color{230, 41, 55, 255}
-MAROON     :: Color{190, 33, 55, 255}
-GREEN      :: Color{0, 228, 48, 255}
-LIME       :: Color{0, 158, 47, 255}
-DARKGREEN  :: Color{0, 117, 44, 255}
-SKYBLUE    :: Color{102, 191, 255, 255}
-BLUE       :: Color{0, 121, 241, 255}
-DARKBLUE   :: Color{0, 82, 172, 255}
-PURPLE     :: Color{200, 122, 255, 255}
-VIOLET     :: Color{135, 60, 190, 255}
-DARKPURPLE :: Color{112, 31, 126, 255}
-BEIGE      :: Color{211, 176, 131, 255}
-BROWN      :: Color{127, 106, 79, 255}
-DARKBROWN  :: Color{76, 63, 47, 255}
-WHITE      :: Color{255, 255, 255, 255}
-BLACK      :: Color{0, 0, 0, 255}
-BLANK      :: Color{0, 0, 0, 0}
-MAGENTA    :: Color{255, 0, 255, 255}
+WHITE := [4]Color{255, 255, 255, 255}
 
 color_to_vec4 :: #force_inline proc(c: Color) -> [4]f32 {
 	return cast([4]f32)c * (1.0 / 255.0)
@@ -86,6 +62,14 @@ point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
 	return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
 
+rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
+	return {r.x + x, r.y + y, r.w - x * 2, r.h - y * 2}
+}
+
+rect_expand :: proc(r: Rect, x: f32, y: f32) -> Rect {
+	return {r.x - x, r.y - y, r.w + x * 2, r.h + y * 2}
+}
+
 rect_overlaps :: proc(a, b: Rect) -> bool {
 	return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
@@ -96,12 +80,4 @@ rect_overlap :: proc(a, b: Rect) -> Rect {
 	x2 := min(a.x + a.w, b.x + b.w)
 	y2 := min(a.y + a.h, b.y + b.h)
 	return {x1, y1, max(0, x2 - x1), max(0, y2 - y1)}
-}
-
-rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {r.x + x, r.y + y, r.w - x * 2, r.h - y * 2}
-}
-
-rect_expand :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {r.x - x, r.y - y, r.w + x * 2, r.h + y * 2}
 }

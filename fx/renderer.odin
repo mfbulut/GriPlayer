@@ -2,17 +2,12 @@ package fx
 
 import "core:encoding/json"
 
-Texture :: struct {
-	index: int,
-	size:   [2]int,
-}
-
 Instance :: struct #align(16) {
 	dest:   Rect,      // x0, y0, x1, y1
 	src:    Rect,      // u0, v0, u1, v1
 	color:  [4]Color,  // TL, TR, BL, BR
 	radius: f32,
-	kind:   enum u32 { Rect, Texture, Text },
+	kind:   enum u32 { Rect, Texture, MSDF },
 	tex_idx: u32,
 }
 
@@ -62,9 +57,9 @@ Batch :: struct {
 }
 
 font: Font
-instances: [dynamic; MAX_INSTANCES]Instance
-batches: [dynamic; 256]Batch
 current_scissor: [4]i32
+batches: [dynamic; 256]Batch
+instances: [dynamic; MAX_INSTANCES]Instance
 
 renderer_init :: proc() {
 	msdf_data: MSDF_File
@@ -149,8 +144,7 @@ draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 	draw_rect_vec(top_left, radius * 2, color, radius)
 }
 
-draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
-	if tex.index < 0 do return
+draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := WHITE, radius := f32(0)) {
 	tw := cast(f32)tex.size.x
 	th := cast(f32)tex.size.y
 
@@ -173,8 +167,41 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Col
 	)
 }
 
-draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
+draw_texture :: proc(tex: Texture, rect: Rect, tint := WHITE, radius := f32(0)) {
 	draw_texture_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, tint, radius)
+}
+
+draw_msdf_ex :: proc(
+	tex: Texture,
+	src: Rect,
+	dest: Rect,
+	unit_range: f32,
+	tint := WHITE,
+) {
+	tw := cast(f32)tex.size.x
+	th := cast(f32)tex.size.y
+
+	src_uv := Rect{
+		src.x / tw,
+		src.y / th,
+		(src.x + src.w) / tw,
+		(src.y + src.h) / th,
+	}
+
+	append(&instances,
+		Instance{
+			src     = src_uv,
+			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
+			color   = tint,
+			radius  = unit_range,
+			kind    = .MSDF,
+			tex_idx = u32(tex.index),
+		},
+	)
+}
+
+draw_msdf :: proc(tex: Texture, rect: Rect, unit_range: f32, tint := WHITE) {
+	draw_msdf_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, unit_range, tint)
 }
 
 // Text Rendering
@@ -184,7 +211,7 @@ draw_text :: proc {
 	draw_text_rect,
 }
 
-draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) {
+draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := WHITE) {
 	if text == "" do return
 	font := font
 
@@ -196,6 +223,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 
 	atlas_w := cast(f32)font.atlas.size.x
 	atlas_h := cast(f32)font.atlas.size.y
+	unit_range := f32(8) / atlas_w
 
 	for char in text {
 		if char == '\n' {
@@ -225,7 +253,8 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 				dest    = dest,
 				src     = src,
 				color   = color,
-				kind    = .Text,
+				radius  = unit_range,
+				kind    = .MSDF,
 				tex_idx = u32(font.atlas.index),
 			},
 		)
@@ -234,7 +263,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color: [4]Color) 
 	}
 }
 
-draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color: [4]Color, center_x := false, center_y := true) {
+draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := WHITE, center_x := false, center_y := true) {
 	if text == "" do return
 	font := font
 
@@ -277,6 +306,7 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 
 	atlas_w := cast(f32)font.atlas.size.x
 	atlas_h := cast(f32)font.atlas.size.y
+	unit_range := f32(8) / atlas_w
 
 	max_w := bounds.w
 	fade_w := min(f32(30), max_w)
@@ -337,7 +367,8 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 				dest    = dest,
 				src     = src,
 				color   = c,
-				kind    = .Text,
+				radius  = unit_range,
+				kind    = .MSDF,
 				tex_idx = u32(font.atlas.index),
 			},
 		)
