@@ -27,7 +27,6 @@ vks: struct {
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
-
 	image_available_semaphore: vk.Semaphore,
 	in_flight_fence: vk.Fence,
 
@@ -840,7 +839,7 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	tex.layout = .SHADER_READ_ONLY_OPTIMAL
 }
 
-texture_free :: proc(tex_ptr: ^Texture) {
+texture_destroy :: proc(tex_ptr: ^Texture) {
 	if tex_ptr == nil || tex_ptr^ == nil do return
 	tex := tex_ptr^
 	
