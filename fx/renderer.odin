@@ -114,7 +114,7 @@ flush :: proc() {
 	count := u32(len(instances)) - last_count
 
 	if count == 0 do return
-	
+
 	append(&batches, Batch{
 		offset = last_count,
 		count  = count,
@@ -175,7 +175,7 @@ draw_msdf_ex :: proc(
 	tex: Texture,
 	src: Rect,
 	dest: Rect,
-	unit_range: f32,
+	px_range: f32,
 	tint := WHITE,
 ) {
 	tw := cast(f32)tex.size.x
@@ -193,15 +193,15 @@ draw_msdf_ex :: proc(
 			src     = src_uv,
 			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
 			color   = tint,
-			radius  = unit_range,
+			radius  = px_range / tw,
 			kind    = .MSDF,
 			tex_idx = u32(tex.index),
 		},
 	)
 }
 
-draw_msdf :: proc(tex: Texture, rect: Rect, unit_range: f32, tint := WHITE) {
-	draw_msdf_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, unit_range, tint)
+draw_msdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := WHITE) {
+	draw_msdf_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, px_range, tint)
 }
 
 // Text Rendering
@@ -223,7 +223,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := WHITE) {
 
 	atlas_w := cast(f32)font.atlas.size.x
 	atlas_h := cast(f32)font.atlas.size.y
-	unit_range := f32(8) / atlas_w
+	unit_range := 8 / atlas_w
 
 	for char in text {
 		if char == '\n' {
@@ -306,10 +306,10 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 
 	atlas_w := cast(f32)font.atlas.size.x
 	atlas_h := cast(f32)font.atlas.size.y
-	unit_range := f32(8) / atlas_w
+	unit_range := 8 / atlas_w
 
 	max_w := bounds.w
-	fade_w := min(f32(30), max_w)
+	fade_w := min(30, max_w)
 	fade_start := bounds.x + max_w - fade_w
 
 	for char in text {

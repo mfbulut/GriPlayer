@@ -47,7 +47,7 @@ sort_icons: [2][Playlist_Sort]Icon
 
 load_icons :: proc() {
 	icon_atlas = fx.texture_load(#load("assets/Icons.png"))
-	
+
 	sort_icons[0] = {
 		.Title = .Sort_Alpha_Ascending, .Artist = .Sort_Alpha_Ascending, .Album = .Sort_Alpha_Ascending,
 		.Track = .Sort_Number_Ascending, .Duration = .Sort_Time_Descending, .Playtime = .Sort_Time_Descending,
@@ -182,13 +182,12 @@ draw_icon :: proc(icon: Icon, bounds: fx.Rect, tint := COLOR_MUTED, inset := f32
 			draw_size,
 			draw_size,
 		}
-		unit_range := ICON_DISTANCE_RANGE / f32(icon_atlas.size.x)
 
 		fx.draw_msdf_ex(
 			icon_atlas,
 			source,
 			destination,
-			unit_range,
+			4,
 			tint,
 		)
 	}
