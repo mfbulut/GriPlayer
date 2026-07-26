@@ -57,7 +57,7 @@ Batch :: struct {
 }
 
 font: Font
-current_scissor: [4]i32
+scissor: [4]i32
 batches: [dynamic; 256]Batch
 instances: [dynamic; MAX_INSTANCES]Instance
 
@@ -92,9 +92,9 @@ set_scissor :: proc(rect: Rect) {
 		cast(i32)(rect.w * scale),
 		cast(i32)(rect.h * scale),
 	}
-	if new_scissor != current_scissor {
+	if new_scissor != scissor {
 		flush()
-		current_scissor = new_scissor
+		scissor = new_scissor
 	}
 }
 
@@ -118,7 +118,7 @@ flush :: proc() {
 	append(&batches, Batch{
 		offset = last_count,
 		count  = count,
-		scissor = current_scissor,
+		scissor = scissor,
 	})
 }
 
@@ -145,6 +145,8 @@ draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 }
 
 draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := WHITE, radius := f32(0)) {
+	if tex.index == 0 do return
+
 	tw := cast(f32)tex.size.x
 	th := cast(f32)tex.size.y
 
@@ -178,6 +180,8 @@ draw_msdf_ex :: proc(
 	px_range: f32,
 	tint := WHITE,
 ) {
+	if tex.index == 0 do return
+
 	tw := cast(f32)tex.size.x
 	th := cast(f32)tex.size.y
 

@@ -40,18 +40,21 @@ vks: struct {
 	clear_color: [4]f32,
 }
 
-Texture :: ^Texture_Data
+Texture :: struct {
+	index: int,
+	size: [2]int,
+}
+
 Texture_Data :: struct {
 	image: vk.Image,
 	view: vk.ImageView,
 	memory: vk.DeviceMemory,
 	layout: vk.ImageLayout,
+	mip_levels: u32,
 	used: bool,
-	index: int,
-	size: [2]int,
 }
 
-textures: [MAX_TEXTURES]Texture_Data
+textures: #soa[MAX_TEXTURES]Texture_Data
 
 check_vk :: proc(result: vk.Result) {
 	if result != .SUCCESS {
@@ -250,6 +253,7 @@ vk_init :: proc() {
 			sType = .SAMPLER_CREATE_INFO,
 			magFilter = .LINEAR,
 			minFilter = .LINEAR,
+			mipmapMode = .LINEAR,
 			addressModeU = .CLAMP_TO_EDGE,
 			addressModeV = .CLAMP_TO_EDGE,
 			addressModeW = .CLAMP_TO_EDGE,
@@ -661,6 +665,8 @@ image_barrier :: proc(
 	old_layout, new_layout: vk.ImageLayout,
 	src_stage, dst_stage: vk.PipelineStageFlags2,
 	src_access, dst_access: vk.AccessFlags2,
+	base_mip_level := u32(0),
+	level_count := u32(1),
 ) {
 	barrier := vk.ImageMemoryBarrier2 {
 		sType = .IMAGE_MEMORY_BARRIER_2,
@@ -673,7 +679,12 @@ image_barrier :: proc(
 		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		image = image,
-		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
+		subresourceRange = {
+			aspectMask = {.COLOR},
+			baseMipLevel = base_mip_level,
+			levelCount = level_count,
+			layerCount = 1,
+		},
 	}
 	dep_info := vk.DependencyInfo {
 		sType = .DEPENDENCY_INFO,
@@ -683,74 +694,82 @@ image_barrier :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
-texture_load :: proc(data: []u8) -> Texture {
+texture_load :: proc(data: []u8, mipmaps := false) -> Texture {
 	w, h, channels: i32
 	pixels := cast([^]Color)stbi.load_from_memory(raw_data(data), cast(i32)len(data), &w, &h, &channels, 4)
 	defer stbi.image_free(pixels)
-	if pixels == nil do return nil
+	if pixels == nil do return {}
 
-	tex := texture_create(int(w), int(h))
-	texture_update(tex, pixels[:w*h], 0, 0, int(w), int(h))
+	tex := texture_create(int(w), int(h), mipmaps)
+	texture_upload(tex, pixels[:w*h], 0, 0, int(w), int(h), mipmaps)
 
 	return tex
 }
 
-texture_create :: proc(w, h: int) -> Texture {
-	index := -1
-	for &tex, i in textures {
-		if !tex.used {
+texture_create :: proc(w, h: int, mipmaps := false) -> Texture {
+	index := 0
+	for i in 1..<MAX_TEXTURES {
+		if !textures.used[i] {
 			index = i
-			tex.used = true
+			textures.used[i] = true
 			break
 		}
 	}
 
-	if index == -1 {
-		return nil
+	if index == 0 {
+		return {}
 	}
 
-	tex := &textures[index]
+	tex_data := &textures[index]
+	mip_levels := u32(1)
+	if mipmaps {
+		mip_size := max(w, h)
+		for mip_size > 1 {
+			mip_size /= 2
+			mip_levels += 1
+		}
+	}
 
 	image_info := vk.ImageCreateInfo {
 		sType = .IMAGE_CREATE_INFO,
 		imageType = .D2,
 		extent = { u32(w), u32(h), 1 },
-		mipLevels = 1,
+		mipLevels = mip_levels,
 		arrayLayers = 1,
 		format = .R8G8B8A8_UNORM,
 		tiling = .OPTIMAL,
 		initialLayout = .UNDEFINED,
-		usage = {.TRANSFER_DST, .SAMPLED},
+		usage = {.TRANSFER_SRC, .TRANSFER_DST, .SAMPLED},
 		samples = {._1},
 		sharingMode = .EXCLUSIVE,
 	}
 
-	vk.CreateImage(vks.device, &image_info, nil, &tex.image)
+	vk.CreateImage(vks.device, &image_info, nil, &tex_data.image)
 
 	mem_reqs: vk.MemoryRequirements
-	vk.GetImageMemoryRequirements(vks.device, tex.image, &mem_reqs)
+	vk.GetImageMemoryRequirements(vks.device, tex_data.image, &mem_reqs)
 
 	alloc_info := vk.MemoryAllocateInfo {
 		sType = .MEMORY_ALLOCATE_INFO,
 		allocationSize = mem_reqs.size,
 		memoryTypeIndex = find_memory_type(mem_reqs.memoryTypeBits, {.DEVICE_LOCAL}),
 	}
-	vk.AllocateMemory(vks.device, &alloc_info, nil, &tex.memory)
-	vk.BindImageMemory(vks.device, tex.image, tex.memory, 0)
+	vk.AllocateMemory(vks.device, &alloc_info, nil, &tex_data.memory)
+	vk.BindImageMemory(vks.device, tex_data.image, tex_data.memory, 0)
 
 	view_info := vk.ImageViewCreateInfo {
 		sType = .IMAGE_VIEW_CREATE_INFO,
-		image = tex.image,
+		image = tex_data.image,
 		viewType = .D2,
 		format = .R8G8B8A8_UNORM,
-		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
+		subresourceRange = { aspectMask = {.COLOR}, levelCount = mip_levels, layerCount = 1 },
 	}
-	vk.CreateImageView(vks.device, &view_info, nil, &tex.view)
+	vk.CreateImageView(vks.device, &view_info, nil, &tex_data.view)
 
 	// Update descriptor set
 	image_info_desc := vk.DescriptorImageInfo {
 		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-		imageView = tex.view,
+		imageView = tex_data.view,
 		sampler = vks.sampler,
 	}
 	write_desc := vk.WriteDescriptorSet {
@@ -764,13 +783,17 @@ texture_create :: proc(w, h: int) -> Texture {
 	}
 	vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
 
-	tex.index = index
-	tex.size = {w, h}
-	return tex
+	tex_data.mip_levels = mip_levels
+	return Texture{index = index, size = {w, h}}
 }
 
-texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
-	if tex == nil || tex.index < 0 || tex.index >= MAX_TEXTURES do return
+texture_upload :: proc(tex: Texture, pixels: []Color, x, y, w, h: int, mipmaps := false) {
+	if tex.index <= 0 || tex.index >= MAX_TEXTURES do return
+	tex_data := &textures[tex.index]
+	if !tex_data.used do return
+	has_mipmaps := tex_data.mip_levels > 1
+	assert(has_mipmaps == (mipmaps && max(tex.size.x, tex.size.y) > 1), "texture mipmap mode must match its creation mode")
+	assert(!has_mipmaps || (x == 0 && y == 0 && w == tex.size.x && h == tex.size.y))
 
 	size := vk.DeviceSize(w * h * 4)
 	buffer, buffer_memory := create_buffer(size, {.TRANSFER_SRC}, {.HOST_VISIBLE, .HOST_COHERENT})
@@ -797,10 +820,11 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	vk.BeginCommandBuffer(cmd, &begin_info)
 
 	image_barrier(
-		cmd, tex.image,
-		tex.layout, .TRANSFER_DST_OPTIMAL,
+		cmd, tex_data.image,
+		tex_data.layout, .TRANSFER_DST_OPTIMAL,
 		{.TOP_OF_PIPE}, {.TRANSFER},
 		{}, {.TRANSFER_WRITE},
+		level_count = has_mipmaps ? tex_data.mip_levels : 1,
 	)
 
 	region := vk.BufferImageCopy {
@@ -808,14 +832,76 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 		imageOffset = { i32(x), i32(y), 0 },
 		imageExtent = { u32(w), u32(h), 1 },
 	}
-	vk.CmdCopyBufferToImage(cmd, buffer, tex.image, .TRANSFER_DST_OPTIMAL, 1, &region)
+	vk.CmdCopyBufferToImage(cmd, buffer, tex_data.image, .TRANSFER_DST_OPTIMAL, 1, &region)
 
-	image_barrier(
-		cmd, tex.image,
-		.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
-		{.TRANSFER}, {.FRAGMENT_SHADER},
-		{.TRANSFER_WRITE}, {.SHADER_READ},
-	)
+	if has_mipmaps {
+		mip_width := i32(tex.size.x)
+		mip_height := i32(tex.size.y)
+
+		for mip_level := u32(1); mip_level < tex_data.mip_levels; mip_level += 1 {
+			image_barrier(
+				cmd, tex_data.image,
+				.TRANSFER_DST_OPTIMAL, .TRANSFER_SRC_OPTIMAL,
+				{.TRANSFER}, {.TRANSFER},
+				{.TRANSFER_WRITE}, {.TRANSFER_READ},
+				base_mip_level = mip_level - 1,
+			)
+
+			next_width := max(mip_width / 2, 1)
+			next_height := max(mip_height / 2, 1)
+			blit := vk.ImageBlit {
+				srcSubresource = {
+					aspectMask = {.COLOR},
+					mipLevel = mip_level - 1,
+					layerCount = 1,
+				},
+				srcOffsets = {
+					{0, 0, 0},
+					{mip_width, mip_height, 1},
+				},
+				dstSubresource = {
+					aspectMask = {.COLOR},
+					mipLevel = mip_level,
+					layerCount = 1,
+				},
+				dstOffsets = {
+					{0, 0, 0},
+					{next_width, next_height, 1},
+				},
+			}
+			vk.CmdBlitImage(
+				cmd,
+				tex_data.image, .TRANSFER_SRC_OPTIMAL,
+				tex_data.image, .TRANSFER_DST_OPTIMAL,
+				1, &blit, .LINEAR,
+			)
+
+			mip_width = next_width
+			mip_height = next_height
+		}
+
+		image_barrier(
+			cmd, tex_data.image,
+			.TRANSFER_SRC_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
+			{.TRANSFER}, {.FRAGMENT_SHADER},
+			{.TRANSFER_READ}, {.SHADER_READ},
+			level_count = tex_data.mip_levels - 1,
+		)
+		image_barrier(
+			cmd, tex_data.image,
+			.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
+			{.TRANSFER}, {.FRAGMENT_SHADER},
+			{.TRANSFER_WRITE}, {.SHADER_READ},
+			base_mip_level = tex_data.mip_levels - 1,
+		)
+	} else {
+		image_barrier(
+			cmd, tex_data.image,
+			.TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL,
+			{.TRANSFER}, {.FRAGMENT_SHADER},
+			{.TRANSFER_WRITE}, {.SHADER_READ},
+		)
+	}
 
 	vk.EndCommandBuffer(cmd)
 
@@ -836,20 +922,20 @@ texture_update :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	vk.DestroyBuffer(vks.device, buffer, nil)
 	vk.FreeMemory(vks.device, buffer_memory, nil)
 
-	tex.layout = .SHADER_READ_ONLY_OPTIMAL
+	tex_data.layout = .SHADER_READ_ONLY_OPTIMAL
 }
 
-texture_destroy :: proc(tex_ptr: ^Texture) {
-	if tex_ptr == nil || tex_ptr^ == nil do return
-	tex := tex_ptr^
+texture_destroy :: proc(tex: ^Texture) {
+	if tex.index == 0 do return
+	tex_data := &textures[tex.index]
 	
 	vk.DeviceWaitIdle(vks.device)
-	if tex.used {
-		vk.DestroyImageView(vks.device, tex.view, nil)
-		vk.DestroyImage(vks.device, tex.image, nil)
-		vk.FreeMemory(vks.device, tex.memory, nil)
-		tex^ = {}
+	if tex_data.used {
+		vk.DestroyImageView(vks.device, tex_data.view, nil)
+		vk.DestroyImage(vks.device, tex_data.image, nil)
+		vk.FreeMemory(vks.device, tex_data.memory, nil)
+		tex_data^ = {}
 	}
-	
-	tex_ptr^ = nil
+
+	tex^ = {}
 }

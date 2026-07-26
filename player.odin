@@ -58,9 +58,9 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
 	if len(cover_bytes) > 0 {
-		player.cover = fx.texture_load(cover_bytes)
+		player.cover = fx.texture_load(cover_bytes, mipmaps = true)
 	} else {
-		player.cover = nil
+		player.cover = {}
 	}
 
 	smtc.update_metadata(song.title, song.artist, cover_bytes)
@@ -169,7 +169,7 @@ current_lyric :: proc() -> (index: int, found: bool) {
 }
 
 player_update :: proc() {
-	if cover_to_free != nil {
+	if cover_to_free.index != 0 {
 		fx.texture_destroy(&cover_to_free)
 	}
 
