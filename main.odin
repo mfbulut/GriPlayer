@@ -336,7 +336,13 @@ draw_now_playing :: proc(bounds: fx.Rect) {
 	}
 
 	if layout(bounds, .Row, {px(160), fr()}, pad = pad_all(16), gap = 18) {
-		cover_region := AtlasRegion{ texture = player.cover, source = {0, 0, f32(player.cover.size.x), f32(player.cover.size.y)} }
+		cover_region: AtlasRegion
+		if player.cover != nil {
+			cover_region = {
+				texture = player.cover,
+				source = {0, 0, f32(player.cover.size.x), f32(player.cover.size.y)},
+			}
+		}
 		draw_cover(cover_region, next(), radius = 8)
 
 		if layout(next(), .Col, {px(48), px(28), fr()}) {

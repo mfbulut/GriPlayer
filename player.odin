@@ -177,9 +177,12 @@ player_update :: proc() {
 		return
 	}
 
-	#partial switch smtc.poll_action() {
-	case .Play, .Pause: 
-		player_toggle_pause()
+	switch smtc.poll_action() {
+	case .None:
+	case .Play:
+		if !player.playing do player_toggle_pause()
+	case .Pause:
+		if player.playing do player_toggle_pause()
 	case .Next:
 		player_next()
 	case .Previous:

@@ -1,173 +1,15 @@
 package smtc
 
+import "core:sync"
 import "core:sys/windows"
 import "core:unicode/utf16"
 
-HSTRING :: distinct rawptr
-EventRegistrationToken :: struct { value: i64 }
-
-foreign import runtimeobject "system:runtimeobject.lib"
-@(default_calling_convention="system")
-foreign runtimeobject {
-	WindowsCreateString :: proc(sourceString: [^]u16, length: u32, string: ^HSTRING) -> windows.HRESULT ---
-	WindowsDeleteString :: proc(string: HSTRING) -> windows.HRESULT ---
-	RoGetActivationFactory :: proc(activatableClassId: HSTRING, iid: ^windows.IID, factory: ^rawptr) -> windows.HRESULT ---
-	RoInitialize :: proc(initType: i32) -> windows.HRESULT ---
-}
-
-foreign import shcore "system:Shcore.lib"
-@(default_calling_convention="system")
-foreign shcore {
-    CreateRandomAccessStreamOverStream :: proc(stream: rawptr, options: i32, riid: ^windows.IID, ppv: ^rawptr) -> windows.HRESULT ---
-}
-
-foreign import shlwapi "system:Shlwapi.lib"
-@(default_calling_convention="system")
-foreign shlwapi {
-    SHCreateMemStream :: proc(pInit: [^]u8, cbInit: u32) -> rawptr ---
-}
-
-IInspectable_UUID := &windows.IID{0xAF86E2E0, 0xB12D, 0x4C6A, {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}}
-IInspectable :: struct #raw_union {
-	#subtype iunknown: windows.IUnknown,
-	using iinspectable_vtable: ^IInspectable_VTable,
-}
-IInspectable_VTable :: struct {
-	using iunknown_vtable: windows.IUnknown_VTable,
-	GetIids: proc "system" (this: ^IInspectable, iidCount: ^u32, iids: ^^windows.IID) -> windows.HRESULT,
-	GetRuntimeClassName: proc "system" (this: ^IInspectable, className: ^HSTRING) -> windows.HRESULT,
-	GetTrustLevel: proc "system" (this: ^IInspectable, trustLevel: ^i32) -> windows.HRESULT,
-}
-
-ISystemMediaTransportControlsInterop_UUID := &windows.IID{0xddb0472d, 0xc911, 0x4a1f, {0x86, 0xd9, 0xdc, 0x3d, 0x71, 0xa9, 0x5f, 0x5a}}
-ISystemMediaTransportControlsInterop :: struct #raw_union {
-	#subtype iinspectable: IInspectable,
-	using ismtc_interop_vtable: ^ISystemMediaTransportControlsInterop_VTable,
-}
-ISystemMediaTransportControlsInterop_VTable :: struct {
-	using iinspectable_vtable: IInspectable_VTable,
-	GetForWindow: proc "system" (this: ^ISystemMediaTransportControlsInterop, appWindow: windows.HWND, riid: ^windows.IID, mediaTransportControl: ^^ISystemMediaTransportControls) -> windows.HRESULT,
-}
-
-MediaPlaybackStatus :: enum i32 {
-	Closed = 0,
-	Changing = 1,
-	Stopped = 2,
-	Playing = 3,
-	Paused = 4,
-}
-
-ISystemMediaTransportControls_UUID := &windows.IID{0x99FA3FF4, 0x1742, 0x42A6, {0x90, 0x2E, 0x08, 0x7D, 0x41, 0xF9, 0x65, 0xEC}}
-ISystemMediaTransportControls :: struct #raw_union {
-	#subtype iinspectable: IInspectable,
-	using ismtc_vtable: ^ISystemMediaTransportControls_VTable,
-}
-ISystemMediaTransportControls_VTable :: struct {
-	using iinspectable_vtable: IInspectable_VTable,
-	get_PlaybackStatus: proc "system" (this: ^ISystemMediaTransportControls, value: ^MediaPlaybackStatus) -> windows.HRESULT,
-	put_PlaybackStatus: proc "system" (this: ^ISystemMediaTransportControls, value: MediaPlaybackStatus) -> windows.HRESULT,
-	get_DisplayUpdater: proc "system" (this: ^ISystemMediaTransportControls, value: ^^ISystemMediaTransportControlsDisplayUpdater) -> windows.HRESULT,
-	get_SoundLevel: proc "system" (this: ^ISystemMediaTransportControls, value: ^i32) -> windows.HRESULT,
-	get_IsEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsPlayEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsPlayEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsStopEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsStopEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsPauseEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsPauseEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsRecordEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsRecordEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsFastForwardEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsFastForwardEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsRewindEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsRewindEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsPreviousEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsPreviousEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsNextEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsNextEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsChannelUpEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsChannelUpEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	get_IsChannelDownEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: ^b8) -> windows.HRESULT,
-	put_IsChannelDownEnabled: proc "system" (this: ^ISystemMediaTransportControls, value: b8) -> windows.HRESULT,
-	add_ButtonPressed: proc "system" (this: ^ISystemMediaTransportControls, handler: ^ITypedEventHandler, token: ^EventRegistrationToken) -> windows.HRESULT,
-	remove_ButtonPressed: proc "system" (this: ^ISystemMediaTransportControls, token: EventRegistrationToken) -> windows.HRESULT,
-	add_PropertyChanged: proc "system" (this: ^ISystemMediaTransportControls, handler: rawptr, token: ^EventRegistrationToken) -> windows.HRESULT,
-	remove_PropertyChanged: proc "system" (this: ^ISystemMediaTransportControls, token: EventRegistrationToken) -> windows.HRESULT,
-}
-
-MediaPlaybackType :: enum i32 {
-	Unknown = 0,
-	Music = 1,
-	Video = 2,
-	Image = 3,
-}
-
-ISystemMediaTransportControlsDisplayUpdater :: struct #raw_union {
-	#subtype iinspectable: IInspectable,
-	using updater_vtable: ^ISystemMediaTransportControlsDisplayUpdater_VTable,
-}
-ISystemMediaTransportControlsDisplayUpdater_VTable :: struct {
-	using iinspectable_vtable: IInspectable_VTable,
-	get_Type: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^MediaPlaybackType) -> windows.HRESULT,
-	put_Type: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: MediaPlaybackType) -> windows.HRESULT,
-	get_AppMediaId: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^HSTRING) -> windows.HRESULT,
-	put_AppMediaId: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: HSTRING) -> windows.HRESULT,
-	get_Thumbnail: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^rawptr) -> windows.HRESULT,
-	put_Thumbnail: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: rawptr) -> windows.HRESULT,
-	get_MusicProperties: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^^IMusicDisplayProperties) -> windows.HRESULT,
-	get_VideoProperties: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^rawptr) -> windows.HRESULT,
-	get_ImageProperties: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, value: ^rawptr) -> windows.HRESULT,
-	CopyFromFileAsync: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater, type: MediaPlaybackType, source: rawptr, operation: ^rawptr) -> windows.HRESULT,
-	ClearAll: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater) -> windows.HRESULT,
-	Update: proc "system" (this: ^ISystemMediaTransportControlsDisplayUpdater) -> windows.HRESULT,
-}
-
-IMusicDisplayProperties :: struct #raw_union {
-	#subtype iinspectable: IInspectable,
-	using musicprops_vtable: ^IMusicDisplayProperties_VTable,
-}
-IMusicDisplayProperties_VTable :: struct {
-	using iinspectable_vtable: IInspectable_VTable,
-	get_Title: proc "system" (this: ^IMusicDisplayProperties, value: ^HSTRING) -> windows.HRESULT,
-	put_Title: proc "system" (this: ^IMusicDisplayProperties, value: HSTRING) -> windows.HRESULT,
-	get_AlbumArtist: proc "system" (this: ^IMusicDisplayProperties, value: ^HSTRING) -> windows.HRESULT,
-	put_AlbumArtist: proc "system" (this: ^IMusicDisplayProperties, value: HSTRING) -> windows.HRESULT,
-	get_Artist: proc "system" (this: ^IMusicDisplayProperties, value: ^HSTRING) -> windows.HRESULT,
-	put_Artist: proc "system" (this: ^IMusicDisplayProperties, value: HSTRING) -> windows.HRESULT,
-}
-
-SystemMediaTransportControlsButton :: enum i32 {
-	Play = 0,
-	Pause = 1,
-	Stop = 2,
-	Record = 3,
-	FastForward = 4,
-	Rewind = 5,
-	Next = 6,
-	Previous = 7,
-	ChannelUp = 8,
-	ChannelDown = 9,
-}
-
-ISystemMediaTransportControlsButtonPressedEventArgs :: struct #raw_union {
-	#subtype iinspectable: IInspectable,
-	using args_vtable: ^ISystemMediaTransportControlsButtonPressedEventArgs_VTable,
-}
-ISystemMediaTransportControlsButtonPressedEventArgs_VTable :: struct {
-	using iinspectable_vtable: IInspectable_VTable,
-	get_Button: proc "system" (this: ^ISystemMediaTransportControlsButtonPressedEventArgs, value: ^SystemMediaTransportControlsButton) -> windows.HRESULT,
-}
-
-ITypedEventHandler_UUID := &windows.IID{0x5734A1B3, 0xB66E, 0x51E2, {0x80, 0x2A, 0x53, 0x05, 0x82, 0x01, 0x93, 0xFC}} // Generated generic IID for button handler (may need testing, usually we just return S_OK for any IID in our custom COM object)
-
-ITypedEventHandler :: struct #raw_union {
-	#subtype iunknown: windows.IUnknown,
-	using handler_vtable: ^ITypedEventHandler_VTable,
-}
-ITypedEventHandler_VTable :: struct {
-	using iunknown_vtable: windows.IUnknown_VTable,
-	Invoke: proc "system" (this: ^ITypedEventHandler, sender: ^ISystemMediaTransportControls, args: ^ISystemMediaTransportControlsButtonPressedEventArgs) -> windows.HRESULT,
+Action :: enum i32 {
+	None,
+	Play,
+	Pause,
+	Next,
+	Previous,
 }
 
 SMTC_Handler :: struct {
@@ -175,20 +17,30 @@ SMTC_Handler :: struct {
 	ref_count: i32,
 }
 
-smtc_handler_query_interface :: proc "system" (this: ^windows.IUnknown, riid: ^windows.IID, ppvObject: ^rawptr) -> windows.HRESULT {
-	if ppvObject == nil do return windows.HRESULT(-2147467261) // E_POINTER
+g_smtc: ^ISystemMediaTransportControls
+g_handler_vtable: ITypedEventHandler_VTable
+g_handler: SMTC_Handler
+pending_action: Action
 
-	is_supported := false
-	if riid.Data1 == 0x00000000 && riid.Data2 == 0x0000 && riid.Data3 == 0x0000 do is_supported = true // IUnknown
-	if riid.Data1 == 0x94ea2b94 && riid.Data2 == 0xe9cc && riid.Data3 == 0x49e0 do is_supported = true // IAgileObject
-	if riid.Data1 == 0x0557e996 && riid.Data2 == 0x7b23 && riid.Data3 == 0x5bae do is_supported = true // ITypedEventHandler
+smtc_handler_query_interface :: proc "system" (
+	this: ^windows.IUnknown,
+	riid: ^windows.IID,
+	result: ^rawptr,
+) -> windows.HRESULT {
+	if result == nil do return transmute(windows.HRESULT)u32(windows.E_POINTER)
 
-	if !is_supported {
-		ppvObject^ = nil
-		return windows.HRESULT(-2147467262) // E_NOINTERFACE
+	iid_equal :: proc "contextless" (a, b: ^windows.IID) -> bool {
+		return a != nil && b != nil && a^ == b^
 	}
 
-	ppvObject^ = this
+	if !iid_equal(riid, &IUnknown_UUID) &&
+	   !iid_equal(riid, &IAgileObject_UUID) &&
+	   !iid_equal(riid, &ITypedEventHandler_UUID) {
+		result^ = nil
+		return transmute(windows.HRESULT)u32(windows.E_NOINTERFACE)
+	}
+
+	result^ = cast(rawptr)this
 	this->AddRef()
 	return windows.S_OK
 }
@@ -205,135 +57,159 @@ smtc_handler_release :: proc "system" (this: ^windows.IUnknown) -> u32 {
 	return u32(handler.ref_count)
 }
 
-smtc_handler_invoke :: proc "system" (this: ^ITypedEventHandler, sender: ^ISystemMediaTransportControls, args: ^ISystemMediaTransportControlsButtonPressedEventArgs) -> windows.HRESULT {
+smtc_handler_invoke :: proc "system" (
+	this: ^ITypedEventHandler,
+	sender: ^ISystemMediaTransportControls,
+	args: ^ISystemMediaTransportControlsButtonPressedEventArgs,
+) -> windows.HRESULT {
+	if args == nil do return transmute(windows.HRESULT)u32(windows.E_POINTER)
+
 	button: SystemMediaTransportControlsButton
-	args->get_Button(&button)
-	action_pending = button
+	if windows.FAILED(args->get_Button(&button)) do return transmute(windows.HRESULT)u32(windows.E_FAIL)
+
+	action: Action
+	#partial switch button {
+	case .Play:     action = .Play
+	case .Pause:    action = .Pause
+	case .Next:     action = .Next
+	case .Previous: action = .Previous
+	}
+	if action == .None do return windows.S_OK
+
+	sync.atomic_store(&pending_action, action)
 	return windows.S_OK
 }
 
-global_handler_vtable: ITypedEventHandler_VTable
-global_handler: SMTC_Handler
-g_smtc: ^ISystemMediaTransportControls
-
-IRandomAccessStreamReference_UUID := &windows.IID{0x33ee3134, 0x1dd6, 0x4e3a, {0x80, 0x67, 0xd1, 0xc1, 0x62, 0xe8, 0x64, 0x2b}}
-IRandomAccessStreamReference :: struct #raw_union {
-    #subtype iinspectable: IInspectable,
-    using streamref_vtable: ^IRandomAccessStreamReference_VTable,
-}
-IRandomAccessStreamReference_VTable :: struct {
-    using iinspectable_vtable: IInspectable_VTable,
-    OpenReadAsync: rawptr,
-}
-
-IRandomAccessStreamReferenceStatics_UUID := &windows.IID{0x857309dc, 0x3fbf, 0x4e7d, {0x98, 0x6f, 0xef, 0x3b, 0x1a, 0x07, 0xa9, 0x64}}
-IRandomAccessStreamReferenceStatics :: struct #raw_union {
-    #subtype iinspectable: IInspectable,
-    using statics_vtable: ^IRandomAccessStreamReferenceStatics_VTable,
-}
-IRandomAccessStreamReferenceStatics_VTable :: struct {
-    using iinspectable_vtable: IInspectable_VTable,
-    CreateFromFile: rawptr,
-    CreateFromUri: rawptr,
-    CreateFromStream: proc "system" (this: ^IRandomAccessStreamReferenceStatics, stream: rawptr, streamReference: ^^IRandomAccessStreamReference) -> windows.HRESULT,
-}
-
-IRandomAccessStream_UUID := &windows.IID{0x905a0fe1, 0xbc53, 0x11df, {0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda}}
-
 create_hstring :: proc(str: string) -> HSTRING {
 	if len(str) == 0 do return nil
-	utf16_buf := make([]u16, len(str), context.temp_allocator)
-	utf16_len := utf16.encode_string(utf16_buf, str)
-	utf16_str := utf16_buf[:utf16_len]
-	hstr: HSTRING
-	WindowsCreateString(raw_data(utf16_str), u32(len(utf16_str)), &hstr)
-	return hstr
+
+	buffer := make([]u16, len(str), context.temp_allocator)
+	length := utf16.encode_string(buffer, str)
+	result: HSTRING
+	if windows.FAILED(WindowsCreateString(raw_data(buffer), u32(length), &result)) {
+		return nil
+	}
+	return result
 }
 
 init :: proc(hwnd: windows.HWND) {
-	RoInitialize(1)
+	if g_smtc != nil || hwnd == nil do return
 
-	global_handler_vtable.QueryInterface = smtc_handler_query_interface
-	global_handler_vtable.AddRef = smtc_handler_add_ref
-	global_handler_vtable.Release = smtc_handler_release
-	global_handler_vtable.Invoke = smtc_handler_invoke
+	ro_result := RoInitialize(1)
+	if windows.FAILED(ro_result) do return
 
-	global_handler.handler_vtable = &global_handler_vtable
-	global_handler.ref_count = 1
+	g_handler_vtable = ITypedEventHandler_VTable {
+		QueryInterface = smtc_handler_query_interface,
+		AddRef = smtc_handler_add_ref,
+		Release = smtc_handler_release,
+		Invoke = smtc_handler_invoke,
+	}
+	g_handler.vtable = &g_handler_vtable
+	g_handler.ref_count = 1
 
 	class_name := create_hstring("Windows.Media.SystemMediaTransportControls")
+	if class_name == nil do return
 	defer WindowsDeleteString(class_name)
 
 	interop: ^ISystemMediaTransportControlsInterop
-	if RoGetActivationFactory(class_name, ISystemMediaTransportControlsInterop_UUID, cast(^rawptr)&interop) != windows.S_OK || interop == nil do return
+	result := RoGetActivationFactory(
+		class_name,
+		&ISystemMediaTransportControlsInterop_UUID,
+		cast(^rawptr)&interop,
+	)
+	if windows.FAILED(result) || interop == nil do return
 	defer interop->Release()
 
-	if interop->GetForWindow(hwnd, ISystemMediaTransportControls_UUID, &g_smtc) != windows.S_OK || g_smtc == nil do return
-	
-	g_smtc->put_IsPlayEnabled(true)
-	g_smtc->put_IsPauseEnabled(true)
-	g_smtc->put_IsNextEnabled(true)
-	g_smtc->put_IsPreviousEnabled(true)
+	result = interop->GetForWindow(hwnd, &ISystemMediaTransportControls_UUID, &g_smtc)
+	if windows.FAILED(result) || g_smtc == nil do return
 
-	token: EventRegistrationToken
-	g_smtc->add_ButtonPressed(&global_handler.handler, &token)
+	controls_ready :=
+		windows.SUCCEEDED(g_smtc->put_IsEnabled(true)) &&
+		windows.SUCCEEDED(g_smtc->put_IsPlayEnabled(true)) &&
+		windows.SUCCEEDED(g_smtc->put_IsPauseEnabled(true)) &&
+		windows.SUCCEEDED(g_smtc->put_IsNextEnabled(true)) &&
+		windows.SUCCEEDED(g_smtc->put_IsPreviousEnabled(true))
+	if !controls_ready {
+		g_smtc->Release()
+		g_smtc = nil
+		return
+	}
+
+	button_token: EventRegistrationToken
+	if windows.FAILED(g_smtc->add_ButtonPressed(&g_handler.handler, &button_token)) {
+		g_smtc->put_IsEnabled(false)
+		g_smtc->Release()
+		g_smtc = nil
+	}
 }
 
-action_pending := SystemMediaTransportControlsButton(-1)
-
-poll_action :: proc() -> SystemMediaTransportControlsButton {
-	action := action_pending
-	action_pending = SystemMediaTransportControlsButton(-1)
-	return action
+poll_action :: proc() -> Action {
+	return sync.atomic_exchange(&pending_action, .None)
 }
 
-update_metadata :: proc(title: string, artist: string, cover_bytes: []byte = nil) {
+update_metadata :: proc(title, artist: string, cover_bytes: []byte = nil) {
 	if g_smtc == nil do return
 
 	updater: ^ISystemMediaTransportControlsDisplayUpdater
-	if g_smtc->get_DisplayUpdater(&updater) != windows.S_OK || updater == nil do return
+	if windows.FAILED(g_smtc->get_DisplayUpdater(&updater)) || updater == nil do return
 	defer updater->Release()
 
-	updater->ClearAll()
-	updater->put_Type(.Music)
+	if windows.FAILED(updater->ClearAll()) ||
+	   windows.FAILED(updater->put_Type(.Music)) {
+		return
+	}
 
 	if len(cover_bytes) > 0 {
-		if istream := SHCreateMemStream(raw_data(cover_bytes), u32(len(cover_bytes))); istream != nil {
-			defer (cast(^windows.IUnknown)istream)->Release()
+		if stream := SHCreateMemStream(raw_data(cover_bytes), u32(len(cover_bytes))); stream != nil {
+			defer (cast(^windows.IUnknown)stream)->Release()
 
 			random_access_stream: rawptr
-			if CreateRandomAccessStreamOverStream(istream, 0, IRandomAccessStream_UUID, &random_access_stream) == windows.S_OK {
+			if windows.SUCCEEDED(CreateRandomAccessStreamOverStream(
+				stream,
+				0,
+				&IRandomAccessStream_UUID,
+				&random_access_stream,
+			)) && random_access_stream != nil {
 				defer (cast(^windows.IUnknown)random_access_stream)->Release()
 
-				ref_class_hstr := create_hstring("Windows.Storage.Streams.RandomAccessStreamReference")
-				defer if ref_class_hstr != nil do WindowsDeleteString(ref_class_hstr)
+				class_name := create_hstring("Windows.Storage.Streams.RandomAccessStreamReference")
+				if class_name != nil {
+					defer WindowsDeleteString(class_name)
 
-				ref_statics: ^IRandomAccessStreamReferenceStatics
-				if RoGetActivationFactory(ref_class_hstr, IRandomAccessStreamReferenceStatics_UUID, cast(^rawptr)&ref_statics) == windows.S_OK {
-					defer ref_statics->Release()
+					statics: ^IRandomAccessStreamReferenceStatics
+					if windows.SUCCEEDED(RoGetActivationFactory(
+						class_name,
+						&IRandomAccessStreamReferenceStatics_UUID,
+						cast(^rawptr)&statics,
+					)) && statics != nil {
+						defer statics->Release()
 
-					stream_ref: ^IRandomAccessStreamReference
-					if ref_statics->CreateFromStream(random_access_stream, &stream_ref) == windows.S_OK {
-						defer stream_ref->Release()
-						updater->put_Thumbnail(cast(rawptr)stream_ref)
+						stream_reference: ^IRandomAccessStreamReference
+						if windows.SUCCEEDED(statics->CreateFromStream(
+							random_access_stream,
+							&stream_reference,
+						)) && stream_reference != nil {
+							defer stream_reference->Release()
+							updater->put_Thumbnail(cast(rawptr)stream_reference)
+						}
 					}
 				}
 			}
 		}
 	}
 
-	music_props: ^IMusicDisplayProperties
-	if updater->get_MusicProperties(&music_props) == windows.S_OK && music_props != nil {
-		defer music_props->Release()
+	properties: ^IMusicDisplayProperties
+	if windows.SUCCEEDED(updater->get_MusicProperties(&properties)) && properties != nil {
+		defer properties->Release()
 
-		title_hstr := create_hstring(title)
-		defer if title_hstr != nil do WindowsDeleteString(title_hstr)
+		title_string := create_hstring(title)
+		defer if title_string != nil do WindowsDeleteString(title_string)
 
-		artist_hstr := create_hstring(artist)
-		defer if artist_hstr != nil do WindowsDeleteString(artist_hstr)
+		artist_string := create_hstring(artist)
+		defer if artist_string != nil do WindowsDeleteString(artist_string)
 
-		music_props->put_Title(title_hstr)
-		music_props->put_Artist(artist_hstr)
+		properties->put_Title(title_string)
+		properties->put_Artist(artist_string)
 	}
 
 	updater->Update()
