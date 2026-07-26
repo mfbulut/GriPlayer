@@ -41,17 +41,17 @@ vks: struct {
 	clear_color: [4]f32,
 }
 
+Texture :: ^Texture_Data
 Texture_Data :: struct {
-	index: int,
-	size: [2]int,
 	image: vk.Image,
 	view: vk.ImageView,
 	memory: vk.DeviceMemory,
 	layout: vk.ImageLayout,
 	used: bool,
+	index: int,
+	size: [2]int,
 }
 
-Texture :: ^Texture_Data
 textures: [MAX_TEXTURES]Texture_Data
 
 check_vk :: proc(result: vk.Result) {
@@ -69,12 +69,6 @@ vk_init :: proc() {
 	}
 
 	{	// Create Instance
-		app_info := vk.ApplicationInfo {
-			sType = .APPLICATION_INFO,
-			pApplicationName = "GriPlayer",
-			apiVersion = vk.API_VERSION_1_3,
-		}
-
 		when ODIN_DEBUG {
 			layer_count := u32(1)
 			val_layer := cstring("VK_LAYER_KHRONOS_validation")
@@ -94,6 +88,12 @@ vk_init :: proc() {
 			}
 		}
 
+		app_info := vk.ApplicationInfo {
+			sType = .APPLICATION_INFO,
+			pApplicationName = "GriPlayer",
+			apiVersion = vk.API_VERSION_1_3,
+		}
+		
 		create_info := vk.InstanceCreateInfo {
 			sType = .INSTANCE_CREATE_INFO,
 			pApplicationInfo = &app_info,
@@ -291,7 +291,7 @@ vk_init :: proc() {
 			bindingCount = 2,
 			pBindings = &bindings[0],
 		}
-		check_vk(vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &vks.descriptor_set_layout))
+		vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &vks.descriptor_set_layout)
 
 		pool_sizes := [?]vk.DescriptorPoolSize {
 			{ type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_TEXTURES },
@@ -305,7 +305,7 @@ vk_init :: proc() {
 			pPoolSizes = &pool_sizes[0],
 		}
 		descriptor_pool: vk.DescriptorPool
-		check_vk(vk.CreateDescriptorPool(vks.device, &desc_pool_info, nil, &descriptor_pool))
+		vk.CreateDescriptorPool(vks.device, &desc_pool_info, nil, &descriptor_pool)
 
 		alloc_set_info := vk.DescriptorSetAllocateInfo {
 			sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -313,7 +313,7 @@ vk_init :: proc() {
 			descriptorSetCount = 1,
 			pSetLayouts = &vks.descriptor_set_layout,
 		}
-		check_vk(vk.AllocateDescriptorSets(vks.device, &alloc_set_info, &vks.descriptor_set))
+		vk.AllocateDescriptorSets(vks.device, &alloc_set_info, &vks.descriptor_set)
 	}
 
 	{	// Instance Buffer
@@ -706,7 +706,9 @@ texture_create :: proc(w, h: int) -> Texture {
 		}
 	}
 
-	if index == -1 do panic("Too many textures")
+	if index == -1 {
+		return nil
+	}
 
 	tex := &textures[index]
 
@@ -724,7 +726,7 @@ texture_create :: proc(w, h: int) -> Texture {
 		sharingMode = .EXCLUSIVE,
 	}
 
-	check_vk(vk.CreateImage(vks.device, &image_info, nil, &tex.image))
+	vk.CreateImage(vks.device, &image_info, nil, &tex.image)
 
 	mem_reqs: vk.MemoryRequirements
 	vk.GetImageMemoryRequirements(vks.device, tex.image, &mem_reqs)
@@ -734,7 +736,7 @@ texture_create :: proc(w, h: int) -> Texture {
 		allocationSize = mem_reqs.size,
 		memoryTypeIndex = find_memory_type(mem_reqs.memoryTypeBits, {.DEVICE_LOCAL}),
 	}
-	check_vk(vk.AllocateMemory(vks.device, &alloc_info, nil, &tex.memory))
+	vk.AllocateMemory(vks.device, &alloc_info, nil, &tex.memory)
 	vk.BindImageMemory(vks.device, tex.image, tex.memory, 0)
 
 	view_info := vk.ImageViewCreateInfo {
@@ -744,7 +746,7 @@ texture_create :: proc(w, h: int) -> Texture {
 		format = .R8G8B8A8_UNORM,
 		subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 	}
-	check_vk(vk.CreateImageView(vks.device, &view_info, nil, &tex.view))
+	vk.CreateImageView(vks.device, &view_info, nil, &tex.view)
 
 	// Update descriptor set
 	image_info_desc := vk.DescriptorImageInfo {
