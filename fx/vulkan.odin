@@ -44,7 +44,7 @@ Texture :: struct {
 	size: [2]int,
 }
 
-Texture_Data :: struct {
+textures: #soa[MAX_TEXTURES]struct {
 	image: vk.Image,
 	view: vk.ImageView,
 	memory: vk.DeviceMemory,
@@ -52,8 +52,6 @@ Texture_Data :: struct {
 	mip_levels: u32,
 	used: bool,
 }
-
-textures: #soa[MAX_TEXTURES]Texture_Data
 
 vk_init :: proc() {
 	{	// Load vulkan-1.dll

@@ -77,10 +77,6 @@ loader_queue: [dynamic]^Music
 loader_mutex: sync.Mutex
 loading_finished: bool
 
-thumbnail_atlases: [dynamic]fx.Texture
-atlas_cursor_x, atlas_cursor_y: int
-
-ATLAS_SIZE :: 4096
 THUMBNAIL_SIZE :: 64
 
 loader_start :: proc() {
@@ -139,30 +135,32 @@ loader_poll :: proc() {
 	defer delete(queue)
 	if len(queue) == 0 do return
 
+	@(static) cursor_x: int
+	@(static) cursor_y: int
+	@(static) atlases: [dynamic]fx.Texture
+	ATLAS_SIZE :: 4096
+
 	next_music: for music in queue {
 		if len(music.thumbnail_pixels) > 0 {
-			if len(thumbnail_atlases) == 0 || atlas_cursor_y + THUMBNAIL_SIZE > ATLAS_SIZE {
+			if len(atlases) == 0 || cursor_y + THUMBNAIL_SIZE > ATLAS_SIZE {
 				atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
-				empty_pixels := make([]fx.Color, ATLAS_SIZE * ATLAS_SIZE)
-				fx.texture_upload(atlas_tex, empty_pixels, 0, 0, ATLAS_SIZE, ATLAS_SIZE)
-				delete(empty_pixels)
-				append(&thumbnail_atlases, atlas_tex)
-				atlas_cursor_x = 0
-				atlas_cursor_y = 0
+				append(&atlases, atlas_tex)
+				cursor_x = 0
+				cursor_y = 0
 			}
 
-			current_atlas := thumbnail_atlases[len(thumbnail_atlases) - 1]
-			fx.texture_upload(current_atlas, music.thumbnail_pixels, atlas_cursor_x, atlas_cursor_y, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-			
+			current_atlas := atlases[len(atlases) - 1]
+			fx.texture_upload(current_atlas, music.thumbnail_pixels, cursor_x, cursor_y, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+
 			music.thumbnail = {
 				texture = current_atlas,
-				source = {f32(atlas_cursor_x), f32(atlas_cursor_y), f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)},
+				source = {f32(cursor_x), f32(cursor_y), f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)},
 			}
 
-			atlas_cursor_x += THUMBNAIL_SIZE
-			if atlas_cursor_x + THUMBNAIL_SIZE > ATLAS_SIZE {
-				atlas_cursor_x = 0
-				atlas_cursor_y += THUMBNAIL_SIZE
+			cursor_x += THUMBNAIL_SIZE
+			if cursor_x + THUMBNAIL_SIZE > ATLAS_SIZE {
+				cursor_x = 0
+				cursor_y += THUMBNAIL_SIZE
 			}
 		}
 
@@ -181,6 +179,7 @@ loader_poll :: proc() {
 				continue next_music
 			}
 		}
+
 		append(&playlists, Playlist{name = playlist_name, sort = .Title})
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
@@ -427,7 +426,7 @@ cache_save :: proc() {
 			cache.songs[song.fullpath] = song^
 		}
 	}
-	
+
 	bytes, error := cbor.marshal(cache)
 	if error == nil {
 		_ = os.write_entire_file(path, bytes)
