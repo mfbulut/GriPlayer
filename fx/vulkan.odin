@@ -392,10 +392,6 @@ vk_init :: proc() {
 }
 
 vk_recreate_swapchain :: proc() {
-	if window.size.x == 0 || window.size.y == 0 {
-		return
-	}
-
 	vk.DeviceWaitIdle(vks.device)
 
 	if swapchain.swapchain != 0 {

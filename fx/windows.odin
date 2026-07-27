@@ -156,11 +156,10 @@ update :: proc(poll_msg := true) {
 		}
 	}
 
-	window.cursor = .Arrow
-
 	cur_time := time.now()
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
 	window.prev_time = cur_time
+	window.cursor = .Arrow
 
 	if window.frame_callback != nil {
 		window.frame_callback()
@@ -168,12 +167,14 @@ update :: proc(poll_msg := true) {
 
 	flush()
 
-	if window.is_resized {
-		vk_recreate_swapchain()
-		window.is_resized = false
-	}
+	if window.size.x > 0 && window.size.y > 0 {
+		if window.is_resized {
+			vk_recreate_swapchain()
+			window.is_resized = false
+		}
 
-	vk_render()
+		vk_render()
+	}
 
 	clear(&instances)
 	clear(&batches)
