@@ -174,6 +174,9 @@ update :: proc(poll_msg := true) {
 	}
 
 	vk_render()
+
+	clear(&instances)
+	clear(&batches)
 }
 
 run :: proc(cb: proc()) {

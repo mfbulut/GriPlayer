@@ -10,28 +10,28 @@ import stbi "vendor:stb/image"
 MAX_TEXTURES :: 1024
 MAX_INSTANCES :: 1024 * 16
 
+swapchain: struct {
+	swapchain: vk.SwapchainKHR,
+	images: [2]vk.Image,
+	image_views: [2]vk.ImageView,
+	present_semaphores: [2]vk.Semaphore,
+}
+
 vks: struct {
 	instance: vk.Instance,
-	physical_device: vk.PhysicalDevice,
+	gpu: vk.PhysicalDevice,
 	device: vk.Device,
 	queue: vk.Queue,
-
 	surface: vk.SurfaceKHR,
-	swapchain: struct {
-		swapchain: vk.SwapchainKHR,
-		images: [2]vk.Image,
-		image_views: [2]vk.ImageView,
-		present_semaphores: [2]vk.Semaphore,
-	},
 
 	command_pool: vk.CommandPool,
 	command_buffer: vk.CommandBuffer,
 	acquire_semaphore: vk.Semaphore,
 	in_flight_fence: vk.Fence,
 
-	pipeline_layout: vk.PipelineLayout,
-	shaders: [2]vk.ShaderEXT,
 	sampler: vk.Sampler,
+	shaders: [2]vk.ShaderEXT,
+	pipeline_layout: vk.PipelineLayout,
 
 	descriptor_set_layout: vk.DescriptorSetLayout,
 	descriptor_set: vk.DescriptorSet,
@@ -55,24 +55,6 @@ Texture_Data :: struct {
 
 textures: #soa[MAX_TEXTURES]Texture_Data
 
-debug_callback :: proc "system" (
-	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
-	messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
-	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-	pUserData: rawptr,
-) -> b32 {
-	context = runtime.default_context()
-	fmt.eprintln("Vulkan Validation:", pCallbackData.pMessage)
-	return false
-}
-
-check_vk :: proc(result: vk.Result) {
-	if result != .SUCCESS {
-		fmt.eprintln("Vulkan Error:", result)
-		panic("Vulkan Error")
-	}
-}
-
 vk_init :: proc() {
 	{	// Load vulkan-1.dll
 		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load vulkan-1.dll")
@@ -90,23 +72,17 @@ vk_init :: proc() {
 			layer_names: ^cstring
 		}
 
-		extensions := [?]cstring {
-			vk.KHR_SURFACE_EXTENSION_NAME,
-			vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
+		extensions: [dynamic; 3]cstring
+		append(&extensions, vk.KHR_SURFACE_EXTENSION_NAME)
+		append(&extensions, vk.KHR_WIN32_SURFACE_EXTENSION_NAME)
+		when ODIN_DEBUG {
+			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		}
 
 		app_info := vk.ApplicationInfo {
 			sType = .APPLICATION_INFO,
 			pApplicationName = "GriPlayer",
 			apiVersion = vk.API_VERSION_1_3,
-		}
-
-		debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
-			sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-			messageSeverity = {.WARNING, .ERROR},
-			messageType = {.VALIDATION, .PERFORMANCE},
-			pfnUserCallback = debug_callback,
 		}
 
 		create_info := vk.InstanceCreateInfo {
@@ -116,11 +92,37 @@ vk_init :: proc() {
 			ppEnabledExtensionNames = &extensions[0],
 			enabledLayerCount = layer_count,
 			ppEnabledLayerNames = layer_names,
-			pNext = &debug_info
+		}
+
+		when ODIN_DEBUG {
+			debug_callback :: proc "system" (
+				messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
+				messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
+				pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+				pUserData: rawptr,
+			) -> b32 {
+				context = runtime.default_context()
+				fmt.eprintln("Vulkan Validation:", pCallbackData.pMessage)
+				return false
+			}
+
+			debug_info := vk.DebugUtilsMessengerCreateInfoEXT {
+				sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				messageSeverity = {.WARNING, .ERROR},
+				messageType = {.VALIDATION, .PERFORMANCE},
+				pfnUserCallback = debug_callback,
+			}
+
+			create_info.pNext = &debug_info
 		}
 
 		vk.CreateInstance(&create_info, nil, &vks.instance)
 		vk.load_proc_addresses(vks.instance)
+
+		when ODIN_DEBUG {
+			debug_messenger: vk.DebugUtilsMessengerEXT
+			vk.CreateDebugUtilsMessengerEXT(vks.instance, &debug_info, nil, &debug_messenger)
+		}
 	}
 
 	{	// Create Surface
@@ -139,12 +141,12 @@ vk_init :: proc() {
 		defer delete(devices)
 		vk.EnumeratePhysicalDevices(vks.instance, &device_count, &devices[0])
 
-		vks.physical_device = devices[0]
+		vks.gpu = devices[0]
 		for d in devices {
 			props: vk.PhysicalDeviceProperties
 			vk.GetPhysicalDeviceProperties(d, &props)
 			if props.deviceType == .DISCRETE_GPU {
-				vks.physical_device = d
+				vks.gpu = d
 				break
 			}
 		}
@@ -152,10 +154,11 @@ vk_init :: proc() {
 
 	{	// Create Logical Device
 		queue_count: u32
-		vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, nil)
+		vk.GetPhysicalDeviceQueueFamilyProperties(vks.gpu, &queue_count, nil)
 		queue_families := make([]vk.QueueFamilyProperties, queue_count)
 		defer delete(queue_families)
-		vk.GetPhysicalDeviceQueueFamilyProperties(vks.physical_device, &queue_count, &queue_families[0])
+		vk.GetPhysicalDeviceQueueFamilyProperties(vks.gpu, &queue_count, &queue_families[0])
+
 		queue_family_index: u32
 		for queue_family, i in queue_families {
 			if .GRAPHICS in queue_family.queueFlags {
@@ -208,7 +211,7 @@ vk_init :: proc() {
 			ppEnabledExtensionNames = &device_extensions[0],
 		}
 
-		vk.CreateDevice(vks.physical_device, &device_create_info, nil, &vks.device)
+		vk.CreateDevice(vks.gpu, &device_create_info, nil, &vks.device)
 		vk.load_proc_addresses(vks.device)
 		vk.GetDeviceQueue(vks.device, queue_family_index, 0, &vks.queue)
 
@@ -351,7 +354,7 @@ vk_init :: proc() {
 			pPushConstantRanges = &push_constant_range,
 		}
 
-		check_vk(vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout))
+		vk.CreatePipelineLayout(vks.device, &pipeline_layout_info, nil, &vks.pipeline_layout)
 
 		shader_infos := [?]vk.ShaderCreateInfoEXT{
 			{
@@ -382,66 +385,70 @@ vk_init :: proc() {
 			}
 		}
 
-		check_vk(vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0]))
+		vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0])
 	}
 
 	vk_recreate_swapchain()
 }
 
 vk_recreate_swapchain :: proc() {
+	if window.size.x == 0 || window.size.y == 0 {
+		return
+	}
+
 	vk.DeviceWaitIdle(vks.device)
 
-	if vks.swapchain.swapchain != 0 {
-		for view in vks.swapchain.image_views {
-			if view != 0 do vk.DestroyImageView(vks.device, view, nil)
+	if swapchain.swapchain != 0 {
+		for view in swapchain.image_views {
+			vk.DestroyImageView(vks.device, view, nil)
 		}
-		for semaphore in vks.swapchain.present_semaphores {
-			if semaphore != 0 do vk.DestroySemaphore(vks.device, semaphore, nil)
+		for semaphore in swapchain.present_semaphores {
+			vk.DestroySemaphore(vks.device, semaphore, nil)
 		}
 	}
 
-	capabilities: vk.SurfaceCapabilitiesKHR
-	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.physical_device, vks.surface, &capabilities)
+	extent := vk.Extent2D{u32(window.size.x), u32(window.size.y)}
 
 	create_info := vk.SwapchainCreateInfoKHR {
 		sType = .SWAPCHAIN_CREATE_INFO_KHR,
 		surface = vks.surface,
-		minImageCount = max(capabilities.minImageCount, 2),
+		minImageCount = 2,
 		imageFormat = .B8G8R8A8_UNORM,
 		imageColorSpace = .SRGB_NONLINEAR,
-		imageExtent = {window.size.x, window.size.y},
+		imageExtent = extent,
 		imageArrayLayers = 1,
 		imageUsage = {.COLOR_ATTACHMENT},
 		imageSharingMode = .EXCLUSIVE,
-		preTransform = capabilities.currentTransform,
+		preTransform = {.IDENTITY},
 		compositeAlpha = {.OPAQUE},
 		presentMode = .FIFO,
 		clipped = true,
-		oldSwapchain = vks.swapchain.swapchain,
+		oldSwapchain = swapchain.swapchain,
 	}
 
 	new_swapchain: vk.SwapchainKHR
 	vk.CreateSwapchainKHR(vks.device, &create_info, nil, &new_swapchain)
 
-	if vks.swapchain.swapchain != 0 {
-		vk.DestroySwapchainKHR(vks.device, vks.swapchain.swapchain, nil)
+	if swapchain.swapchain != 0 {
+		vk.DestroySwapchainKHR(vks.device, swapchain.swapchain, nil)
 	}
-	vks.swapchain.swapchain = new_swapchain
 
-	image_count: u32 = 2
-	vk.GetSwapchainImagesKHR(vks.device, vks.swapchain.swapchain, &image_count, &vks.swapchain.images[0])
+	swapchain.swapchain = new_swapchain
+
+	image_count := u32(2)
+	vk.GetSwapchainImagesKHR(vks.device, swapchain.swapchain, &image_count, &swapchain.images[0])
 
 	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
 	for i in 0..<image_count {
 		view_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
-			image = vks.swapchain.images[i],
+			image = swapchain.images[i],
 			viewType = .D2,
 			format = .B8G8R8A8_UNORM,
 			subresourceRange = { aspectMask = {.COLOR}, levelCount = 1, layerCount = 1 },
 		}
-		vk.CreateImageView(vks.device, &view_info, nil, &vks.swapchain.image_views[i])
-		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.swapchain.present_semaphores[i])
+		vk.CreateImageView(vks.device, &view_info, nil, &swapchain.image_views[i])
+		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &swapchain.present_semaphores[i])
 	}
 }
 
@@ -450,12 +457,13 @@ vk_render :: proc() {
 
 	image_index: u32
 	res := vk.AcquireNextImageKHR(
-		vks.device, vks.swapchain.swapchain, max(u64),
+		vks.device, swapchain.swapchain, max(u64),
 		vks.acquire_semaphore,
 		0, &image_index,
 	)
 
 	if res == .ERROR_OUT_OF_DATE_KHR {
+		vk_recreate_swapchain()
 		return
 	}
 
@@ -471,7 +479,7 @@ vk_render :: proc() {
 	vk.BeginCommandBuffer(cmd, &begin_info)
 
 	image_barrier(
-		cmd, vks.swapchain.images[image_index],
+		cmd, swapchain.images[image_index],
 		.UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL,
 		{.TOP_OF_PIPE}, {.COLOR_ATTACHMENT_OUTPUT},
 		{}, {.COLOR_ATTACHMENT_WRITE},
@@ -479,7 +487,7 @@ vk_render :: proc() {
 
 	color_attachment := vk.RenderingAttachmentInfo {
 		sType = .RENDERING_ATTACHMENT_INFO,
-		imageView = vks.swapchain.image_views[image_index],
+		imageView = swapchain.image_views[image_index],
 		imageLayout = .COLOR_ATTACHMENT_OPTIMAL,
 		loadOp = .CLEAR,
 		storeOp = .STORE,
@@ -488,7 +496,7 @@ vk_render :: proc() {
 
 	rendering_info := vk.RenderingInfo {
 		sType = .RENDERING_INFO,
-		renderArea = { extent = {window.size.x, window.size.y} },
+		renderArea = { extent = {u32(window.size.x), u32(window.size.y)} },
 		layerCount = 1,
 		colorAttachmentCount = 1,
 		pColorAttachments = &color_attachment,
@@ -544,12 +552,7 @@ vk_render :: proc() {
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
 
 	if len(instances) > 0 {
-		if u32(len(instances)) > MAX_INSTANCES {
-			panic("Instance buffer overflow")
-		}
-
-		dst := cast(rawptr)(uintptr(vks.instance_buffer_mapped))
-		mem.copy(dst, raw_data(instances[:]), len(instances) * size_of(Instance))
+		mem.copy(vks.instance_buffer_mapped, raw_data(instances[:]), len(instances) * size_of(Instance))
 
 		for b in batches {
 			if b.count == 0 do continue
@@ -566,14 +569,14 @@ vk_render :: proc() {
 	vk.CmdEndRendering(cmd)
 
 	image_barrier(
-		cmd, vks.swapchain.images[image_index],
+		cmd, swapchain.images[image_index],
 		.COLOR_ATTACHMENT_OPTIMAL, .PRESENT_SRC_KHR,
-		{.COLOR_ATTACHMENT_OUTPUT}, {.ALL_COMMANDS},
+		{.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_OUTPUT},
 		{.COLOR_ATTACHMENT_WRITE}, {},
 	)
 	vk.EndCommandBuffer(cmd)
 
-	render_finished_semaphore := &vks.swapchain.present_semaphores[image_index]
+	render_finished_semaphore := &swapchain.present_semaphores[image_index]
 	cmd_info := vk.CommandBufferSubmitInfo {
 		sType = .COMMAND_BUFFER_SUBMIT_INFO,
 		commandBuffer = cmd,
@@ -604,19 +607,19 @@ vk_render :: proc() {
 		waitSemaphoreCount = 1,
 		pWaitSemaphores = render_finished_semaphore,
 		swapchainCount = 1,
-		pSwapchains = &vks.swapchain.swapchain,
+		pSwapchains = &swapchain.swapchain,
 		pImageIndices = &image_index,
 	}
 
-	vk.QueuePresentKHR(vks.queue, &present_info)
-
-	clear(&instances)
-	clear(&batches)
+	present_res := vk.QueuePresentKHR(vks.queue, &present_info)
+	if present_res == .ERROR_OUT_OF_DATE_KHR || present_res == .SUBOPTIMAL_KHR || res == .SUBOPTIMAL_KHR {
+		vk_recreate_swapchain()
+	}
 }
 
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
 	mem_properties: vk.PhysicalDeviceMemoryProperties
-	vk.GetPhysicalDeviceMemoryProperties(vks.physical_device, &mem_properties)
+	vk.GetPhysicalDeviceMemoryProperties(vks.gpu, &mem_properties)
 	for i in 0..<mem_properties.memoryTypeCount {
 		if (type_filter & (1 << i)) != 0 && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
 			return i
@@ -632,8 +635,8 @@ create_buffer :: proc(size: vk.DeviceSize, usage: vk.BufferUsageFlags, propertie
 		usage = usage,
 		sharingMode = .EXCLUSIVE,
 	}
-	vk.CreateBuffer(vks.device, &buffer_info, nil, &buffer)
 
+	vk.CreateBuffer(vks.device, &buffer_info, nil, &buffer)
 	mem_requirements: vk.MemoryRequirements
 	vk.GetBufferMemoryRequirements(vks.device, buffer, &mem_requirements)
 
