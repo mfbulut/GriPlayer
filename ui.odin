@@ -3,6 +3,7 @@ package main
 import "core:math/ease"
 import "core:hash"
 import "core:time"
+import "core:fmt"
 
 import "fx"
 
@@ -80,24 +81,26 @@ end :: proc() {
 		state.content_size.x = layout.max.x - layout.body.pos.x
 		state.content_size.y = layout.max.y - layout.body.pos.y
 
-		fade_height := min(f32(30), layout.body.size.y * 0.25)
-		transparent := layout.bg_color
-		transparent.a = 0
-		opaque := layout.bg_color
+		if state.content_size.y > layout.rect.size.y {
+			fade_height := min(f32(30), layout.rect.size.y * 0.25)
+			transparent := layout.bg_color
+			transparent.a = 0
+			opaque := layout.bg_color
 
-		if state.scroll.y > 0.1 {
-			fx.draw_rect(
-				{layout.body.pos, {layout.body.size.x, fade_height}},
-				{opaque, opaque, transparent, transparent}, 8
-			)
-		}
+			if state.scroll.y > 0.1 {
+				fx.draw_rect(
+					{layout.rect.pos, {layout.rect.size.x, fade_height}},
+					{opaque, opaque, transparent, transparent}, 8
+				)
+			}
 
-		max_scroll := state.content_size.y - layout.body.size.y
-		if max_scroll - state.scroll.y > 0.1 {
-			fx.draw_rect(
-				{{layout.body.pos.x, layout.body.pos.y + layout.body.size.y - fade_height}, {layout.body.size.x, fade_height}},
-				{transparent, transparent, opaque, opaque}, 8
-			)
+			max_scroll := state.content_size.y - layout.rect.size.y
+			if max_scroll - state.scroll.y > 0.1 {
+				fx.draw_rect(
+					{{layout.rect.pos.x, layout.rect.pos.y + layout.rect.size.y - fade_height}, {layout.rect.size.x, fade_height}},
+					{transparent, transparent, opaque, opaque}, 8
+				)
+			}
 		}
 
 		pop_clip_rect()
@@ -123,7 +126,7 @@ get_id :: proc(str: string) -> Id {
 	return Id(hash.fnv64a(transmute([]byte)str, seed))
 }
 
-child_id   :: proc(id: Id, str: string) -> Id {
+child_id :: proc(id: Id, str: string) -> Id {
 	return Id(hash.fnv64a(transmute([]byte)str, u64(id)))
 }
 

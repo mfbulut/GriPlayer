@@ -253,7 +253,7 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 
 	// Queue slots
 	for i in 0..=len(player.queue) {
-		center := content_top + 16.0 + 56.0 * 0.5 + f32(i) * 56.0
+		center := content_top + 56.0 * 0.5 + f32(i) * 56.0
 		if distance := abs(drag_center - center); distance < best_distance {
 			best_distance, best_arr, best_index = distance, &player.queue, i
 		}
@@ -263,7 +263,7 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 	playlist_start := clamp(player.cursor + 1, 0, len(player.songs))
 	playlist_count := len(player.songs) - playlist_start
 
-	playlist_top := content_top + 16.0 + f32(len(player.queue)) * 56.0 + 42.0
+	playlist_top := content_top + f32(len(player.queue)) * 56.0 + 42.0
 
 	for i in 0..=playlist_count {
 		center := playlist_top + 56.0 * 0.5 + f32(i) * 56.0
