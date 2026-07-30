@@ -5,7 +5,7 @@ import "core:hash"
 
 import "fx"
 
-Id :: distinct u32
+Id :: distinct u64
 
 Layout :: struct {
 	body:                fx.Rect,
@@ -103,14 +103,14 @@ get_id_string  :: #force_inline proc(str: string)  -> Id { return get_id_bytes(t
 
 get_id_bytes   :: proc(bytes: []byte) -> Id {
 	idx := len(ctx.id_stack)
-	seed := idx > 0 ? u32(ctx.id_stack[idx - 1]) : 2166136261
-	return Id(hash.fnv32a(bytes, seed))
+	seed := idx > 0 ? u64(ctx.id_stack[idx - 1]) : 2166136261
+	return Id(hash.fnv64a(bytes, seed))
 }
 
 get_child_id         :: proc{get_child_id_string, get_child_id_bytes}
 get_child_id_string  :: #force_inline proc(id: Id, str: string)  -> Id { return get_child_id_bytes(id, transmute([]byte) str) }
 get_child_id_bytes   :: proc(id: Id, bytes: []byte) -> Id {
-	return Id(hash.fnv32a(bytes, u32(id)))
+	return Id(hash.fnv64a(bytes, u64	(id)))
 }
 
 push_clip_rect :: proc(rect: fx.Rect) {

@@ -523,15 +523,12 @@ playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> Result
 	return res
 }
 
-song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort = .Title) -> Result_Set {
-	row_name := fmt.tprintf("song_%d_%s", index, song.fullpath)
-	row_id := get_id(row_name)
-
-	res: Result_Set
-	if begin(row_name, pad = 5, gap = 10) {
+song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
+	if begin("song_row", pad = 5, gap = 10) {
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
 
+		row_id := get_id(song.fullpath)
 		res = update_control(row_id, container.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
@@ -610,7 +607,7 @@ song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort 
 		}
 	}
 
-	return res
+	return
 }
 
 format_time :: proc(seconds: f32) -> string {
@@ -695,26 +692,33 @@ handle_keyboard_input :: proc() {
 
 	if fx.key_is_pressed_repeat(.Up) do audio.volume = clamp(audio.volume + 0.05, 0, 1)
 	if fx.key_is_pressed_repeat(.Down) do audio.volume = clamp(audio.volume - 0.05, 0, 1)
+
 	if player.music == nil do return
+
 	if fx.key_is_pressed(.Space) do player_toggle_pause()
-	if fx.key_is_down(.Ctrl) {
+
+	if fx.key_is_down(.Ctrl) && len(player.music.lyrics) > 0 {
 		lyric_index, lyric_found := current_lyric()
 		position := scrub_time >= 0 ? scrub_time : audio.position()
+
 		if fx.key_is_pressed_repeat(.Left) {
-			if !lyric_found &&
-			   len(player.music.lyrics) > 0 &&
-			   position >= player.music.lyrics[len(player.music.lyrics) - 1].time {
+			if !lyric_found && position >= player.music.lyrics[len(player.music.lyrics) - 1].time {
 				player_seek(player.music.lyrics[lyric_index].time)
 			} else {
 				player_seek(lyric_index > 0 ? player.music.lyrics[lyric_index - 1].time : 0)
 			}
 		}
+
 		if fx.key_is_pressed_repeat(.Right) {
-			if len(player.music.lyrics) == 0 do player_next()
-			else if !lyric_found && position < player.music.lyrics[0].time do player_seek(player.music.lyrics[0].time)
-			else if lyric_index < len(player.music.lyrics) - 1 do player_seek(player.music.lyrics[lyric_index + 1].time)
-			else do player_next()
+			if !lyric_found && position < player.music.lyrics[0].time {
+				player_seek(player.music.lyrics[0].time)
+			} else if lyric_index < len(player.music.lyrics) - 1 {
+				player_seek(player.music.lyrics[lyric_index + 1].time)
+			} else {
+				player_next()
+			}
 		}
+
 		lyrics_synced = true
 	} else {
 		if fx.key_is_pressed_repeat(.Left) do player_seek(max(audio.position() - 5, 0))

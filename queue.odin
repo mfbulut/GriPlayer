@@ -46,6 +46,10 @@ draw_queue :: proc() {
 				cnt.scroll.y += speed
 			}
 
+			max_scroll := max(cnt.content_size.y - cnt.body.size.y, 0)
+			cnt.scroll_target.y = clamp(cnt.scroll_target.y, 0, max_scroll)
+			cnt.scroll.y = clamp(cnt.scroll.y, 0, max_scroll)
+
 			queue_update_drag_target(cnt)
 		}
 
