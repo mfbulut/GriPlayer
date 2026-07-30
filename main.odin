@@ -406,11 +406,11 @@ frame :: proc() {
 								lyrics_container.scroll.y = animated_scroll
 							}
 
-							for lyric, index in player.music.lyrics {
+							for lyric, i in player.music.lyrics {
 								layout_row({-1}, 60)
 								row := layout_next()
 
-								is_active := found && index == active
+								is_active := found && i == active
 								if lyrics_synced && is_active {
 									row_center := row.pos.y + row.size.y * 0.5
 									container_center := lyrics_container.body.pos.y + lyrics_container.body.size.y * 0.5
@@ -422,7 +422,7 @@ frame :: proc() {
 
 								if !fx.rect_overlaps(row, get_clip_rect()) do continue
 
-								row_id := get_id(fmt.tprintf("lyric_%d", index))
+								row_id := get_id(fmt.tprintf("lyric_%d", i))
 								hit := update_control(row_id, row)
 
 								active_amount := animate(
@@ -477,7 +477,7 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 	draw_icon(.Note, bounds, icon_size, COLOR_TEXT)
 }
 
-playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> (res: Result_Set) {
+playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Result_Set) {
 	if begin(playlist.name, pad = 6, gap = 6) {
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
@@ -488,7 +488,7 @@ playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> (res: 
 
 		if .HOVER in res do fx.set_cursor(.Hand)
 
-		count := index == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
+		count := i == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
 		count_text := fmt.tprintf("%d", count)
 		count_width := fx.measure_text(count_text, 10).x + 6
 
@@ -502,7 +502,7 @@ playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> (res: 
 	return res
 }
 
-song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
+song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
 	if begin(song.fullpath, pad = 5, gap = 10) {
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
@@ -526,11 +526,11 @@ song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort 
 		case .Playtime:
 			right_text = fmt.tprintf("%dm", int(song.playtime) / 60)
 		case .Last_Listened:
-			if time.to_unix_nanoseconds(song.last_timestamp) > 0 {
-				y1, m1, d1 := time.date(song.last_timestamp)
+			if time.to_unix_nanoseconds(song.listen_timestamp) > 0 {
+				y1, m1, d1 := time.date(song.listen_timestamp)
 				y2, m2, d2 := time.date(time.now())
 				if y1 == y2 && m1 == m2 && d1 == d2 {
-					h, m, _ := time.clock(song.last_timestamp)
+					h, m, _ := time.clock(song.listen_timestamp)
 					right_text = fmt.tprintf("%02d:%02d", h, m)
 				} else {
 					right_text = fmt.tprintf("%02d/%02d", d1, int(m1))

@@ -110,7 +110,7 @@ get_id_bytes   :: proc(bytes: []byte) -> Id {
 get_child_id         :: proc{get_child_id_string, get_child_id_bytes}
 get_child_id_string  :: #force_inline proc(id: Id, str: string)  -> Id { return get_child_id_bytes(id, transmute([]byte) str) }
 get_child_id_bytes   :: proc(id: Id, bytes: []byte) -> Id {
-	return Id(hash.fnv64a(bytes, u64	(id)))
+	return Id(hash.fnv64a(bytes, u64(id)))
 }
 
 push_clip_rect :: proc(rect: fx.Rect) {

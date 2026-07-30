@@ -54,8 +54,8 @@ draw_queue :: proc() {
 		}
 
 		// Explicit Queue
-		for song, index in player.queue {
-			if queue_drag.song != nil && queue_drag.target_arr == &player.queue && queue_drag.target_index == index {
+		for song, i in player.queue {
+			if queue_drag.song != nil && queue_drag.target_arr == &player.queue && queue_drag.target_index == i {
 				layout_row({-1}, 56)
 				layout_next()
 			}
@@ -63,11 +63,11 @@ draw_queue :: proc() {
 			layout_row({-1}, 56)
 			bounds := layout_next()
 
-			row_id := get_id(fmt.tprintf("queue_%d", index))
+			row_id := get_id(fmt.tprintf("queue_%d", i))
 			local_y := bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-			bounds.pos.y = animate(row_id, local_y, 0.08) + cnt.body.pos.y - cnt.scroll.y
+			bounds.pos.y = animate(row_id, local_y) + cnt.body.pos.y - cnt.scroll.y
 
-			draw_queue_row(song, "queue", index, &player.queue, bounds)
+			draw_queue_row(song, "queue", i, &player.queue, bounds)
 		}
 
 		if queue_drag.song != nil && queue_drag.target_arr == &player.queue && queue_drag.target_index == len(player.queue) {
@@ -81,7 +81,7 @@ draw_queue :: proc() {
 
 		divider_id := get_id("queue_divider")
 		local_divider_y := divider_bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-		divider_bounds.pos.y = animate(divider_id, local_divider_y, 0.08) + cnt.body.pos.y - cnt.scroll.y
+		divider_bounds.pos.y = animate(divider_id, local_divider_y) + cnt.body.pos.y - cnt.scroll.y
 
 		if fx.rect_overlaps(divider_bounds, get_clip_rect()) {
 			text_width := fx.measure_text("Playlist", 11).x + 18
@@ -97,10 +97,10 @@ draw_queue :: proc() {
 
 		// Playlist
 		playlist_start := clamp(player.cursor + 1, 0, len(player.songs))
-		for index := playlist_start; index < len(player.songs); index += 1 {
-			song := player.songs[index]
+		for i := playlist_start; i < len(player.songs); i += 1 {
+			song := player.songs[i]
 
-			if queue_drag.song != nil && queue_drag.target_arr == &player.songs && queue_drag.target_index == index {
+			if queue_drag.song != nil && queue_drag.target_arr == &player.songs && queue_drag.target_index == i {
 				layout_row({-1}, 56)
 				layout_next()
 			}
@@ -108,11 +108,11 @@ draw_queue :: proc() {
 			layout_row({-1}, 56)
 			bounds := layout_next()
 
-			row_id := get_id(fmt.tprintf("playlist_%d", index))
+			row_id := get_id(fmt.tprintf("playlist_%d", i))
 			local_y := bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-			bounds.pos.y = animate(row_id, local_y, 0.08) + cnt.body.pos.y - cnt.scroll.y
+			bounds.pos.y = animate(row_id, local_y) + cnt.body.pos.y - cnt.scroll.y
 
-			draw_queue_row(song, "playlist", index, &player.songs, bounds)
+			draw_queue_row(song, "playlist", i, &player.songs, bounds)
 		}
 
 		if queue_drag.song != nil && queue_drag.target_arr == &player.songs && queue_drag.target_index == len(player.songs) {
@@ -132,10 +132,10 @@ draw_queue :: proc() {
 	}
 }
 
-draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
+draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
 	if !fx.rect_overlaps(bounds, get_clip_rect()) && !is_overlay do return
 
-	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, index))
+	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, i))
 
 	pad := f32(6)
 	handle_bounds := fx.Rect{bounds.pos, {38, bounds.size.y}}
@@ -153,7 +153,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 		queue_drag = {
 			song = song,
 			target_arr = arr,
-			target_index = index,
+			target_index = i,
 			grab_offset = fx.mouse_pos().y - bounds.pos.y,
 			row_x = bounds.pos.x,
 			row_w = bounds.size.x,
@@ -176,15 +176,15 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 	if .HOVER in remove_res do fx.set_cursor(.Hand)
 	if .SUBMIT in remove_res {
 		if arr == &player.queue {
-			ordered_remove(&player.queue, index)
-			for i := index + 1; i <= len(player.queue); i += 1 {
+			ordered_remove(&player.queue, i)
+			for i in 0..=len(player.queue) {
 				shift_row_animations("queue", i, i - 1)
 			}
 		} else if arr == &player.songs {
-			current_moved := index == player.cursor
-			if !current_moved && index < player.cursor do player.cursor -= 1
-			ordered_remove(&player.songs, index)
-			for i := index + 1; i <= len(player.songs); i += 1 {
+			current_moved := i == player.cursor
+			if !current_moved && i < player.cursor do player.cursor -= 1
+			ordered_remove(&player.songs, i)
+			for i in 0..=len(player.songs) {
 				shift_row_animations("playlist", i, i - 1)
 			}
 			if current_moved do player.cursor = -1
@@ -197,13 +197,13 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 	}
 	if .SUBMIT in body_res {
 		if arr == &player.songs {
-			player.cursor = index
+			player.cursor = i
 			player_play_music(song)
 		} else if arr == &player.queue {
 			player_play_music(song)
-			for _ in 0 ..< index + 1 do ordered_remove(&player.queue, 0)
-			for i := index + 1; i <= len(player.queue) + index; i += 1 {
-				shift_row_animations("queue", i, i - (index + 1))
+			for _ in 0..<i+1 do ordered_remove(&player.queue, 0)
+			for i in 0..=len(player.queue) {
+				shift_row_animations("queue", i, i - (i + 1))
 			}
 		}
 	}
@@ -236,7 +236,7 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 	width := f32(15)
 	x := bounds.pos.x + (bounds.size.x - width) * 0.5
 	y := bounds.pos.y + bounds.size.y * 0.5 - 6.5
-	for index in 0 ..< 3 do fx.draw_rect({{x, y + f32(index) * 5}, {width, 3}}, color, 1.5)
+	for i in 0 ..< 3 do fx.draw_rect({{x, y + f32(i) * 5}, {width, 3}}, color, 1.5)
 }
 
 queue_update_drag_target :: proc(cnt: ^Container) {
@@ -250,10 +250,10 @@ queue_update_drag_target :: proc(cnt: ^Container) {
 	best_index := queue_drag.target_index
 
 	// Queue slots
-	for index := 0; index <= len(player.queue); index += 1 {
-		center := content_top + 16.0 + 56.0 * 0.5 + f32(index) * 56.0
+	for i in 0..=len(player.queue) {
+		center := content_top + 16.0 + 56.0 * 0.5 + f32(i) * 56.0
 		if distance := abs(drag_center - center); distance < best_distance {
-			best_distance, best_arr, best_index = distance, &player.queue, index
+			best_distance, best_arr, best_index = distance, &player.queue, i
 		}
 	}
 
@@ -263,11 +263,10 @@ queue_update_drag_target :: proc(cnt: ^Container) {
 
 	playlist_top := content_top + 16.0 + f32(len(player.queue)) * 56.0 + 42.0
 
-	for i := 0; i <= playlist_count; i += 1 {
+	for i in 0..=playlist_count {
 		center := playlist_top + 56.0 * 0.5 + f32(i) * 56.0
-		index := playlist_start + i
 		if distance := abs(drag_center - center); distance < best_distance {
-			best_distance, best_arr, best_index = distance, &player.songs, index
+			best_distance, best_arr, best_index = distance, &player.songs, playlist_start + i
 		}
 	}
 
@@ -311,7 +310,7 @@ queue_update_drag_target :: proc(cnt: ^Container) {
 	if queue_drag.needs_remove {
 		prefix := queue_drag.target_arr == &player.queue ? "queue" : "playlist"
 		ordered_remove(queue_drag.target_arr, queue_drag.target_index)
-		for i := queue_drag.target_index + 1; i <= len(queue_drag.target_arr); i += 1 {
+		for i in queue_drag.target_index + 1..=len(queue_drag.target_arr) {
 			shift_row_animations(prefix, i, i - 1)
 		}
 		queue_drag.needs_remove = false

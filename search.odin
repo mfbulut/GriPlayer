@@ -170,10 +170,6 @@ draw_search_box :: proc() {
 		if fx.key_is_pressed(.Enter) && len(search.results) > 0 {
 			player_start_playlist(search.results[:], 0)
 		}
-
-		if fx.key_is_pressed(.Enter) && len(search.results) > 0 {
-			player_start_playlist(search.results[:], 0)
-		}
 	}
 
 	if begin("SearchBox", pad = 8, gap = 4) {

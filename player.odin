@@ -104,9 +104,11 @@ player_prev :: proc() {
 
 player_shuffle :: proc() {
 	rand.shuffle(player.songs[:])
-	for song, index in player.songs {
+	player.cursor = 0
+
+	for song, i in player.songs {
 		if song == player.music {
-			player.cursor = index
+			player.songs[0], player.songs[i] = player.songs[i], player.songs[0]
 			break
 		}
 	}
@@ -122,9 +124,9 @@ player_toggle_shuffle :: proc() {
 	for song in player.playlist {
 		append(&player.songs, song)
 	}
-	for song, index in player.songs {
+	for song, i in player.songs {
 		if song == player.music {
-			player.cursor = index
+			player.cursor = i
 			break
 		}
 	}
@@ -164,15 +166,15 @@ player_queue_add :: proc(song: ^Music, next := false) {
 	}
 }
 
-current_lyric :: proc() -> (index: int, found: bool) {
+current_lyric :: proc() -> (i: int, found: bool) {
 	if player.music == nil || len(player.music.lyrics) == 0 do return
 	position := scrub_time >= 0 ? scrub_time : audio.position()
 	if position < player.music.lyrics[0].time do return 0, false
 	for lyric, lyric_index in player.music.lyrics {
 		if position < lyric.time do break
-		index = lyric_index
+		i = lyric_index
 	}
-	return index, true
+	return i, true
 }
 
 player_update :: proc() {

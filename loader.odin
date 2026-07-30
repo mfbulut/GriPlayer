@@ -28,16 +28,16 @@ Lyric :: struct {
 }
 
 Music :: struct {
-	fullpath:        string,
-	title:           string,
-	artist:          string,
-	album:           string,
-	track:           int,
-	playtime:        f32,
-	duration:        f32,
-	liked:           bool,
-	liked_timestamp: time.Time,
-	last_timestamp:  time.Time,
+	fullpath:         string,
+	title:            string,
+	artist:           string,
+	album:            string,
+	track:            int,
+	playtime:         f32,
+	duration:         f32,
+	liked:            bool,
+	liked_timestamp:  time.Time,
+	listen_timestamp: time.Time,
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []fx.Color,
@@ -76,10 +76,21 @@ playlists: [dynamic]Playlist
 loader_queue: [dynamic]^Music
 loader_mutex: sync.Mutex
 loading_finished: bool
-
-THUMBNAIL_SIZE :: 64
+polling_finished: bool
 
 loader_start :: proc() {
+	if dir, dir_err := os.user_data_dir(context.temp_allocator); dir_err == nil {
+		if app_dir, app_err := os.join_path({dir, "GriPlayer"}, context.temp_allocator); app_err == nil {
+			if volume_path, vol_err := os.join_path({app_dir, "volume.bin"}, context.temp_allocator); vol_err == nil {
+				if data, err := os.read_entire_file(volume_path, context.temp_allocator); err == nil {
+					if len(data) == size_of(f32) {
+						audio.volume = (cast(^f32)raw_data(data))^
+					}
+				}
+			}
+		}
+	}
+
 	append(&playlists, Playlist{
 		name = "Liked",
 		icon = .Heart,
@@ -100,7 +111,7 @@ loader_start :: proc() {
 			return
 		}
 
-		cache_load()
+		cache, err := cache_load()
 		walker := os.walker_create(music_dir)
 		defer os.walker_destroy(&walker)
 
@@ -109,13 +120,40 @@ loader_start :: proc() {
 				os.walker_skip_dir(&walker)
 				continue
 			}
+
 			extension := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
 			if extension != ".opus" && extension != ".ogg" && extension != ".mp3" &&
 			   extension != ".flac" && extension != ".wav" {
 				continue
 			}
 
-			music := load_music(info.fullpath)
+			music := new(Music)
+
+			if err == nil {
+				if cached, found := cache[info.fullpath]; found {
+					music^ = cached
+				}
+			}
+
+			if music.fullpath == "" {
+				music.fullpath = strings.clone(info.fullpath)
+				if metadata, ok := audio.metadata(music.fullpath); ok {
+					music.title = metadata.title
+					music.artist = metadata.artist
+					music.album = metadata.album
+					music.track = metadata.track
+					music.duration = metadata.duration
+				}
+
+				if music.title == "" {
+					music.title = strings.clone(os.stem(music.fullpath))
+				}
+
+				load_lrc(music)
+				load_thumbnail(music)
+			}
+
+			free_all(context.temp_allocator)
 			sync.lock(&loader_mutex)
 			append(&loader_queue, music)
 			sync.unlock(&loader_mutex)
@@ -128,11 +166,21 @@ loader_start :: proc() {
 }
 
 loader_poll :: proc() {
+	if polling_finished do return
+
 	sync.lock(&loader_mutex)
+
+	if(loading_finished && len(loader_queue) == 0) {
+		polling_finished = true;
+		return
+	}
+
 	queue := slice.clone(loader_queue[:])
-	clear(&loader_queue)
-	sync.unlock(&loader_mutex)
 	defer delete(queue)
+	clear(&loader_queue)
+
+	sync.unlock(&loader_mutex)
+
 	if len(queue) == 0 do return
 
 	@(static) cursor_x: int
@@ -142,7 +190,7 @@ loader_poll :: proc() {
 
 	next_music: for music in queue {
 		if len(music.thumbnail_pixels) > 0 {
-			if len(atlases) == 0 || cursor_y + THUMBNAIL_SIZE > ATLAS_SIZE {
+			if len(atlases) == 0 || cursor_y + 64 > ATLAS_SIZE {
 				atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
 				append(&atlases, atlas_tex)
 				cursor_x = 0
@@ -150,17 +198,17 @@ loader_poll :: proc() {
 			}
 
 			current_atlas := atlases[len(atlases) - 1]
-			fx.texture_upload(current_atlas, music.thumbnail_pixels, cursor_x, cursor_y, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+			fx.texture_upload(current_atlas, music.thumbnail_pixels, cursor_x, cursor_y, 64, 64)
 
 			music.thumbnail = {
 				texture = current_atlas,
-				source = {{f32(cursor_x), f32(cursor_y)}, {f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)}},
+				source = {{f32(cursor_x), f32(cursor_y)}, {f32(64), f32(64)}},
 			}
 
-			cursor_x += THUMBNAIL_SIZE
-			if cursor_x + THUMBNAIL_SIZE > ATLAS_SIZE {
+			cursor_x += 64
+			if cursor_x + 64 > ATLAS_SIZE {
 				cursor_x = 0
-				cursor_y += THUMBNAIL_SIZE
+				cursor_y += 64
 			}
 		}
 
@@ -168,7 +216,7 @@ loader_poll :: proc() {
 			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
 
-		if time.to_unix_nanoseconds(music.last_timestamp) > 0 {
+		if time.to_unix_nanoseconds(music.listen_timestamp) > 0 {
 			append(&playlists[HISTORY_PLAYLIST_INDEX].songs, music)
 		}
 
@@ -200,46 +248,11 @@ loader_poll :: proc() {
 	}
 }
 
-loader_is_finished :: proc() -> bool {
-	sync.lock(&loader_mutex)
-	finished := loading_finished && len(loader_queue) == 0
-	sync.unlock(&loader_mutex)
-	return finished
-}
+load_lrc :: proc(music: ^Music) -> os.Error {
+	filename := os.join_filename(os.stem(music.fullpath), "lrc", context.temp_allocator) or_return
+	path := os.join_path({os.dir(music.fullpath), filename}, context.temp_allocator) or_return
 
-load_music :: proc(fullpath: string) -> ^Music {
-	music := new(Music)
-	music.fullpath = strings.clone(fullpath)
-	if cached, found := cache.songs[music.fullpath]; found {
-		music^ = cached
-	} else {
-		if metadata, ok := audio.metadata(music.fullpath); ok {
-			music.title = metadata.title
-			music.artist = metadata.artist
-			music.album = metadata.album
-			music.track = metadata.track
-			music.duration = metadata.duration
-		}
-
-		if music.title == "" {
-			music.title = strings.clone(os.stem(music.fullpath))
-		}
-
-		load_lrc(music)
-		load_thumbnail(music)
-	}
-
-	free_all(context.temp_allocator)
-	return music
-}
-
-load_lrc :: proc(music: ^Music) {
-	path := strings.concatenate(
-		{os.dir(music.fullpath), "\\", os.stem(music.fullpath), ".lrc"},
-		context.temp_allocator,
-	)
-	data, read_error := os.read_entire_file(path, context.allocator)
-	if read_error != nil do return
+	data := os.read_entire_file(path, context.allocator) or_return
 	defer delete(data)
 
 	bit_array.init(&music.lyrics_filter, 32768)
@@ -271,6 +284,8 @@ load_lrc :: proc(music: ^Music) {
 			}
 		}
 	}
+
+	return nil
 }
 
 load_thumbnail :: proc(music: ^Music) {
@@ -283,13 +298,8 @@ load_thumbnail :: proc(music: ^Music) {
 	if pixels == nil do return
 	defer image.image_free(pixels)
 
-	music.thumbnail_pixels = make([]fx.Color, THUMBNAIL_SIZE * THUMBNAIL_SIZE)
-	success := image.resize_uint8(pixels, w, h, 0, cast([^]u8)raw_data(music.thumbnail_pixels), THUMBNAIL_SIZE,THUMBNAIL_SIZE, 0, 4)
-
-	if success == 0 {
-		delete(music.thumbnail_pixels)
-		music.thumbnail_pixels = nil
-	}
+	music.thumbnail_pixels = make([]fx.Color, 64 * 64)
+	image.resize_uint8(pixels, w, h, 0, cast([^]u8)raw_data(music.thumbnail_pixels), 64, 64, 0, 4)
 }
 
 playlist_sort :: proc(playlist: ^Playlist) {
@@ -322,8 +332,8 @@ playlist_sort :: proc(playlist: ^Playlist) {
 		})
 	case .Last_Listened:
 		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
-			if a.last_timestamp == b.last_timestamp do return strings.compare(a.title, b.title) == -1
-			return time.diff(b.last_timestamp, a.last_timestamp) > 0
+			if a.listen_timestamp == b.listen_timestamp do return strings.compare(a.title, b.title) == -1
+			return time.diff(b.listen_timestamp, a.listen_timestamp) > 0
 		})
 	case .Liked_Time:
 		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
@@ -371,10 +381,10 @@ toggle_like :: proc(song: ^Music) {
 
 record_listen :: proc(song: ^Music) {
 	history := &playlists[HISTORY_PLAYLIST_INDEX]
-	song.last_timestamp = time.now()
-	for item, index in history.songs {
+	song.listen_timestamp = time.now()
+	for item, i in history.songs {
 		if item == song {
-			ordered_remove(&history.songs, index)
+			ordered_remove(&history.songs, i)
 			break
 		}
 	}
@@ -383,48 +393,42 @@ record_listen :: proc(song: ^Music) {
 	for &playlist in playlists do playlist_sort(&playlist)
 }
 
-cache: struct {
-	volume: f32,
-	songs:  map[string]Music,
-}
+cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
+	dir := os.user_data_dir(context.temp_allocator) or_return
+	path := os.join_path({dir, "GriPlayer", "cache.cbor"}, context.temp_allocator) or_return
+	data := os.read_entire_file(path, context.temp_allocator) or_return
 
-cache_load :: proc() {
-	dir, dir_error := os.user_data_dir(context.temp_allocator)
-	if dir_error != nil do return
-
-	path := strings.concatenate({dir, "\\GriPlayer\\cache.cbor"}, context.temp_allocator)
-	data, read_error := os.read_entire_file(path, context.temp_allocator)
-	if read_error != nil do return
-
-	if error := cbor.unmarshal(data, &cache, {.Trusted_Input}); error != nil {
-		fmt.eprintln("Failed to load cache:", error)
-		return
+	if err := cbor.unmarshal(data, &songs, {.Trusted_Input}); err != nil {
+		fmt.eprintln("Failed to load cache:", err)
 	}
 
-	audio.volume = cache.volume
+	return
 }
 
-cache_save :: proc() {
-	if !loader_is_finished() do return
-	dir, dir_error := os.user_data_dir(context.temp_allocator)
-	if dir_error != nil do return
+cache_save :: proc() -> os.Error {
+	if !polling_finished do return nil
 
-	app_dir := strings.concatenate({dir, "\\GriPlayer"}, context.temp_allocator)
+	dir := os.user_data_dir(context.allocator) or_return
+	app_dir := os.join_path({dir, "GriPlayer"}, context.allocator) or_return
 	os.make_directory(app_dir)
-	path := strings.concatenate({app_dir, "\\cache.cbor"}, context.temp_allocator)
+	path := os.join_path({app_dir, "cache.cbor"}, context.allocator) or_return
 
-	cache.volume = audio.volume
-	cache.songs = make(map[string]Music, 1024)
+	volume_path := os.join_path({app_dir, "volume.bin"}, context.allocator) or_return
+	os.write_entire_file(volume_path, slice.bytes_from_ptr(&audio.volume, 1)) or_return
+
+	songs := make(map[string]Music, 1024)
+
 	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
 		for song in playlist.songs {
-			cache.songs[song.fullpath] = song^
+			songs[song.fullpath] = song^
 		}
 	}
 
-	bytes, error := cbor.marshal(cache)
-	if error == nil {
-		_ = os.write_entire_file(path, bytes)
+	if bytes, err := cbor.marshal(songs); err == nil {
+		os.write_entire_file(path, bytes) or_return
 	} else {
-		fmt.eprintln("Failed to save cache:", error)
+		fmt.eprintln("Failed to save cache:", err)
 	}
+
+	return nil
 }
