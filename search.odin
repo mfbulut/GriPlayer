@@ -117,10 +117,9 @@ update_search :: proc() {
 	query_text := string(textbox.builder.buf[:])
 	clear(&search.results)
 
-	if container := get_container(get_id("SongsList")); container != nil {
-		container.scroll.y = 0
-		container.scroll_target.y = 0
-	}
+	container := get_container(get_id("SongsList"))
+	container.scroll.y = 0
+	container.scroll_target.y = 0
 
 	query := strings.to_lower(strings.trim_space(query_text), context.temp_allocator)
 	if query == "" {

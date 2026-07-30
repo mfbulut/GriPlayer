@@ -486,10 +486,11 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 }
 
 playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Result_Set) {
-	if begin(playlist.name, pad = 6, gap = 6) {
+	if begin(playlist.name, pad = 6) {
+		id := get_id(playlist.name)
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
-		res = update_control(container.id, container.rect)
+		res = update_control(id, container.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
 		fx.draw_rect(container.rect, bg_color, 6)
@@ -512,10 +513,11 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 
 song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
 	if begin(song.fullpath, pad = 5, gap = 10) {
+		id := get_id(song.fullpath)
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
 
-		res = update_control(container.id, container.rect)
+		res = update_control(id, container.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
 		fx.draw_rect(container.rect, bg_color, 6)
@@ -575,7 +577,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				{right_bounds.pos.x, right_bounds.pos.y + (right_bounds.size.y - 36) * 0.5},
 				{36, 36},
 			}
-			like_id := get_child_id(container.id, "like")
+			like_id := get_child_id(id, "like")
 			like_res := update_control(like_id, like_bounds)
 
 			icon_color := ui_color(LINK_COLOR, like_res)

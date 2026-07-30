@@ -318,7 +318,7 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 		}
 
 		if mouse_over(body) || mouse_over(base) {
-			ctx.scroll_target = container
+			ctx.scroll_id = ctx.container_stack[len(ctx.container_stack) - 1]
 		}
 	} else {
 		container.scroll[i] = 0

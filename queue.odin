@@ -159,6 +159,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 			row_w = bounds.size.x,
 			needs_remove = true,
 		}
+		ctx.focus_id = get_child_id(get_id(song.fullpath), "handle")
 	}
 
 	res := handle_res + remove_res + body_res
@@ -292,15 +293,8 @@ queue_update_drag_target :: proc(cnt: ^Container) {
 		row_id := get_id(fmt.tprintf("%s_%d", prefix, queue_drag.target_index))
 		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - cnt.body.pos.y + cnt.scroll.y
 
-		animations[row_id] = Animation {
-			last_update = ctx.frame,
-			progress = 0,
-			duration = 0.08,
-			ease = .Cubic_Out,
-			initial = {start_local_y, 0, 0, 0},
-			current = {start_local_y, 0, 0, 0},
-			target = {-999999, 0, 0, 0},
-		}
+		animation_cancel(row_id)
+		animate(row_id, start_local_y)
 
 		queue_drag = {}
 		ctx.focus_id = 0

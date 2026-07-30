@@ -2,6 +2,7 @@ package main
 
 import "core:math/ease"
 import "core:hash"
+import "core:time"
 
 import "fx"
 
@@ -14,13 +15,10 @@ Layout :: struct {
 	items_count:         int,
 	item_index:          int,
 	next_row:            f32,
-	pad:             	 f32,
 	gap:             	 f32,
 }
 
 Container :: struct {
-	id:            Id,
-	last_update:   int,
 	rect, body:    fx.Rect,
 	content_size:  fx.Vec2,
 	scroll:        fx.Vec2,
@@ -30,31 +28,26 @@ Container :: struct {
 }
 
 ctx : struct {
-	frame:              int,
-	hover_id, focus_id: Id,
-	scroll_target:      ^Container,
-	containers:         [dynamic; 256]Container,
-	container_stack:    [dynamic; 256]^Container,
-	clip_stack:         [dynamic; 256]fx.Rect,
-	id_stack:           [dynamic; 256]Id,
-	layout_stack:       [dynamic; 256]Layout,
+	frame: int,
+	hover_id, focus_id, scroll_id: Id,
+	containers:      map[Id]Container,
+	container_stack: [dynamic; 256]Id,
+	layout_stack:    [dynamic; 256]Layout,
+	clip_stack:      [dynamic; 256]fx.Rect,
 }
 
 @(deferred_none=end)
 begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radius: f32 = 8, scroll := false, bg := fx.BLANK, marker: f32 = -1) -> bool {
 	is_root := len(ctx.container_stack) == 0
 
-	id := get_id(name)
+	id := scroll ? get_id(name) : get_id("temp")
 	container := get_container(id)
 	container.bg_color = bg
+	container.rect = is_root ? rect : layout_next()
 
-	actual_rect := is_root ? rect : layout_next()
-
-	append(&ctx.id_stack, id)
-	container.rect = actual_rect
 	fx.draw_rect(container.rect, bg, radius)
 
-	append(&ctx.container_stack, container)
+	append(&ctx.container_stack, id)
 	container.has_scroll = scroll
 
 	body := container.rect
@@ -70,13 +63,10 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radi
 	layout_body := fx.rect_shrink(body, pad)
 	layout := Layout {
 		body = fx.Rect{layout_body.pos - container.scroll, layout_body.size},
-		max = fx.Vec2{-0x1000000, -0x1000000},
-		pad = pad,
 		gap = gap,
 	}
 
 	append(&ctx.layout_stack, layout)
-	layout_row({0}, 0, pad, gap)
 	container.body = body
 
 	if scroll do push_clip_rect(container.body)
@@ -84,55 +74,6 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radi
 }
 
 end :: proc() {
-	container := pop_container()
-	if container.has_scroll do pop_clip_rect()
-}
-
-update_ui :: proc() {
-	if ctx.scroll_target != nil {
-		ctx.scroll_target.scroll_target.x += fx.mouse_scroll().x * 60
-		ctx.scroll_target.scroll_target.y += fx.mouse_scroll().y * -60
-	}
-
-	ctx.scroll_target = nil
-	ctx.frame += 1
-}
-
-get_id         :: proc{get_id_string, get_id_bytes}
-get_id_string  :: #force_inline proc(str: string)  -> Id { return get_id_bytes(transmute([]byte) str) }
-
-get_id_bytes   :: proc(bytes: []byte) -> Id {
-	idx := len(ctx.id_stack)
-	seed := idx > 0 ? u64(ctx.id_stack[idx - 1]) : 2166136261
-	return Id(hash.fnv64a(bytes, seed))
-}
-
-get_child_id         :: proc{get_child_id_string, get_child_id_bytes}
-get_child_id_string  :: #force_inline proc(id: Id, str: string)  -> Id { return get_child_id_bytes(id, transmute([]byte) str) }
-get_child_id_bytes   :: proc(id: Id, bytes: []byte) -> Id {
-	return Id(hash.fnv64a(bytes, u64(id)))
-}
-
-push_clip_rect :: proc(rect: fx.Rect) {
-	append(&ctx.clip_stack, rect)
-	fx.set_scissor(get_clip_rect())
-}
-
-pop_clip_rect :: proc() {
-	pop(&ctx.clip_stack)
-	fx.set_scissor(get_clip_rect())
-}
-
-get_clip_rect :: proc() -> fx.Rect {
-	if len(ctx.clip_stack) == 0 do return fx.Rect{{0, 0}, {99999, 99999}}
-	return ctx.clip_stack[len(ctx.clip_stack) - 1]
-}
-
-get_layout :: proc() -> ^Layout {
-	return &ctx.layout_stack[len(ctx.layout_stack) - 1]
-}
-
-pop_container :: proc() -> ^Container {
 	layout := get_layout()
 	container := get_current_container()
 	container.content_size.x = layout.max.x - layout.body.pos.x
@@ -162,47 +103,66 @@ pop_container :: proc() -> ^Container {
 
 	pop(&ctx.container_stack)
 	pop(&ctx.layout_stack)
-	pop(&ctx.id_stack)
 
-	return container
+	if container.has_scroll do pop_clip_rect()
+}
+
+update_ui :: proc() {
+	if ctx.scroll_id != 0 {
+		container := get_container(ctx.scroll_id)
+		container.scroll_target.x += fx.mouse_scroll().x * 60
+		container.scroll_target.y += fx.mouse_scroll().y * -60
+	}
+
+	ctx.scroll_id = 0
+	ctx.frame += 1
+}
+
+get_id         :: proc{get_id_string, get_id_bytes}
+get_id_string  :: #force_inline proc(str: string)  -> Id { return get_id_bytes(transmute([]byte) str) }
+
+get_id_bytes   :: proc(bytes: []byte) -> Id {
+	idx := len(ctx.container_stack)
+	seed := idx > 0 ? u64(ctx.container_stack[idx - 1]) : 2166136261
+	return Id(hash.fnv64a(bytes, seed))
+}
+
+get_child_id         :: proc{get_child_id_string, get_child_id_bytes}
+get_child_id_string  :: #force_inline proc(id: Id, str: string)  -> Id { return get_child_id_bytes(id, transmute([]byte) str) }
+get_child_id_bytes   :: proc(id: Id, bytes: []byte) -> Id {
+	return Id(hash.fnv64a(bytes, u64(id)))
+}
+
+push_clip_rect :: proc(rect: fx.Rect) {
+	append(&ctx.clip_stack, rect)
+	fx.set_scissor(get_clip_rect())
+}
+
+pop_clip_rect :: proc() {
+	pop(&ctx.clip_stack)
+	fx.set_scissor(get_clip_rect())
+}
+
+get_clip_rect :: proc() -> fx.Rect {
+	if len(ctx.clip_stack) == 0 do return fx.Rect{{0, 0}, {99999, 99999}}
+	return ctx.clip_stack[len(ctx.clip_stack) - 1]
 }
 
 get_current_container :: proc() -> ^Container {
-	assert(len(ctx.container_stack) > 0)
-	return ctx.container_stack[len(ctx.container_stack) - 1]
+	return get_container(ctx.container_stack[len(ctx.container_stack) - 1])
 }
 
 get_container :: proc(id: Id) -> ^Container {
-	for &container in ctx.containers {
-		if container.id == id {
-			container.last_update = ctx.frame
-			return &container
-		}
-	}
-
-	if len(ctx.containers) < 1024 {
-		append(&ctx.containers, Container{id = id, last_update = ctx.frame})
-		return &ctx.containers[len(ctx.containers) - 1]
-	}
-
-	oldest_idx := 0
-	oldest_time := ctx.containers[0].last_update
-	for i in 1..<len(ctx.containers) {
-		if ctx.containers[i].last_update < oldest_time {
-			oldest_time = ctx.containers[i].last_update
-			oldest_idx = i
-		}
-	}
-	container := &ctx.containers[oldest_idx]
-	container^ = {}
-	container.id = id
-	container.last_update = ctx.frame
-	return container
+	_, ptr, _, _ := map_entry(&ctx.containers, id)
+	return ptr
 }
 
-layout_row :: proc(widths: []f32, height: f32 = 0, pad: f32 = -1, gap: f32 = -1) {
+get_layout :: proc() -> ^Layout {
+	return &ctx.layout_stack[len(ctx.layout_stack) - 1]
+}
+
+layout_row :: proc(widths: []f32, height: f32 = 0, gap: f32 = -1) {
 	layout := get_layout()
-	if pad >= 0 do layout.pad = pad
 	if gap >= 0 do layout.gap = gap
 
 	if len(widths) > 0 do copy(layout.widths[:], widths[:])
@@ -258,7 +218,7 @@ layout_next :: proc() -> (res: fx.Rect) {
 }
 
 Animation :: struct {
-	last_update: int,
+	last_update: time.Tick,
 	progress:    f32,
 	duration:    f32,
 	initial:     fx.Vec4,
@@ -272,7 +232,7 @@ animations: map[Id]Animation
 animation_to :: proc(animation_id: Id, target: fx.Vec4, duration: f32, curve: ease.Ease) -> fx.Vec4 {
 	if animation_id not_in animations {
 		animations[animation_id] = Animation{
-			last_update = ctx.frame,
+			last_update = time.tick_now(),
 			progress = 1,
 			duration = duration,
 			ease = curve,
@@ -284,7 +244,7 @@ animation_to :: proc(animation_id: Id, target: fx.Vec4, duration: f32, curve: ea
 	}
 
 	item := &animations[animation_id]
-	item.last_update = ctx.frame
+	item.last_update = time.tick_now()
 	amount := ease.ease(item.ease, clamp(item.progress, 0, 1))
 	item.current = item.initial + (item.target - item.initial) * amount
 
@@ -328,10 +288,13 @@ animate :: proc {
 animation_update_all :: proc() {
 	keys_to_delete := make([dynamic]Id, context.temp_allocator)
 	for key, &item in animations {
-		if ctx.frame - item.last_update > 600 {
+		diff := time.tick_since(item.last_update)
+
+		if time.duration_seconds(diff) > 10 {
 			append(&keys_to_delete, key)
 			continue
 		}
+
 		if item.progress < 1 {
 			item.progress = min(item.progress + fx.frame_time() / max(item.duration, 0.0001), 1)
 		}
