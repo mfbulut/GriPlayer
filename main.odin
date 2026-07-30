@@ -477,59 +477,37 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 	draw_icon(.Note, bounds, icon_size, COLOR_TEXT)
 }
 
-playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> Result_Set {
-	row_id := get_id(fmt.tprintf("playlist_%d_%s", index, playlist.name))
-	bounds := layout_next()
-	if !fx.rect_overlaps(bounds, get_clip_rect()) do return {}
-	res := update_control(row_id, bounds)
+playlist_row :: proc(playlist: ^Playlist, index: int, is_active: bool) -> (res: Result_Set) {
+	if begin(playlist.name, pad = 6, gap = 6) {
+		container := get_current_container()
+		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
+		res = update_control(container.id, container.rect)
 
-	bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
-	fx.draw_rect(bounds, bg_color, 6)
+		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
+		fx.draw_rect(container.rect, bg_color, 6)
 
-	if .HOVER in res do fx.set_cursor(.Hand)
+		if .HOVER in res do fx.set_cursor(.Hand)
 
-	icon_rect := fx.Rect {
-		bounds.pos + {6, 0},
-		{20, bounds.size.y},
+		count := index == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
+		count_text := fmt.tprintf("%d", count)
+		count_width := fx.measure_text(count_text, 10).x + 6
+
+		layout_row({20, -1, count_width}, -1, gap = 8)
+
+		draw_icon(playlist.icon, layout_next(), 20, is_active ? COLOR_TEXT : COLOR_MUTED)
+		fx.draw_text_faded(playlist.name, layout_next(), 13, is_active ? COLOR_TEXT : COLOR_MUTED)
+		fx.draw_text_faded(count_text, layout_next(), 10, COLOR_MUTED)
 	}
-
-	draw_icon(playlist.icon, icon_rect, 20, is_active ? COLOR_TEXT : COLOR_MUTED)
-
-	text_bounds := fx.Rect {
-		bounds.pos + {32, (bounds.size.y - 14) * 0.5},
-		{max(bounds.size.x - 32 - 40, 0), 14},
-	}
-
-	fx.draw_text_faded(
-		playlist.name,
-		text_bounds,
-		13,
-		is_active ? COLOR_TEXT : COLOR_TEXT
-	)
-
-	count := index == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
-	count_text := fmt.tprintf("%d", count)
-	count_width := fx.measure_text(count_text, 10).x
-	count_bounds := fx.Rect {
-		{
-			bounds.pos.x + bounds.size.x - count_width - 8,
-			bounds.pos.y + (bounds.size.y - 10) * 0.5,
-		},
-		{count_width, 10},
-	}
-
-	fx.draw_text_faded(count_text, count_bounds, 10, COLOR_MUTED)
 
 	return res
 }
 
 song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
-	if begin("song_row", pad = 5, gap = 10) {
+	if begin(song.fullpath, pad = 5, gap = 10) {
 		container := get_current_container()
 		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
 
-		row_id := get_id(song.fullpath)
-		res = update_control(row_id, container.rect)
+		res = update_control(container.id, container.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
 		fx.draw_rect(container.rect, bg_color, 6)
@@ -587,7 +565,7 @@ song_row :: proc(song: ^Music, index: int, is_active: bool, sort: Playlist_Sort 
 				{right_bounds.pos.x, right_bounds.pos.y + (right_bounds.size.y - 36) * 0.5},
 				{36, 36},
 			}
-			like_id := get_child_id(row_id, "like")
+			like_id := get_child_id(container.id, "like")
 			like_res := update_control(like_id, like_bounds)
 
 			icon_color := ui_color(LINK_COLOR, like_res)
