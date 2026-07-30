@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:time"
+import "core:time/timezone"
 import "core:strings"
 import "core:text/edit"
 
@@ -9,6 +10,7 @@ import "fx"
 import "fx/audio"
 import "fx/smtc"
 
+utc_offset: i64
 queue_active := false
 lyrics_synced := true
 selected_playlist := 0
@@ -38,6 +40,12 @@ main :: proc() {
 	textbox.set_clipboard = proc(user_data: rawptr, text: string) -> (ok: bool) { return fx.set_clipboard(text) }
 	textbox.get_clipboard = proc(user_data: rawptr) -> (text: string, ok: bool) { return fx.get_clipboard() }
 	icon_atlas = fx.texture_load(#load("assets/Icons.png"))
+
+	if region, ok := timezone.region_load("local", context.allocator); ok {
+		utc_offset = region.rrule.has_dst ? region.rrule.dst_offset : region.rrule.std_offset
+		utc_offset *= 1000000000
+		timezone.region_destroy(region, context.allocator)
+	}
 
 	fft_init()
 	fx.run(frame)
@@ -527,10 +535,12 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 			right_text = fmt.tprintf("%dm", int(song.playtime) / 60)
 		case .Last_Listened:
 			if time.to_unix_nanoseconds(song.listen_timestamp) > 0 {
-				y1, m1, d1 := time.date(song.listen_timestamp)
+				local_time := time.Time{ song.listen_timestamp._nsec + utc_offset }
+
+				y1, m1, d1 := time.date(local_time)
 				y2, m2, d2 := time.date(time.now())
 				if y1 == y2 && m1 == m2 && d1 == d2 {
-					h, m, _ := time.clock(song.listen_timestamp)
+					h, m, _ := time.clock(local_time)
 					right_text = fmt.tprintf("%02d:%02d", h, m)
 				} else {
 					right_text = fmt.tprintf("%02d/%02d", d1, int(m1))
