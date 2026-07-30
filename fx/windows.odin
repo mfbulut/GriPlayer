@@ -139,10 +139,6 @@ dpi_scale :: proc() -> f32 {
 	return f32(win.GetDpiForWindow(window.hwnd)) / f32(96.0)
 }
 
-window_size_pixels :: proc() -> Vec2 {
-	return Vec2(window.size)
-}
-
 window_size :: proc() -> Vec2 {
 	return Vec2(window.size) / dpi_scale()
 }

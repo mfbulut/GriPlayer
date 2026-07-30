@@ -185,19 +185,19 @@ draw_search_box :: proc() {
 		update_control(bg_id, bounds)
 		hovered := ctx.hover_id == bg_id || ctx.hover_id == tb_id || ctx.hover_id == close_id
 
+		background := (search.focused || hovered) ? ROW_COLOR.hover : COLOR_SURFACE
+
+		if search.focused {
+			fx.draw_rect(fx.rect_expand(bounds, 1), COLOR_ACCENT, 8)
+			fx.draw_rect(bounds, background, 7)
+		} else {
+			fx.draw_rect(bounds, background, 8)
+		}
+
 		if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) && !hovered {
 			search.focused = false
 			textbox.selection[0] = len(textbox.builder.buf)
 			textbox.selection[1] = len(textbox.builder.buf)
-		}
-
-		background := (search.focused || hovered) ? ROW_COLOR.hover : COLOR_SURFACE
-
-		if search.focused {
-			fx.draw_rect(bounds, COLOR_ACCENT, 8)
-			fx.draw_rect(fx.rect_shrink(bounds, 1), background, 7)
-		} else {
-			fx.draw_rect(bounds, background, 8)
 		}
 
 		show_close := len(textbox.builder.buf) > 0 || search.active

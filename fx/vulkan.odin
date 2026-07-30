@@ -548,11 +548,13 @@ vk_render :: proc() {
 	if len(instances) > 0 {
 		mem.copy(vks.instance_buffer_mapped, raw_data(instances[:]), len(instances) * size_of(Instance))
 
+		scale := dpi_scale()
 		for b in batches {
 			if b.count == 0 do continue
+
 			rect := vk.Rect2D {
-				offset = {b.scissor[0], b.scissor[1]},
-				extent = {u32(b.scissor[2]), u32(b.scissor[3])},
+				offset = {i32(b.scissor.pos.x * scale), i32(b.scissor.pos.y * scale)},
+				extent = {u32(b.scissor.size.x * scale), u32(b.scissor.size.y * scale)},
 			}
 
 			vk.CmdSetScissorWithCount(cmd, 1, &rect)

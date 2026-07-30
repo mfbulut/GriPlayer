@@ -278,8 +278,6 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 		res := update_control(id, fx.rect_expand(base, 4))
 		res_thumb := update_control(id_thumb, fx.rect_expand(thumb, 4))
 
-		is_dragging := fx.key_is_down(.Mouse_Left) && ctx.focus_id == id_thumb
-
 		if fx.key_is_down(.Mouse_Left) {
 			scroll_ratio := maxscroll / max(1.0, base.size[i] - thumb.size[i])
 
@@ -288,8 +286,7 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 				container.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
 				container.scroll_target[i] = container.scroll[i]
 				ctx.focus_id = id_thumb
-				is_dragging = true
-			} else if is_dragging {
+			} else if ctx.focus_id == id_thumb {
 				container.scroll[i] += fx.mouse_delta()[i] * scroll_ratio
 				container.scroll_target[i] = container.scroll[i]
 			}
@@ -298,7 +295,9 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 		container.scroll_target[i] = clamp(container.scroll_target[i], 0.0, maxscroll)
 		scroll_id := get_child_id(id, "scroll")
 
-		if !is_dragging {
+		if ctx.focus_id == id_thumb {
+			animation_cancel(scroll_id)
+		} else {
 			container.scroll[i] = animate(scroll_id, container.scroll_target[i], 0.08)
 		}
 

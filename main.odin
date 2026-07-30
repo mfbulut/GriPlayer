@@ -119,6 +119,9 @@ frame :: proc() {
 								layout_row({-1}, 30)
 								if .SUBMIT in playlist_row(&playlist, i, selected_playlist == i) {
 									selected_playlist = i
+									if i == LIKED_PLAYLIST_INDEX {
+										refresh_liked_playlist()
+									}
 								}
 							}
 						}
@@ -279,7 +282,7 @@ frame :: proc() {
 				}
 
 				layout_row({-1}, 90)
-				if begin("Controls", pad = 8, gap = 8) {
+				if begin("Controls", pad = 12, gap = 8) {
 					duration := audio.duration()
 					position := scrub_time >= 0 ? scrub_time : audio.position()
 					position_text := format_time(position)

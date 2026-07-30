@@ -53,11 +53,11 @@ MSDF_File :: struct {
 Batch :: struct {
 	offset: u32,
 	count:  u32,
-	scissor: [4]i32,
+	scissor: Rect,
 }
 
 font: Font
-scissor: [4]i32
+scissor: Rect
 batches: [dynamic; 256]Batch
 instances: [dynamic; MAX_INSTANCES]Instance
 
@@ -85,17 +85,9 @@ clear_window :: proc(color: Color) {
 }
 
 set_scissor :: proc(rect: Rect) {
-	scale := dpi_scale()
-	new_scissor := [4]i32 {
-		cast(i32)(rect.pos.x * scale),
-		cast(i32)(rect.pos.y * scale),
-		cast(i32)(rect.size.x * scale),
-		cast(i32)(rect.size.y * scale),
-	}
-
-	if new_scissor != scissor {
+	if rect != scissor {
 		flush()
-		scissor = new_scissor
+		scissor = rect
 	}
 }
 
@@ -118,7 +110,18 @@ flush :: proc() {
 	})
 }
 
+should_draw :: #force_inline proc(rect: Rect, color: [4]Color) -> bool {
+	if rect.size.x <= 0 || rect.size.y <= 0  do return false
+	if color[0].a == 0 && color[1].a == 0 && color[2].a == 0 && color[3].a == 0 do return false
+
+	if !rect_overlaps(rect, scissor) do return false
+
+	return true
+}
+
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
+	if !should_draw(r, color) do return
+
 	append(&instances,
 		Instance{
 			dest   = {r.pos, r.pos + r.size},
@@ -137,6 +140,7 @@ draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 }
 
 draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
+	if !should_draw(dest, tint) do return
 	if tex.index == 0 do return
 
 	size := cast(Vec2)tex.size
@@ -163,6 +167,7 @@ draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radi
 }
 
 draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
+	if !should_draw(dest, tint) do return
 	if tex.index == 0 do return
 
 	size := cast(Vec2)tex.size
@@ -197,6 +202,9 @@ draw_text :: proc {
 
 draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Color)WHITE) {
 	if text == "" do return
+
+	size := measure_text(text, font_size)
+	if !should_draw({pos, size}, color) do return
 	font := font
 
 	font_scale := font_size / font.metrics.emSize
@@ -266,6 +274,7 @@ draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast
 
 draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color) {
 	if text == "" || bounds.size.x <= 0 do return
+	if !should_draw(bounds, {color, color, color, color}) do return
 
 	size := measure_text(text, font_size)
 	if size.x <= bounds.size.x {

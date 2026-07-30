@@ -293,7 +293,6 @@ load_thumbnail :: proc(music: ^Music) {
 }
 
 playlist_sort :: proc(playlist: ^Playlist) {
-
 	switch playlist.sort {
 	case .Title:
 		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
@@ -345,6 +344,14 @@ liked_playlist_count :: proc() -> int {
 		if song.liked do count += 1
 	}
 	return count
+}
+
+refresh_liked_playlist :: proc() {
+	liked := &playlists[LIKED_PLAYLIST_INDEX]
+	for index := len(liked.songs) - 1; index >= 0; index -= 1 {
+		if !liked.songs[index].liked do ordered_remove(&liked.songs, index)
+	}
+	playlist_sort(liked)
 }
 
 toggle_like :: proc(song: ^Music) {
