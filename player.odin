@@ -55,7 +55,6 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	state := get_scroll_state(get_id("Lyrics"))
 	state.scroll.y = 0
 	state.scroll_target.y = 0
-	animation_cancel(get_id("lyrics_sync"))
 
 	record_listen(song)
 	visualizer_create_palette(song.thumbnail_pixels)

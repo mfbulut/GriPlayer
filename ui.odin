@@ -3,7 +3,6 @@ package main
 import "core:math/ease"
 import "core:hash"
 import "core:time"
-import "core:fmt"
 
 import "fx"
 
@@ -25,7 +24,6 @@ Layout :: struct {
 	next_row:            f32,
 	gap:                 f32,
 	bg_color:            fx.Color,
-	has_scroll:          bool,
 }
 
 ctx : struct {
@@ -36,8 +34,8 @@ ctx : struct {
 	clip_stack:      [dynamic]fx.Rect,
 }
 
-@(deferred_none=end)
-begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radius: f32 = 8, scroll := false, bg := fx.BLANK, marker: f32 = -1) -> bool {
+@(deferred_in=end)
+begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll := false, bg := fx.BLANK, marker: f32 = -1) -> bool {
 	is_root := len(ctx.layout_stack) == 0
 
 	id := scroll ? get_id(name) : get_id("temp")
@@ -45,12 +43,11 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radi
 	layout := Layout {
 		id = id,
 		bg_color = bg,
-		has_scroll = scroll,
 		gap = gap,
 	}
 
 	layout.rect = is_root ? rect : layout_next()
-	fx.draw_rect(layout.rect, bg, radius)
+	fx.draw_rect(layout.rect, bg, 8)
 
 	body := layout.rect
 
@@ -70,13 +67,14 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radi
 	}
 
 	append(&ctx.layout_stack, layout)
+	
 	return true
 }
 
-end :: proc() {
+end :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll := false, bg := fx.BLANK, marker: f32 = -1) {
 	layout := get_layout()
 
-	if layout.has_scroll {
+	if scroll {
 		state := get_scroll_state(layout.id)
 		state.content_size.x = layout.max.x - layout.body.pos.x
 		state.content_size.y = layout.max.y - layout.body.pos.y
@@ -285,7 +283,7 @@ animation_update_all :: proc() {
 	for key, &item in animations {
 		diff := time.tick_since(item.last_update)
 
-		if time.duration_seconds(diff) > 10 {
+		if time.duration_seconds(diff) > 1 {
 			append(&keys_to_delete, key)
 			continue
 		}

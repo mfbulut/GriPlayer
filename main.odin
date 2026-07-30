@@ -399,20 +399,19 @@ frame :: proc() {
 							lyrics_layout := get_layout()
 							lyrics_cnt := get_scroll_state(lyrics_layout.id)
 
-							if mouse_over(lyrics_layout.body) && fx.mouse_scroll().y != 0 {
+							if mouse_over(lyrics_layout.rect) && fx.mouse_scroll().y != 0 {
 								lyrics_synced = false
 							}
 
-							scrollbar_id := get_id("scrollbar_v")
+							scrollbar_id := child_id(lyrics_layout.id, "scrollbar_v")
 							thumb_id := child_id(scrollbar_id, "thumb")
 							if ctx.focus_id == thumb_id {
 								lyrics_synced = false
 							}
 
 							if lyrics_synced && !found {
-								animated_scroll := animate(get_id("lyrics_sync"), 0, 0.5)
-								lyrics_cnt.scroll_target.y = animated_scroll
-								lyrics_cnt.scroll.y = animated_scroll
+								lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+								lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
 							}
 
 							for lyric, i in player.music.lyrics {
@@ -422,11 +421,10 @@ frame :: proc() {
 								is_active := found && i == active
 								if lyrics_synced && is_active {
 									row_center := row.pos.y + row.size.y * 0.5
-									container_center := lyrics_layout.body.pos.y + lyrics_layout.body.size.y * 0.5
+									container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
 									target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
-									animated_scroll := animate(get_id("lyrics_sync"), target_scroll, 0.5)
-									lyrics_cnt.scroll_target.y = animated_scroll
-									lyrics_cnt.scroll.y = animated_scroll
+									lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+									lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
 								}
 
 								if !fx.rect_overlaps(row, get_clip_rect()) do continue

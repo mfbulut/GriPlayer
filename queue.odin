@@ -133,10 +133,10 @@ draw_queue :: proc() {
 	}
 }
 
-draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
+draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
 	if !fx.rect_overlaps(bounds, get_clip_rect()) && !is_overlay do return
 
-	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, i))
+	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, index))
 
 	pad := f32(6)
 	handle_bounds := fx.Rect{bounds.pos, {38, bounds.size.y}}
@@ -154,7 +154,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 		queue_drag = {
 			song = song,
 			target_arr = arr,
-			target_index = i,
+			target_index = index,
 			grab_offset = fx.mouse_pos().y - bounds.pos.y,
 			row_x = bounds.pos.x,
 			row_w = bounds.size.x,
@@ -178,14 +178,14 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 	if .HOVER in remove_res do fx.set_cursor(.Hand)
 	if .SUBMIT in remove_res {
 		if arr == &player.queue {
-			ordered_remove(&player.queue, i)
+			ordered_remove(&player.queue, index)
 			for i in 0..=len(player.queue) {
 				shift_row_animations("queue", i, i - 1)
 			}
 		} else if arr == &player.songs {
-			current_moved := i == player.cursor
-			if !current_moved && i < player.cursor do player.cursor -= 1
-			ordered_remove(&player.songs, i)
+			current_moved := index == player.cursor
+			if !current_moved && index < player.cursor do player.cursor -= 1
+			ordered_remove(&player.songs, index)
 			for i in 0..=len(player.songs) {
 				shift_row_animations("playlist", i, i - 1)
 			}
@@ -199,18 +199,18 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 	}
 	if .SUBMIT in body_res {
 		if arr == &player.songs {
-			player.cursor = i
+			player.cursor = index
 			player_play_music(song)
 		} else if arr == &player.queue {
 			player_play_music(song)
-			for _ in 0..<i+1 do ordered_remove(&player.queue, 0)
+			for _ in 0..<index+1 do ordered_remove(&player.queue, 0)
 			for i in 0..=len(player.queue) {
 				shift_row_animations("queue", i, i - (i + 1))
 			}
 		}
 	}
 
-	cover_size := f32(42)
+	cover_size := f32(40)
 	cover_bounds := fx.Rect {
 		{handle_bounds.pos.x + handle_bounds.size.x + pad, bounds.pos.y + (bounds.size.y - cover_size) * 0.5},
 		{cover_size, cover_size},

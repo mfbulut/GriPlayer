@@ -264,7 +264,7 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 	maxscroll := cs[i] - body.size[i]
 
 	if maxscroll > 0 && body.size[i] > 0 {
-		id := get_id(id_string)
+		id := child_id(layout_id, id_string)
 		id_thumb := child_id(id, "thumb")
 
 		base := body
@@ -298,7 +298,7 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 		if ctx.focus_id == id_thumb {
 			animation_cancel(scroll_id)
 		} else {
-			state.scroll[i] = animate(scroll_id, state.scroll_target[i], 0.08)
+			state.scroll[i] = animate(scroll_id, state.scroll_target[i], 0.16)
 		}
 
 		state.scroll[i] = clamp(state.scroll[i], 0.0, maxscroll)
