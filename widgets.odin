@@ -154,7 +154,7 @@ link :: proc(id: Id, text: string, font_size: f32 = 14) -> (res: Result_Set) {
 	color := animate(id, ui_color(LINK_COLOR, res))
 	fx.draw_text_faded(text, bounds, font_size, color)
 
-	amount := animate(get_child_id(id, "amount"), .HOVER in res ? f32(1) : f32(0))
+	amount := animate(child_id(id, "amount"), .HOVER in res ? f32(1) : f32(0))
 	if amount > 0.001 {
 		underline_width := bounds.size.x * amount
 		c := LINK_COLOR.hover
@@ -233,12 +233,12 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 		size = {base.size.x, 3.5},
 	}
 
-	track_color := animate(get_child_id(id, "track_color"), ui_color(SCROLLBAR_COLOR, res))
+	track_color := animate(child_id(id, "track_color"), ui_color(SCROLLBAR_COLOR, res))
 	fx.draw_rect(track, track_color, 2.0)
 
 	fill_track := track
 	fill_track.size.x = track.size.x * ratio
-	fill_color := animate(get_child_id(id, "fill_color"), ui_color(fill, res))
+	fill_color := animate(child_id(id, "fill_color"), ui_color(fill, res))
 	fx.draw_rect(fill_track, fill_color, 2.0)
 
 	if preview && .HOVER in res && !(.ACTIVE in res) {
@@ -252,7 +252,7 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 	}
 
 	thumb_size_target: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
-	thumb_size := animate(get_child_id(id, "thumb_size"), thumb_size_target)
+	thumb_size := animate(child_id(id, "thumb_size"), thumb_size_target)
 	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
 	fx.draw_circle(thumb_pos, thumb_size, fill_color)
 
@@ -260,12 +260,12 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 	return
 }
 
-scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: string, i: int, marker: f32 = -1) {
+scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec2, id_string: string, i: int, marker: f32 = -1) {
 	maxscroll := cs[i] - body.size[i]
 
 	if maxscroll > 0 && body.size[i] > 0 {
 		id := get_id(id_string)
-		id_thumb := get_child_id(id, "thumb")
+		id_thumb := child_id(id, "thumb")
 
 		base := body
 		base.pos[1-i] += base.size[1-i]
@@ -273,7 +273,7 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 
 		thumb := base
 		thumb.size[i] = clamp(base.size[i] * body.size[i] / cs[i], 30, base.size[i])
-		thumb.pos[i] += container.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+		thumb.pos[i] += state.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
 
 		res := update_control(id, fx.rect_expand(base, 4))
 		res_thumb := update_control(id_thumb, fx.rect_expand(thumb, 4))
@@ -283,33 +283,33 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 
 			if fx.key_is_pressed(.Mouse_Left) && ctx.focus_id == id {
 				target_pos := fx.mouse_pos()[i] - thumb.size[i] * 0.5
-				container.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
-				container.scroll_target[i] = container.scroll[i]
+				state.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
+				state.scroll_target[i] = state.scroll[i]
 				ctx.focus_id = id_thumb
 			} else if ctx.focus_id == id_thumb {
-				container.scroll[i] += fx.mouse_delta()[i] * scroll_ratio
-				container.scroll_target[i] = container.scroll[i]
+				state.scroll[i] += fx.mouse_delta()[i] * scroll_ratio
+				state.scroll_target[i] = state.scroll[i]
 			}
 		}
 
-		container.scroll_target[i] = clamp(container.scroll_target[i], 0.0, maxscroll)
-		scroll_id := get_child_id(id, "scroll")
+		state.scroll_target[i] = clamp(state.scroll_target[i], 0.0, maxscroll)
+		scroll_id := child_id(id, "scroll")
 
 		if ctx.focus_id == id_thumb {
 			animation_cancel(scroll_id)
 		} else {
-			container.scroll[i] = animate(scroll_id, container.scroll_target[i], 0.08)
+			state.scroll[i] = animate(scroll_id, state.scroll_target[i], 0.08)
 		}
 
-		container.scroll[i] = clamp(container.scroll[i], 0.0, maxscroll)
+		state.scroll[i] = clamp(state.scroll[i], 0.0, maxscroll)
 
-		thumb.pos[i] = base.pos[i] + container.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+		thumb.pos[i] = base.pos[i] + state.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
 		thumb_color := ui_color(SCROLLBAR_COLOR, res + res_thumb)
 		fx.draw_rect(thumb, thumb_color, 8)
 
 		if marker >= 0 {
 			marker_target := clamp(marker, 0, 1)
-			marker_position := animate(get_child_id(id, "marker"), marker_target, 0.5)
+			marker_position := animate(child_id(id, "marker"), marker_target, 0.5)
 			marker_height := min(f32(10), base.size[i])
 			marker_rect := base
 			marker_rect.pos[i] = base.pos[i] + (base.size[i] - marker_height) * marker_position
@@ -318,10 +318,11 @@ scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: 
 		}
 
 		if mouse_over(body) || mouse_over(base) {
-			ctx.scroll_id = ctx.container_stack[len(ctx.container_stack) - 1]
+			ctx.scroll_id = layout_id
 		}
 	} else {
-		container.scroll[i] = 0
+		state.scroll[i] = 0
+		state.scroll_target[i] = 0
 	}
 }
 

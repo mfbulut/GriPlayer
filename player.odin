@@ -52,9 +52,9 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	lyrics_synced = true
 	scrub_time = -1
 
-	container := get_container(get_id("Lyrics"))
-	container.scroll.y = 0
-	container.scroll_target.y = 0
+	state := get_scroll_state(get_id("Lyrics"))
+	state.scroll.y = 0
+	state.scroll_target.y = 0
 	animation_cancel(get_id("lyrics_sync"))
 
 	record_listen(song)

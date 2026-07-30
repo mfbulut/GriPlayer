@@ -8,129 +8,123 @@ import "fx"
 
 Id :: distinct u64
 
+Scroll_State :: struct {
+	scroll:        fx.Vec2,
+	scroll_target: fx.Vec2,
+	content_size:  fx.Vec2,
+}
+
 Layout :: struct {
-	body:                fx.Rect,
+	id:                  Id,
+	rect, body:          fx.Rect,
 	position, size, max: fx.Vec2,
 	widths:              [32]f32,
 	items_count:         int,
 	item_index:          int,
 	next_row:            f32,
-	gap:             	 f32,
-}
-
-Container :: struct {
-	rect, body:    fx.Rect,
-	content_size:  fx.Vec2,
-	scroll:        fx.Vec2,
-	scroll_target: fx.Vec2,
-	bg_color:      fx.Color,
-	has_scroll:    bool,
+	gap:                 f32,
+	bg_color:            fx.Color,
+	has_scroll:          bool,
 }
 
 ctx : struct {
 	frame: int,
 	hover_id, focus_id, scroll_id: Id,
-	containers:      map[Id]Container,
-	container_stack: [dynamic; 256]Id,
-	layout_stack:    [dynamic; 256]Layout,
-	clip_stack:      [dynamic; 256]fx.Rect,
+	scroll_states:      map[Id]Scroll_State,
+	layout_stack:    [dynamic]Layout,
+	clip_stack:      [dynamic]fx.Rect,
 }
 
 @(deferred_none=end)
 begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, radius: f32 = 8, scroll := false, bg := fx.BLANK, marker: f32 = -1) -> bool {
-	is_root := len(ctx.container_stack) == 0
+	is_root := len(ctx.layout_stack) == 0
 
 	id := scroll ? get_id(name) : get_id("temp")
-	container := get_container(id)
-	container.bg_color = bg
-	container.rect = is_root ? rect : layout_next()
 
-	fx.draw_rect(container.rect, bg, radius)
-
-	append(&ctx.container_stack, id)
-	container.has_scroll = scroll
-
-	body := container.rect
-
-	if scroll {
-		cs := container.content_size + pad
-		if cs.x > container.body.size.x { body.size.y -= 9 }
-		if cs.y > container.body.size.y { body.size.x -= 9 }
-		scrollbar(container, body, cs, "scrollbar_v", 1, marker)
-		scrollbar(container, body, cs, "scrollbar_h", 0, -1)
-	}
-
-	layout_body := fx.rect_shrink(body, pad)
 	layout := Layout {
-		body = fx.Rect{layout_body.pos - container.scroll, layout_body.size},
+		id = id,
+		bg_color = bg,
+		has_scroll = scroll,
 		gap = gap,
 	}
 
-	append(&ctx.layout_stack, layout)
-	container.body = body
+	layout.rect = is_root ? rect : layout_next()
+	fx.draw_rect(layout.rect, bg, radius)
 
-	if scroll do push_clip_rect(container.body)
+	body := layout.rect
+
+	if scroll {
+		state := get_scroll_state(id)
+		cs := state.content_size + pad
+		if cs.x > body.size.x { body.size.y -= 9 }
+		if cs.y > body.size.y { body.size.x -= 9 }
+		scrollbar(id, state, body, cs, "scrollbar_v", 1, marker)
+		scrollbar(id, state, body, cs, "scrollbar_h", 0, -1)
+
+		layout_body := fx.rect_shrink(body, pad)
+		layout.body = fx.Rect{layout_body.pos - state.scroll, layout_body.size}
+		push_clip_rect(body)
+	} else {
+		layout.body = fx.rect_shrink(body, pad)
+	}
+
+	append(&ctx.layout_stack, layout)
 	return true
 }
 
 end :: proc() {
 	layout := get_layout()
-	container := get_current_container()
-	container.content_size.x = layout.max.x - layout.body.pos.x
-	container.content_size.y = layout.max.y - layout.body.pos.y
 
-	if container.content_size.y > container.body.size.y {
-		fade_height := min(f32(30), container.body.size.y * 0.25)
-		transparent := container.bg_color
+	if layout.has_scroll {
+		state := get_scroll_state(layout.id)
+		state.content_size.x = layout.max.x - layout.body.pos.x
+		state.content_size.y = layout.max.y - layout.body.pos.y
+
+		fade_height := min(f32(30), layout.body.size.y * 0.25)
+		transparent := layout.bg_color
 		transparent.a = 0
-		opaque := container.bg_color
+		opaque := layout.bg_color
 
-		if container.scroll.y > 0.1 {
+		if state.scroll.y > 0.1 {
 			fx.draw_rect(
-				{container.body.pos, {container.body.size.x, fade_height}},
+				{layout.body.pos, {layout.body.size.x, fade_height}},
 				{opaque, opaque, transparent, transparent}, 8
 			)
 		}
 
-		max_scroll := container.content_size.y - container.body.size.y
-		if max_scroll - container.scroll.y > 0.1 {
+		max_scroll := state.content_size.y - layout.body.size.y
+		if max_scroll - state.scroll.y > 0.1 {
 			fx.draw_rect(
-				{{container.body.pos.x, container.body.pos.y + container.body.size.y - fade_height}, {container.body.size.x, fade_height}},
+				{{layout.body.pos.x, layout.body.pos.y + layout.body.size.y - fade_height}, {layout.body.size.x, fade_height}},
 				{transparent, transparent, opaque, opaque}, 8
 			)
 		}
+
+		pop_clip_rect()
 	}
 
-	pop(&ctx.container_stack)
 	pop(&ctx.layout_stack)
-
-	if container.has_scroll do pop_clip_rect()
 }
 
 update_ui :: proc() {
 	if ctx.scroll_id != 0 {
-		container := get_container(ctx.scroll_id)
-		container.scroll_target.x += fx.mouse_scroll().x * 60
-		container.scroll_target.y += fx.mouse_scroll().y * -60
+		state := get_scroll_state(ctx.scroll_id)
+		state.scroll_target.x += fx.mouse_scroll().x * 60
+		state.scroll_target.y += fx.mouse_scroll().y * -60
 	}
 
 	ctx.scroll_id = 0
 	ctx.frame += 1
 }
 
-get_id         :: proc{get_id_string, get_id_bytes}
-get_id_string  :: #force_inline proc(str: string)  -> Id { return get_id_bytes(transmute([]byte) str) }
-
-get_id_bytes   :: proc(bytes: []byte) -> Id {
-	idx := len(ctx.container_stack)
-	seed := idx > 0 ? u64(ctx.container_stack[idx - 1]) : 2166136261
-	return Id(hash.fnv64a(bytes, seed))
+get_id :: proc(str: string) -> Id {
+	idx := len(ctx.layout_stack)
+	seed := idx > 0 ? u64(ctx.layout_stack[idx - 1].id) : 2166136261
+	return Id(hash.fnv64a(transmute([]byte)str, seed))
 }
 
-get_child_id         :: proc{get_child_id_string, get_child_id_bytes}
-get_child_id_string  :: #force_inline proc(id: Id, str: string)  -> Id { return get_child_id_bytes(id, transmute([]byte) str) }
-get_child_id_bytes   :: proc(id: Id, bytes: []byte) -> Id {
-	return Id(hash.fnv64a(bytes, u64(id)))
+child_id   :: proc(id: Id, str: string) -> Id {
+	return Id(hash.fnv64a(transmute([]byte)str, u64(id)))
 }
 
 push_clip_rect :: proc(rect: fx.Rect) {
@@ -148,13 +142,11 @@ get_clip_rect :: proc() -> fx.Rect {
 	return ctx.clip_stack[len(ctx.clip_stack) - 1]
 }
 
-get_current_container :: proc() -> ^Container {
-	return get_container(ctx.container_stack[len(ctx.container_stack) - 1])
-}
-
-get_container :: proc(id: Id) -> ^Container {
-	_, ptr, _, _ := map_entry(&ctx.containers, id)
-	return ptr
+get_scroll_state :: proc(id: Id) -> ^Scroll_State {
+	if id not_in ctx.scroll_states {
+		ctx.scroll_states[id] = {}
+	}
+	return &ctx.scroll_states[id]
 }
 
 get_layout :: proc() -> ^Layout {

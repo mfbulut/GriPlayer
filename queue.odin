@@ -30,27 +30,28 @@ shift_row_animations :: proc(prefix: string, old_index, new_index: int) {
 
 draw_queue :: proc() {
 	if begin("Queue", scroll = true, bg = COLOR_SURFACE, pad = 16) {
-		cnt := get_current_container()
+		layout := get_layout()
+		state := get_scroll_state(layout.id)
 
 		if queue_drag.song != nil {
 			edge := f32(42)
 			mouse_y := fx.mouse_pos().y
 
-			if mouse_y < cnt.rect.pos.y + edge {
-				speed := (cnt.rect.pos.y + edge - mouse_y) / edge * 480 * fx.frame_time()
-				cnt.scroll_target.y -= speed
-				cnt.scroll.y -= speed
-			} else if mouse_y > cnt.rect.pos.y + cnt.rect.size.y - edge {
-				speed := (mouse_y - cnt.rect.pos.y - cnt.rect.size.y + edge) / edge * 480 * fx.frame_time()
-				cnt.scroll_target.y += speed
-				cnt.scroll.y += speed
+			if mouse_y < layout.rect.pos.y + edge {
+				speed := (layout.rect.pos.y + edge - mouse_y) / edge * 480 * fx.frame_time()
+				state.scroll_target.y -= speed
+				state.scroll.y -= speed
+			} else if mouse_y > layout.rect.pos.y + layout.rect.size.y - edge {
+				speed := (mouse_y - layout.rect.pos.y - layout.rect.size.y + edge) / edge * 480 * fx.frame_time()
+				state.scroll_target.y += speed
+				state.scroll.y += speed
 			}
 
-			max_scroll := max(cnt.content_size.y - cnt.body.size.y, 0)
-			cnt.scroll_target.y = clamp(cnt.scroll_target.y, 0, max_scroll)
-			cnt.scroll.y = clamp(cnt.scroll.y, 0, max_scroll)
+			max_scroll := max(state.content_size.y - layout.body.size.y, 0)
+			state.scroll_target.y = clamp(state.scroll_target.y, 0, max_scroll)
+			state.scroll.y = clamp(state.scroll.y, 0, max_scroll)
 
-			queue_update_drag_target(cnt)
+			queue_update_drag_target(layout)
 		}
 
 		// Explicit Queue
@@ -64,8 +65,8 @@ draw_queue :: proc() {
 			bounds := layout_next()
 
 			row_id := get_id(fmt.tprintf("queue_%d", i))
-			local_y := bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-			bounds.pos.y = animate(row_id, local_y) + cnt.body.pos.y - cnt.scroll.y
+			local_y := bounds.pos.y - layout.body.pos.y
+			bounds.pos.y = animate(row_id, local_y) + layout.body.pos.y
 
 			draw_queue_row(song, "queue", i, &player.queue, bounds)
 		}
@@ -80,8 +81,8 @@ draw_queue :: proc() {
 		divider_bounds := layout_next()
 
 		divider_id := get_id("queue_divider")
-		local_divider_y := divider_bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-		divider_bounds.pos.y = animate(divider_id, local_divider_y) + cnt.body.pos.y - cnt.scroll.y
+		local_divider_y := divider_bounds.pos.y - layout.body.pos.y
+		divider_bounds.pos.y = animate(divider_id, local_divider_y) + layout.body.pos.y
 
 		if fx.rect_overlaps(divider_bounds, get_clip_rect()) {
 			text_width := fx.measure_text("Playlist", 11).x + 18
@@ -109,8 +110,8 @@ draw_queue :: proc() {
 			bounds := layout_next()
 
 			row_id := get_id(fmt.tprintf("playlist_%d", i))
-			local_y := bounds.pos.y - cnt.body.pos.y + cnt.scroll.y
-			bounds.pos.y = animate(row_id, local_y) + cnt.body.pos.y - cnt.scroll.y
+			local_y := bounds.pos.y - layout.body.pos.y
+			bounds.pos.y = animate(row_id, local_y) + layout.body.pos.y
 
 			draw_queue_row(song, "playlist", i, &player.songs, bounds)
 		}
@@ -145,9 +146,9 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 		{max(remove_bounds.pos.x - handle_bounds.pos.x - handle_bounds.size.x, 0), bounds.size.y}
 	}
 
-	handle_res := update_control(get_child_id(row_id, "handle"), handle_bounds)
-	remove_res := update_control(get_child_id(row_id, "remove"), remove_bounds)
-	body_res   := update_control(get_child_id(row_id, "body"), body_bounds)
+	handle_res := update_control(child_id(row_id, "handle"), handle_bounds)
+	remove_res := update_control(child_id(row_id, "remove"), remove_bounds)
+	body_res   := update_control(child_id(row_id, "body"), body_bounds)
 
 	if .ACTIVE in handle_res && queue_drag.song == nil {
 		queue_drag = {
@@ -159,7 +160,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, i: int, arr: ^[dynamic]^Mus
 			row_w = bounds.size.x,
 			needs_remove = true,
 		}
-		ctx.focus_id = get_child_id(get_id(song.fullpath), "handle")
+		ctx.focus_id = child_id(get_id(song.fullpath), "handle")
 	}
 
 	res := handle_res + remove_res + body_res
@@ -240,10 +241,10 @@ draw_queue_handle :: proc(bounds: fx.Rect, color: fx.Color) {
 	for i in 0 ..< 3 do fx.draw_rect({{x, y + f32(i) * 5}, {width, 3}}, color, 1.5)
 }
 
-queue_update_drag_target :: proc(cnt: ^Container) {
+queue_update_drag_target :: proc(layout: ^Layout) {
 	if queue_drag.song == nil do return
 
-	content_top := cnt.body.pos.y - cnt.scroll.y
+	content_top := layout.body.pos.y
 	drag_center := fx.mouse_pos().y - queue_drag.grab_offset + 56.0 * 0.5
 
 	best_distance := f32(1e30)
@@ -291,7 +292,8 @@ queue_update_drag_target :: proc(cnt: ^Container) {
 		inject_at(queue_drag.target_arr, queue_drag.target_index, song)
 
 		row_id := get_id(fmt.tprintf("%s_%d", prefix, queue_drag.target_index))
-		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - cnt.body.pos.y + cnt.scroll.y
+		layout := get_layout()
+		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - layout.body.pos.y
 
 		animation_cancel(row_id)
 		animate(row_id, start_local_y)

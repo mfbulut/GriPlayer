@@ -206,7 +206,7 @@ frame :: proc() {
 		if current_tab == .Both || current_tab == .Player {
 			if begin("Player", bg = COLOR_SURFACE) {
 				if len(visualizer_palette) > 0 {
-					bounds := get_current_container().rect
+					bounds := get_layout().rect
 					tint_height := min(bounds.size.y, f32(280))
 					top := visualizer_color_at(0)
 					bottom := visualizer_color_at(0.65)
@@ -396,22 +396,23 @@ frame :: proc() {
 							icon_size := min(f32(40), bounds.size.x * 0.25)
 							draw_icon(.Note, bounds, icon_size, COLOR_MUTED)
 						} else {
-							lyrics_container := get_current_container()
+							lyrics_layout := get_layout()
+							lyrics_cnt := get_scroll_state(lyrics_layout.id)
 
-							if mouse_over(lyrics_container.body) && fx.mouse_scroll().y != 0 {
+							if mouse_over(lyrics_layout.body) && fx.mouse_scroll().y != 0 {
 								lyrics_synced = false
 							}
 
 							scrollbar_id := get_id("scrollbar_v")
-							thumb_id := get_child_id(scrollbar_id, "thumb")
+							thumb_id := child_id(scrollbar_id, "thumb")
 							if ctx.focus_id == thumb_id {
 								lyrics_synced = false
 							}
 
 							if lyrics_synced && !found {
 								animated_scroll := animate(get_id("lyrics_sync"), 0, 0.5)
-								lyrics_container.scroll_target.y = animated_scroll
-								lyrics_container.scroll.y = animated_scroll
+								lyrics_cnt.scroll_target.y = animated_scroll
+								lyrics_cnt.scroll.y = animated_scroll
 							}
 
 							for lyric, i in player.music.lyrics {
@@ -421,11 +422,11 @@ frame :: proc() {
 								is_active := found && i == active
 								if lyrics_synced && is_active {
 									row_center := row.pos.y + row.size.y * 0.5
-									container_center := lyrics_container.body.pos.y + lyrics_container.body.size.y * 0.5
-									target_scroll := lyrics_container.scroll.y + (row_center - container_center)
+									container_center := lyrics_layout.body.pos.y + lyrics_layout.body.size.y * 0.5
+									target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
 									animated_scroll := animate(get_id("lyrics_sync"), target_scroll, 0.5)
-									lyrics_container.scroll_target.y = animated_scroll
-									lyrics_container.scroll.y = animated_scroll
+									lyrics_cnt.scroll_target.y = animated_scroll
+									lyrics_cnt.scroll.y = animated_scroll
 								}
 
 								if !fx.rect_overlaps(row, get_clip_rect()) do continue
@@ -434,7 +435,7 @@ frame :: proc() {
 								hit := update_control(row_id, row)
 
 								active_amount := animate(
-									get_child_id(row_id, "active"),
+									child_id(row_id, "active"),
 									is_active ? f32(1) : f32(0),
 								)
 
@@ -487,13 +488,14 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 
 playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Result_Set) {
 	if begin(playlist.name, pad = 6) {
+		layout := get_layout()
+		if !fx.rect_overlaps(layout.rect, get_clip_rect()) do return {}
+
 		id := get_id(playlist.name)
-		container := get_current_container()
-		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
-		res = update_control(id, container.rect)
+		res = update_control(id, layout.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
-		fx.draw_rect(container.rect, bg_color, 6)
+		fx.draw_rect(layout.rect, bg_color, 6)
 
 		if .HOVER in res do fx.set_cursor(.Hand)
 
@@ -513,14 +515,14 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 
 song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
 	if begin(song.fullpath, pad = 5, gap = 10) {
-		id := get_id(song.fullpath)
-		container := get_current_container()
-		if !fx.rect_overlaps(container.rect, get_clip_rect()) do return {}
+		layout := get_layout()
+		if !fx.rect_overlaps(layout.rect, get_clip_rect()) do return {}
 
-		res = update_control(id, container.rect)
+		id := get_id(song.fullpath)
+		res = update_control(id, layout.rect)
 
 		bg_color := ui_color(is_active ? ACTIVE_ROW_COLOR : ROW_COLOR, res)
-		fx.draw_rect(container.rect, bg_color, 6)
+		fx.draw_rect(layout.rect, bg_color, 6)
 
 		if .HOVER in res do fx.set_cursor(.Hand)
 
@@ -563,11 +565,11 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 		draw_cover(song.thumbnail, layout_next(), cover_bg)
 
 		text_bounds := layout_next()
-		title_bounds := fx.Rect{{text_bounds.pos.x, container.rect.pos.y + 7}, {text_bounds.size.x, 18}}
+		title_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 7}, {text_bounds.size.x, 18}}
 		fx.draw_text_faded(song.title, title_bounds, 14, COLOR_TEXT)
 
 		secondary := song.artist
-		artist_bounds := fx.Rect{{text_bounds.pos.x, container.rect.pos.y + 25}, {text_bounds.size.x, 15}}
+		artist_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 25}, {text_bounds.size.x, 15}}
 		fx.draw_text_faded(secondary, artist_bounds, 11, COLOR_MUTED)
 
 		right_bounds := layout_next()
@@ -577,7 +579,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				{right_bounds.pos.x, right_bounds.pos.y + (right_bounds.size.y - 36) * 0.5},
 				{36, 36},
 			}
-			like_id := get_child_id(id, "like")
+			like_id := child_id(id, "like")
 			like_res := update_control(like_id, like_bounds)
 
 			icon_color := ui_color(LINK_COLOR, like_res)

@@ -117,9 +117,9 @@ update_search :: proc() {
 	query_text := string(textbox.builder.buf[:])
 	clear(&search.results)
 
-	container := get_container(get_id("SongsList"))
-	container.scroll.y = 0
-	container.scroll_target.y = 0
+	state := get_scroll_state(get_id("SongsList"))
+	state.scroll.y = 0
+	state.scroll_target.y = 0
 
 	query := strings.to_lower(strings.trim_space(query_text), context.temp_allocator)
 	if query == "" {
@@ -172,7 +172,7 @@ draw_search_box :: proc() {
 	}
 
 	if begin("SearchBox", pad = 8, gap = 4) {
-		bounds := get_current_container().rect
+		bounds := get_layout().rect
 		bg_id := get_id("SearchBoxBg")
 		tb_id := get_id("SearchBox")
 		close_id := get_id("close-search")

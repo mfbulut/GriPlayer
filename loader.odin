@@ -83,9 +83,7 @@ loader_start :: proc() {
 		if app_dir, app_err := os.join_path({dir, "GriPlayer"}, context.temp_allocator); app_err == nil {
 			if volume_path, vol_err := os.join_path({app_dir, "volume.bin"}, context.temp_allocator); vol_err == nil {
 				if data, err := os.read_entire_file(volume_path, context.temp_allocator); err == nil {
-					if len(data) == size_of(f32) {
-						audio.volume = (cast(^f32)raw_data(data))^
-					}
+					audio.volume = (cast(^f32)raw_data(data))^
 				}
 			}
 		}
