@@ -3,16 +3,18 @@ package fx
 import "core:math"
 import "core:math/linalg"
 
-Vec2 :: [2]f32
-Vec3 :: [3]f32
-Vec4 :: [4]f32
+Vec2  :: [2]f32
+Vec3  :: [3]f32
+Vec4  :: [4]f32
 Color :: [4]byte
 
 Rect :: struct {
-	x, y, w, h: f32
+	pos, size: Vec2
 }
 
-WHITE := [4]Color{255, 255, 255, 255}
+WHITE := Color{255, 255, 255, 255}
+BLACK := Color{0, 0, 0, 255}
+BLANK := Color{0, 0, 0, 0}
 
 color_to_vec4 :: #force_inline proc(c: Color) -> [4]f32 {
 	return cast([4]f32)c * (1.0 / 255.0)
@@ -58,26 +60,26 @@ color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
 	return
 }
 
-point_in_rect :: proc(p: Vec2, r: Rect) -> bool {
-	return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
+point_in_rect :: proc(r: Rect, p: Vec2) -> bool {
+	return p.x >= r.pos.x && p.x < r.pos.x + r.size.x && p.y >= r.pos.y && p.y < r.pos.y + r.size.y
 }
 
-rect_shrink :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {r.x + x, r.y + y, r.w - x * 2, r.h - y * 2}
+rect_shrink :: proc(r: Rect, n: f32) -> Rect {
+	return {r.pos + n, r.size - n * 2}
 }
 
-rect_expand :: proc(r: Rect, x: f32, y: f32) -> Rect {
-	return {r.x - x, r.y - y, r.w + x * 2, r.h + y * 2}
+rect_expand :: proc(rect: Rect, n: f32) -> Rect {
+	return {rect.pos - n, rect.size + n * 2}
 }
 
 rect_overlaps :: proc(a, b: Rect) -> bool {
-	return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+	return a.pos.x < b.pos.x + b.size.x && a.pos.x + a.size.x > b.pos.x && a.pos.y < b.pos.y + b.size.y && a.pos.y + a.size.y > b.pos.y
 }
 
 rect_overlap :: proc(a, b: Rect) -> Rect {
-	x1 := max(a.x, b.x)
-	y1 := max(a.y, b.y)
-	x2 := min(a.x + a.w, b.x + b.w)
-	y2 := min(a.y + a.h, b.y + b.h)
-	return {x1, y1, max(0, x2 - x1), max(0, y2 - y1)}
+	x1 := max(a.pos.x, b.pos.x)
+	y1 := max(a.pos.y, b.pos.y)
+	x2 := min(a.pos.x + a.size.x, b.pos.x + b.size.x)
+	y2 := min(a.pos.y + a.size.y, b.pos.y + b.size.y)
+	return {{x1, y1}, {max(0, x2 - x1), max(0, y2 - y1)}}
 }

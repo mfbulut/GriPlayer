@@ -2,18 +2,7 @@ package main
 
 import "fx"
 
-COLOR_BACKGROUND    :: fx.Color{14, 17, 22, 255}
-COLOR_SURFACE       :: fx.Color{21, 25, 31, 255}
-COLOR_HOVER         :: fx.Color{31, 36, 44, 255}
-COLOR_BORDER        :: fx.Color{48, 54, 64, 255}
-COLOR_ACCENT_DARK   :: fx.Color{31, 51, 86, 255}
-COLOR_ACCENT        :: fx.Color{70, 111, 190, 255}
-COLOR_ACCENT_BRIGHT :: fx.Color{96, 145, 230, 255}
-COLOR_TEXT          :: fx.Color{246, 245, 241, 255}
-COLOR_MUTED         :: fx.Color{158, 166, 178, 255}
-
 Icon :: enum {
-	None,
 	Album,
 	Artist,
 	Heart,
@@ -32,309 +21,345 @@ Icon :: enum {
 	Volume,
 	Mute,
 	Cross,
-	Sort_Alpha_Ascending,
-	Sort_Alpha_Descending,
-	Sort_Number_Ascending,
-	Sort_Number_Descending,
-	Sort_Time_Ascending,
-	Sort_Time_Descending,
-	Sort_Date_Ascending,
-	Sort_Date_Descending,
+	Alpha_Ascending,
+	Alpha_Descending,
+	Number_Ascending,
+	Number_Descending,
+	Time_Ascending,
+	Time_Descending,
+	Date_Ascending,
+	Date_Descending,
+}
+
+sort_icons := [2][Playlist_Sort]Icon{
+	{
+		.Title = .Alpha_Ascending, .Artist = .Alpha_Ascending, .Album = .Alpha_Ascending,
+		.Track = .Number_Ascending, .Duration = .Time_Descending, .Playtime = .Time_Descending,
+		.Last_Listened = .Date_Descending, .Liked_Time = .Date_Descending,
+	},
+	{
+		.Title = .Alpha_Descending, .Artist = .Alpha_Descending, .Album = .Alpha_Descending,
+		.Track = .Number_Descending, .Duration = .Time_Ascending, .Playtime = .Time_Ascending,
+		.Last_Listened = .Date_Ascending, .Liked_Time = .Date_Ascending,
+	}
 }
 
 icon_atlas: fx.Texture
-sort_icons: [2][Playlist_Sort]Icon
 
-load_icons :: proc() {
-	icon_atlas = fx.texture_load(#load("assets/Icons.png"))
-
-	sort_icons[0] = {
-		.Title = .Sort_Alpha_Ascending, .Artist = .Sort_Alpha_Ascending, .Album = .Sort_Alpha_Ascending,
-		.Track = .Sort_Number_Ascending, .Duration = .Sort_Time_Descending, .Playtime = .Sort_Time_Descending,
-		.Last_Listened = .Sort_Date_Descending, .Liked_Time = .Sort_Date_Descending,
-	}
-	sort_icons[1] = {
-		.Title = .Sort_Alpha_Descending, .Artist = .Sort_Alpha_Descending, .Album = .Sort_Alpha_Descending,
-		.Track = .Sort_Number_Descending, .Duration = .Sort_Time_Ascending, .Playtime = .Sort_Time_Ascending,
-		.Last_Listened = .Sort_Date_Ascending, .Liked_Time = .Sort_Date_Ascending,
-	}
+Result :: enum u32 {
+	ACTIVE,
+	HOVER,
+	SUBMIT,
+	CHANGE,
+	SECONDARY,
 }
 
-Style_State :: struct {
-	bg:   fx.Color,
-	text: fx.Color,
+Result_Set :: bit_set[Result; u32]
+
+UI_Color :: struct {
+	base:  fx.Color,
+	hover: fx.Color,
+	focus: fx.Color,
 }
 
-Style :: struct {
-	disabled: Style_State,
-	normal:   Style_State,
-	hover:    Style_State,
-	press:    Style_State,
+COLOR_BACKGROUND    :: fx.Color{16, 18, 22, 255}
+COLOR_SURFACE       :: fx.Color{24, 26, 32, 255}
+COLOR_BORDER        :: fx.Color{60, 68, 80, 255}
+COLOR_TEXT          :: fx.Color{240, 245, 255, 255}
+COLOR_MUTED         :: fx.Color{150, 160, 175, 255}
+COLOR_ACCENT        :: fx.Color{30, 100, 160, 255}
+
+// TODO Fix colors
+LINK_COLOR           := UI_Color{COLOR_MUTED, COLOR_TEXT, COLOR_TEXT}
+
+BUTTON_COLOR         := UI_Color{fx.Color{40, 44, 52, 255}, fx.Color{48, 52, 60, 255}, fx.Color{60, 66, 76, 255}}
+ACTIVE_BUTTON_COLOR  := UI_Color{fx.Color{26, 88, 140, 255}, fx.Color{44, 105, 160, 255}, fx.Color{62, 123, 178, 255}}
+
+ROW_COLOR            := UI_Color{fx.BLANK, fx.Color{36, 40, 48, 255}, fx.Color{48, 54, 64, 255}}
+ACTIVE_ROW_COLOR     := UI_Color{fx.Color{25, 42, 60, 255}, fx.Color{26, 48, 70, 255}, fx.Color{26, 52, 77, 255}}
+
+SCROLLBAR_COLOR      := UI_Color{fx.Color{48, 54, 64, 255}, fx.Color{58, 64, 74, 255}, fx.Color{68, 74, 84, 255}}
+SLIDER_FILL_COLOR    := UI_Color{COLOR_ACCENT, fx.Color{50, 120, 180, 255}, fx.Color{70, 140, 200, 255}}
+
+ui_color :: proc(c: UI_Color, res: Result_Set) -> fx.Color {
+	if .ACTIVE in res do return c.focus
+	if .HOVER in res do return c.hover
+	return c.base
 }
 
-LABEL_STYLE :: Style{
-	normal = {text = COLOR_TEXT},
-}
-
-LINK_STYLE :: Style{
-	disabled = {text = fx.Color{158, 166, 178, 70}},
-	normal = {text = COLOR_MUTED},
-	hover = {text = COLOR_TEXT},
-	press = {text = COLOR_TEXT},
-}
-
-BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{31, 36, 44, 115}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = COLOR_HOVER, text = COLOR_MUTED},
-	hover = {bg = COLOR_BORDER, text = COLOR_TEXT},
-	press = {bg = fx.Color{62, 69, 80, 255}, text = COLOR_TEXT},
-}
-
-MENU_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = fx.Color{}, text = COLOR_MUTED},
-	hover = {bg = COLOR_HOVER, text = COLOR_TEXT},
-	press = {bg = COLOR_BORDER, text = COLOR_TEXT},
-}
-
-ACTIVE_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{31, 51, 86, 115}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = COLOR_ACCENT_DARK, text = COLOR_TEXT},
-	hover = {bg = fx.Color{40, 66, 110, 255}, text = COLOR_TEXT},
-	press = {bg = fx.Color{49, 81, 136, 255}, text = COLOR_TEXT},
-}
-
-SLIDER_STYLE :: Style{
-	disabled = {bg = fx.Color{48, 54, 64, 127}, text = fx.Color{158, 166, 178, 127}},
-	normal = {bg = COLOR_BORDER, text = COLOR_ACCENT},
-	hover = {bg = COLOR_BORDER, text = COLOR_ACCENT},
-	press = {bg = COLOR_BORDER, text = COLOR_ACCENT},
-}
-
-MUTED_SLIDER_STYLE :: Style{
-	disabled = {bg = fx.Color{48, 54, 64, 127}, text = fx.Color{158, 166, 178, 127}},
-	normal = {bg = COLOR_BORDER, text = COLOR_MUTED},
-	hover = {bg = COLOR_BORDER, text = COLOR_MUTED},
-	press = {bg = COLOR_BORDER, text = COLOR_MUTED},
-}
-
-ICON_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = fx.Color{}, text = COLOR_MUTED},
-	hover = {bg = COLOR_HOVER, text = COLOR_TEXT},
-	press = {bg = COLOR_BORDER, text = COLOR_TEXT},
-}
-
-LIKE_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = fx.Color{}, text = COLOR_MUTED},
-	hover = {bg = COLOR_HOVER, text = COLOR_MUTED},
-	press = {bg = COLOR_BORDER, text = COLOR_MUTED},
-}
-
-ACTIVE_ICON_BUTTON_STYLE :: Style{
-	disabled = {bg = fx.Color{}, text = fx.Color{158, 166, 178, 70}},
-	normal = {bg = fx.Color{}, text = COLOR_TEXT},
-	hover = {bg = fx.Color{49, 81, 136, 255}, text = COLOR_TEXT},
-	press = {bg = fx.Color{58, 96, 160, 255}, text = COLOR_TEXT},
-}
-
-SCROLL_STYLE :: Style{
-	disabled = {bg = fx.Color{}, text = fx.Color{}},
-	normal = {bg = fx.Color{48, 54, 64, 50}, text = fx.Color{122, 130, 142, 110}},
-	hover = {bg = fx.Color{48, 54, 64, 65}, text = fx.Color{158, 166, 178, 140}},
-	press = {bg = fx.Color{48, 54, 64, 80}, text = fx.Color{158, 166, 178, 165}},
-}
-
-square_bounds :: proc(bounds: fx.Rect, inset := f32(0)) -> fx.Rect {
-	size := max(min(bounds.w, bounds.h) - inset * 2, 0)
-	return {
-		x = bounds.x + (bounds.w - size) * .5,
-		y = bounds.y + (bounds.h - size) * .5,
-		w = size,
-		h = size,
-	}
-}
-
-draw_icon :: proc(icon: Icon, bounds: fx.Rect, tint := COLOR_MUTED, inset := f32(0)) {
-	if icon == .None do return
-
-	ICON_ATLAS_CELL_SIZE :: 32
-	ICON_ATLAS_COLUMNS   :: 8
-	ICON_DISTANCE_RANGE  :: f32(4)
-
-	icon_bounds := square_bounds(bounds, inset)
-	if icon_bounds.w > 0 {
-		index := int(icon) - 1
-		cell := f32(ICON_ATLAS_CELL_SIZE)
-		source := fx.Rect{
-			f32(index % ICON_ATLAS_COLUMNS) * cell,
-			f32(index / ICON_ATLAS_COLUMNS) * cell,
-			cell,
-			cell,
+mouse_over :: proc(rect: fx.Rect) -> bool {
+	if context_menu.song != nil {
+		if !fx.point_in_rect(context_menu.bounds, fx.mouse_pos()) {
+			return false
 		}
-
-		canvas_size := cell - ICON_DISTANCE_RANGE * 2
-		draw_size := icon_bounds.w * cell / canvas_size
-		destination := fx.Rect{
-			icon_bounds.x - (draw_size - icon_bounds.w) * .5,
-			icon_bounds.y - (draw_size - icon_bounds.h) * .5,
-			draw_size,
-			draw_size,
+		if !fx.point_in_rect(context_menu.bounds, rect.pos) {
+			return false
 		}
-
-		fx.draw_msdf_ex(
-			icon_atlas,
-			source,
-			destination,
-			4,
-			tint,
-		)
 	}
+	return fx.point_in_rect(rect, fx.mouse_pos()) && fx.point_in_rect(get_clip_rect(), fx.mouse_pos())
 }
 
-style_state :: proc(style: Style, hit: Interaction, disabled := false, selected := false) -> Style_State {
-	if disabled do return style.disabled
-	if hit.held do return style.press
-	if hit.hovered || selected do return style.hover
-	return style.normal
+update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
+	hover := mouse_over(rect)
+
+	if ctx.focus_id == id {
+		res += {.ACTIVE}
+	}
+
+	if hover && !fx.key_is_down(.Mouse_Left) && !fx.key_is_down(.Mouse_Right) {
+		ctx.hover_id = id
+	}
+
+	if ctx.focus_id == id {
+		if fx.key_is_released(.Mouse_Left) && hover {
+			res += {.SUBMIT}
+		}
+		if fx.key_is_released(.Mouse_Right) && hover {
+			res += {.SECONDARY}
+		}
+		if (fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right)) && !hover {
+			ctx.focus_id = 0
+		}
+		if !fx.key_is_down(.Mouse_Left) && !fx.key_is_down(.Mouse_Right) {
+			ctx.focus_id = 0
+		}
+	}
+
+	if ctx.hover_id == id {
+		if hover do res += {.HOVER}
+		if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
+			ctx.focus_id = id
+			res += {.ACTIVE}
+		} else if !hover {
+			ctx.hover_id = 0
+		}
+	}
+
+	return
 }
 
-text_style :: proc(color: fx.Color) -> Style {
-	style := LABEL_STYLE
-	style.normal.text = color
-	return style
+label :: proc(text: string, font_size: f32 = 14) {
+	rect := layout_next()
+	fx.draw_text_rect(text, rect, font_size, COLOR_TEXT, true)
 }
 
-label :: proc(bounds: fx.Rect, text: string, font_size := f32(12), style: Style = LABEL_STYLE, center_x := false, center_y := true) {
-	if !is_visible(bounds) do return
-	fx.draw_text_faded(text, bounds, font_size, style.normal.text, center_x, center_y)
-}
+link :: proc(id: Id, text: string, font_size: f32 = 14) -> (res: Result_Set) {
+	text_width := fx.measure_text(text, font_size).x
 
-link :: proc(link_id: ID, bounds: fx.Rect, text: string, font_size := f32(13), style: Style = LINK_STYLE, disabled := false) -> bool {
-	if text == "" || bounds.w <= 0 || bounds.h <= 0 do return false
-	width := min(fx.measure_text(text, font_size).x, bounds.w)
-	hit_bounds := fx.Rect{bounds.x, bounds.y, width, bounds.h}
-	hit := interact(link_id, hit_bounds, disabled)
-	state := style_state(style, hit, disabled)
-	background := animate(id("background", link_id), state.bg)
-	color := animate(id("text", link_id), state.text)
-	amount := animate(id("hover", link_id), hit.hovered ? f32(1) : f32(0))
-	if background.a > 0 do fx.draw_rect(hit_bounds, background, 4)
-	fx.draw_text_faded(text, bounds, font_size, color, false, true)
+	bounds := layout_next()
+	bounds.size.x = min(text_width, bounds.size.x)
 
-	if amount > .001 {
-		underline_width := hit_bounds.w * amount
+	res = update_control(id, bounds)
+
+	color := animate(id, ui_color(LINK_COLOR, res))
+	fx.draw_text_faded(text, bounds, font_size, color)
+
+	amount := animate(get_child_id(id, "amount"), .HOVER in res ? f32(1) : f32(0))
+	if amount > 0.001 {
+		underline_width := bounds.size.x * amount
+		c := LINK_COLOR.hover
+		c.a = u8(amount * 255.0)
 		fx.draw_rect(
-			{hit_bounds.x + (hit_bounds.w - underline_width) * .5, hit_bounds.y + hit_bounds.h - 3, underline_width, 1},
-			fx.color_opacity(style.hover.text, amount),
+			{ bounds.pos + {(bounds.size.x - underline_width) * 0.5, bounds.size.y - 3},
+			{ underline_width, 1}},
+			c,
 		)
 	}
 
-	if hit.hovered do fx.set_cursor(.Hand)
-	return hit.clicked
+	if .HOVER in res do fx.set_cursor(.Hand)
+
+	return
 }
 
-button :: proc(
-	button_id: ID,
-	bounds: fx.Rect,
-	label: string,
-	style: Style = BUTTON_STYLE,
-	disabled := false,
-	selected := false,
-	icon: Icon = .None,
-	center_x := true,
-	font_size := f32(12),
-	right_padding := f32(7),
-	icon_size := f32(20),
-	overlay := false,
-) -> bool {
-	hit := interact(button_id, bounds, disabled, overlay)
-	state := style_state(style, hit, disabled, selected)
-	background := animate(id("background", button_id), state.bg)
-	text := animate(id("text", button_id), state.text)
-	fx.draw_rect(bounds, background, 7)
-	if icon == .None {
-		text_bounds := center_x ? bounds : fx.Rect{bounds.x + 7, bounds.y, max(bounds.w - 7 - right_padding, 0), bounds.h}
-		fx.draw_text_faded(label, text_bounds, font_size, text, center_x, true)
-	} else if center_x {
-		label_width := fx.measure_text(label, font_size).x
-		icon_gap := label == "" ? f32(0) : f32(8)
-		content_width := icon_size + icon_gap + label_width
-		content_x := bounds.x + (bounds.w - content_width) * .5
-		draw_icon(icon, {content_x, bounds.y, icon_size, bounds.h}, text)
-		fx.draw_text_faded(label, {content_x + icon_size + icon_gap, bounds.y, label_width, bounds.h}, font_size, text, false, true)
-	} else {
-		draw_icon(icon, {bounds.x + 7, bounds.y, icon_size, bounds.h}, text)
-		text_x := bounds.x + 7 + icon_size + 8
-		fx.draw_text_faded(label, {text_x, bounds.y, max(bounds.x + bounds.w - right_padding - text_x, 0), bounds.h}, font_size, text, false, true)
-	}
+button :: proc(label: string, font_size: f32 = 14, active := false) -> (res: Result_Set) {
+	id := get_id(label)
+	r := layout_next()
+	res = update_control(id, r)
 
-	if hit.hovered && !disabled {
-		fx.set_cursor(.Hand)
-	}
+	bg_style := active ? ACTIVE_BUTTON_COLOR : BUTTON_COLOR
+	color := ui_color(bg_style, res)
+	fx.draw_rect(r, color, 8)
+	fx.draw_text_rect(label, r, font_size, COLOR_TEXT, true)
 
-	return hit.clicked
+	if .HOVER in res do fx.set_cursor(.Hand)
+
+	return
 }
 
-icon_button :: proc(
-	button_id: ID,
-	bounds: fx.Rect,
-	icon: Icon,
-	selected := false,
-	disabled := false,
-	style: Style = ICON_BUTTON_STYLE,
-	inset := f32(8),
-) -> bool {
-	hit := interact(button_id, bounds, disabled)
-	state := style_state(style, hit, disabled, selected)
-	background := animate(id("background", button_id), state.bg)
-	tint := animate(id("text", button_id), state.text)
-	circle := square_bounds(bounds)
+icon_button :: proc(id_str: string, icon: Icon, tint: fx.Color = COLOR_MUTED, radius: f32 = 8, bg: bool = true, offset: f32 = 0, scale: f32 = 0.7, active: bool = false) -> (res: Result_Set) {
+	id := get_id(id_str)
+	r := layout_next()
+	r.pos.x += offset
+	res = update_control(id, r)
 
-	fx.draw_circle(
-		{circle.x + circle.w * .5, circle.y + circle.h * .5},
-		circle.w * .5,
-		background,
-	)
-
-	draw_icon(icon, bounds, tint, inset)
-	if hit.hovered && !disabled {
-		fx.set_cursor(.Hand)
+	if bg {
+		bg_style := active ? ACTIVE_BUTTON_COLOR : BUTTON_COLOR
+		color := ui_color(bg_style, res)
+		fx.draw_rect(r, color, radius)
 	}
 
-	return hit.clicked
+	tint_amount := (active || .HOVER in res || .ACTIVE in res) ? f32(1) : f32(0)
+	final_tint := fx.color_lerp(tint, COLOR_TEXT, tint_amount)
+
+	draw_icon(icon, r, min(r.size.x, r.size.y) * scale, final_tint)
+
+	if .HOVER in res do fx.set_cursor(.Hand)
+
+	return
 }
 
-slider :: proc(slider_id: ID, bounds: fx.Rect, value: ^f32, low, high: f32, style: Style = SLIDER_STYLE, disabled := false) -> Interaction {
-	hit := interact(slider_id, bounds, disabled)
-	if hit.held && high > low && bounds.w > 0 {
-		previous := value^
-		value^ = low + clamp((fx.mouse_pos().x - bounds.x) / bounds.w, 0, 1) * (high - low)
-		hit.changed = value^ != previous
-	}
-	hit.committed = hit.released
+slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL_COLOR, preview: bool = false) -> (res: Result_Set, bounds: fx.Rect) {
+	last := value^
+	v := last
+	base := layout_next()
 
-	ratio := high > low ? clamp((value^ - low) / (high - low), 0, 1) : f32(0)
-	state := style_state(style, hit, disabled)
-	center_y := bounds.y + bounds.h * .5
+	res = update_control(id, base)
+
+	if .ACTIVE in res && fx.key_is_released(.Mouse_Left) {
+		res += {.SUBMIT}
+	}
+
+	if ctx.focus_id == id && fx.key_is_down(.Mouse_Left) {
+		v = low + f32(fx.mouse_pos().x - base.pos.x) * (high - low) / max(base.size.x, 1)
+		res += {.CHANGE}
+	}
+
+	v = clamp(v, low, high); value^ = v
+
+	ratio := (high > low) ? clamp((v - low) / (high - low), 0.0, 1.0) : f32(0)
+	center_y := base.pos.y + base.size.y * 0.5
 	track := fx.Rect{
-		x = bounds.x,
-		y = center_y - 3.5/2,
-		w = bounds.w,
-		h = 3.5,
+		pos = {base.pos.x, center_y - 1.75},
+		size = {base.size.x, 3.5},
 	}
 
-	track_color := animate(id("background", slider_id), state.bg)
-	fill_color := animate(id("text", slider_id), state.text)
-	fx.draw_rect(track, track_color, 2)
-	fx.draw_rect({track.x, track.y, track.w * ratio, track.h}, fill_color, 2)
-	thumb_size := animate(id("size", slider_id), hit.hovered || hit.held ? f32(4) : f32(3))
-	fx.draw_circle({bounds.x + bounds.w * ratio, center_y}, thumb_size, fill_color)
+	track_color := animate(get_child_id(id, "track_color"), ui_color(SCROLLBAR_COLOR, res))
+	fx.draw_rect(track, track_color, 2.0)
 
-	if hit.hovered || hit.held {
+	fill_track := track
+	fill_track.size.x = track.size.x * ratio
+	fill_color := animate(get_child_id(id, "fill_color"), ui_color(fill, res))
+	fx.draw_rect(fill_track, fill_color, 2.0)
+
+	if preview && .HOVER in res && !(.ACTIVE in res) {
+		hover_ratio := clamp((fx.mouse_pos().x - base.pos.x) / max(base.size.x, 1), 0.0, 1.0)
+		preview_track := track
+		if hover_ratio > ratio {
+			preview_track.pos.x += track.size.x * ratio
+			preview_track.size.x = track.size.x * (hover_ratio - ratio)
+			fx.draw_rect(preview_track, fx.Color{100, 110, 120, 255}, 2.0)
+		}
+	}
+
+	thumb_size_target: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
+	thumb_size := animate(get_child_id(id, "thumb_size"), thumb_size_target)
+	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
+	fx.draw_circle(thumb_pos, thumb_size, fill_color)
+
+	bounds = base
+	return
+}
+
+scrollbar :: proc(container: ^Container, body: fx.Rect, cs: fx.Vec2, id_string: string, i: int, marker: f32 = -1) {
+	maxscroll := cs[i] - body.size[i]
+
+	if maxscroll > 0 && body.size[i] > 0 {
+		id := get_id(id_string)
+		id_thumb := get_child_id(id, "thumb")
+
+		base := body
+		base.pos[1-i] += base.size[1-i]
+		base.size[1-i] = 4
+
+		thumb := base
+		thumb.size[i] = clamp(base.size[i] * body.size[i] / cs[i], 30, base.size[i])
+		thumb.pos[i] += container.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+
+		res := update_control(id, fx.rect_expand(base, 4))
+		res_thumb := update_control(id_thumb, fx.rect_expand(thumb, 4))
+
+		is_dragging := fx.key_is_down(.Mouse_Left) && ctx.focus_id == id_thumb
+
+		if fx.key_is_down(.Mouse_Left) {
+			scroll_ratio := maxscroll / max(1.0, base.size[i] - thumb.size[i])
+
+			if fx.key_is_pressed(.Mouse_Left) && ctx.focus_id == id {
+				target_pos := fx.mouse_pos()[i] - thumb.size[i] * 0.5
+				container.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
+				container.scroll_target[i] = container.scroll[i]
+				ctx.focus_id = id_thumb
+				is_dragging = true
+			} else if is_dragging {
+				container.scroll[i] += fx.mouse_delta()[i] * scroll_ratio
+				container.scroll_target[i] = container.scroll[i]
+			}
+		}
+
+		container.scroll_target[i] = clamp(container.scroll_target[i], 0.0, maxscroll)
+		scroll_id := get_child_id(id, "scroll")
+
+		if !is_dragging {
+			container.scroll[i] = animate(scroll_id, container.scroll_target[i], 0.08)
+		}
+
+		container.scroll[i] = clamp(container.scroll[i], 0.0, maxscroll)
+
+		thumb.pos[i] = base.pos[i] + container.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+		thumb_color := ui_color(SCROLLBAR_COLOR, res + res_thumb)
+		fx.draw_rect(thumb, thumb_color, 8)
+
+		if marker >= 0 {
+			marker_target := clamp(marker, 0, 1)
+			marker_position := animate(get_child_id(id, "marker"), marker_target, 0.5)
+			marker_height := min(f32(10), base.size[i])
+			marker_rect := base
+			marker_rect.pos[i] = base.pos[i] + (base.size[i] - marker_height) * marker_position
+			marker_rect.size[i] = marker_height
+			fx.draw_rect(marker_rect, COLOR_ACCENT, 8)
+		}
+
+		if mouse_over(body) || mouse_over(base) {
+			ctx.scroll_target = container
+		}
+	} else {
+		container.scroll[i] = 0
+	}
+}
+
+menu_button :: proc(text: string, icon: Icon) -> (res: Result_Set) {
+	id := get_id(text)
+	bounds := layout_next()
+	res = update_control(id, bounds)
+
+	bg_color := ui_color(ROW_COLOR, res)
+	fx.draw_rect(bounds, bg_color, 8)
+
+	if .HOVER in res {
 		fx.set_cursor(.Hand)
 	}
 
-	return hit
+	icon_rect := fx.Rect{
+		{bounds.pos.x + 6, bounds.pos.y},
+		{20, bounds.size.y}
+	}
+
+	icon_color := ui_color(LINK_COLOR, res)
+
+	draw_icon(icon, icon_rect, 20, icon_color)
+
+	text_bounds := fx.Rect{
+		{bounds.pos.x + 32, bounds.pos.y + (bounds.size.y - 14) * 0.5},
+		{max(bounds.size.x - 32, 0), 14}
+	}
+
+	fx.draw_text_faded(text, text_bounds, 13, COLOR_TEXT)
+
+	return
+}
+
+draw_icon :: proc(icon: Icon, bounds: fx.Rect, size: f32 = 0, tint := COLOR_TEXT) {
+	final_size := size > 0 ? size : max(min(bounds.size.x, bounds.size.y), 0)
+	dest := fx.Rect{bounds.pos + (bounds.size - final_size) * 0.5, final_size}
+	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 32 + 1, 30}
+	fx.draw_msdf_ex(icon_atlas, source, dest, 4, tint)
 }

@@ -3,7 +3,7 @@ package main
 import "core:container/bit_array"
 import "core:encoding/cbor"
 import "core:fmt"
-import "core:hash/xxhash"
+import "core:hash"
 import "core:os"
 import "core:slice"
 import "core:strconv"
@@ -154,7 +154,7 @@ loader_poll :: proc() {
 
 			music.thumbnail = {
 				texture = current_atlas,
-				source = {f32(cursor_x), f32(cursor_y), f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)},
+				source = {{f32(cursor_x), f32(cursor_y)}, {f32(THUMBNAIL_SIZE), f32(THUMBNAIL_SIZE)}},
 			}
 
 			cursor_x += THUMBNAIL_SIZE
@@ -167,6 +167,7 @@ loader_poll :: proc() {
 		if music.liked {
 			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
+
 		if time.to_unix_nanoseconds(music.last_timestamp) > 0 {
 			append(&playlists[HISTORY_PLAYLIST_INDEX].songs, music)
 		}
@@ -180,7 +181,7 @@ loader_poll :: proc() {
 			}
 		}
 
-		append(&playlists, Playlist{name = playlist_name, sort = .Title})
+		append(&playlists, Playlist{name = playlist_name, sort = .Title, icon = .Note})
 		append(&playlists[len(playlists) - 1].songs, music)
 	}
 
@@ -191,13 +192,12 @@ loader_poll :: proc() {
 			if song.album != album do continue next_playlist
 		}
 		playlist.sort = .Track
+		playlist.icon = .Album
 	}
 
 	for &playlist in playlists {
 		playlist_sort(&playlist)
 	}
-
-	search.initialized = false
 }
 
 loader_is_finished :: proc() -> bool {
@@ -263,10 +263,11 @@ load_lrc :: proc(music: ^Music) {
 				append(&runes, character)
 			}
 		}
+
 		if len(runes) >= 5 {
 			for index in 0 ..= len(runes) - 5 {
 				bytes := slice.reinterpret([]byte, runes[index:index + 5])
-				bit_array.set(&music.lyrics_filter, uint(xxhash.XXH32(bytes) & 32767))
+				bit_array.set(&music.lyrics_filter, uint(hash.fnv32a(bytes) & 32767))
 			}
 		}
 	}
@@ -283,17 +284,8 @@ load_thumbnail :: proc(music: ^Music) {
 	defer image.image_free(pixels)
 
 	music.thumbnail_pixels = make([]fx.Color, THUMBNAIL_SIZE * THUMBNAIL_SIZE)
-	success := image.resize_uint8(
-		pixels,
-		w,
-		h,
-		0,
-		cast([^]u8)raw_data(music.thumbnail_pixels),
-		THUMBNAIL_SIZE,
-		THUMBNAIL_SIZE,
-		0,
-		4,
-	)
+	success := image.resize_uint8(pixels, w, h, 0, cast([^]u8)raw_data(music.thumbnail_pixels), THUMBNAIL_SIZE,THUMBNAIL_SIZE, 0, 4)
+
 	if success == 0 {
 		delete(music.thumbnail_pixels)
 		music.thumbnail_pixels = nil
@@ -301,6 +293,7 @@ load_thumbnail :: proc(music: ^Music) {
 }
 
 playlist_sort :: proc(playlist: ^Playlist) {
+
 	switch playlist.sort {
 	case .Title:
 		slice.sort_by(playlist.songs[:], proc(a, b: ^Music) -> bool {
@@ -340,6 +333,7 @@ playlist_sort :: proc(playlist: ^Playlist) {
 			return time.diff(b.liked_timestamp, a.liked_timestamp) > 0
 		})
 	}
+
 	if playlist.sort_reversed {
 		slice.reverse(playlist.songs[:])
 	}
@@ -353,14 +347,6 @@ liked_playlist_count :: proc() -> int {
 	return count
 }
 
-liked_playlist_refresh :: proc() {
-	liked := &playlists[LIKED_PLAYLIST_INDEX]
-	for index := len(liked.songs) - 1; index >= 0; index -= 1 {
-		if !liked.songs[index].liked do ordered_remove(&liked.songs, index)
-	}
-	playlist_sort(liked)
-}
-
 toggle_like :: proc(song: ^Music) {
 	if song == nil do return
 	liked := &playlists[LIKED_PLAYLIST_INDEX]
@@ -371,6 +357,7 @@ toggle_like :: proc(song: ^Music) {
 	for item in liked.songs {
 		if item == song do return
 	}
+
 	append(&liked.songs, song)
 	playlist_sort(liked)
 }
@@ -398,7 +385,7 @@ cache_load :: proc() {
 	dir, dir_error := os.user_data_dir(context.temp_allocator)
 	if dir_error != nil do return
 
-	path := strings.concatenate({dir, "\\fmusic\\cache.cbor"}, context.temp_allocator)
+	path := strings.concatenate({dir, "\\GriPlayer\\cache.cbor"}, context.temp_allocator)
 	data, read_error := os.read_entire_file(path, context.temp_allocator)
 	if read_error != nil do return
 
@@ -415,7 +402,7 @@ cache_save :: proc() {
 	dir, dir_error := os.user_data_dir(context.temp_allocator)
 	if dir_error != nil do return
 
-	app_dir := strings.concatenate({dir, "\\fmusic"}, context.temp_allocator)
+	app_dir := strings.concatenate({dir, "\\GriPlayer"}, context.temp_allocator)
 	os.make_directory(app_dir)
 	path := strings.concatenate({app_dir, "\\cache.cbor"}, context.temp_allocator)
 

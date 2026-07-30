@@ -169,10 +169,10 @@ open :: proc(path: string, gapless := false) -> bool {
 update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     if state.decoder == nil do return false
 
-    padding: windows.UINT32
-    state.client->GetCurrentPadding(&padding)
+    pad: windows.UINT32
+    state.client->GetCurrentPadding(&pad)
 
-    available_frames := state.buffer_size - padding
+    available_frames := state.buffer_size - pad
     if available_frames == 0 do return false
 
     buffer: [^]u8

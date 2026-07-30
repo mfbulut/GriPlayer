@@ -51,10 +51,17 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	player.playing = !paused
 	lyrics_synced = true
 	scrub_time = -1
+
+	if container := get_container(get_id("Lyrics")); container != nil {
+		container.scroll.y = 0
+		container.scroll_target.y = 0
+	}
+	animation_cancel(get_id("lyrics_sync"))
+
 	record_listen(song)
 	visualizer_create_palette(song.thumbnail_pixels)
 
-	cover_to_free = player.cover	
+	cover_to_free = player.cover
 	cover_bytes := audio.cover(song.fullpath)
 	defer delete(cover_bytes)
 	if len(cover_bytes) > 0 {

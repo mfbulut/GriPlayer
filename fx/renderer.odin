@@ -87,21 +87,16 @@ clear_window :: proc(color: Color) {
 set_scissor :: proc(rect: Rect) {
 	scale := dpi_scale()
 	new_scissor := [4]i32 {
-		cast(i32)(rect.x * scale),
-		cast(i32)(rect.y * scale),
-		cast(i32)(rect.w * scale),
-		cast(i32)(rect.h * scale),
+		cast(i32)(rect.pos.x * scale),
+		cast(i32)(rect.pos.y * scale),
+		cast(i32)(rect.size.x * scale),
+		cast(i32)(rect.size.y * scale),
 	}
-	
+
 	if new_scissor != scissor {
 		flush()
 		scissor = new_scissor
 	}
-}
-
-reset_scissor :: proc() {
-	ws := window_size()
-	set_scissor({0, 0, ws.x, ws.y})
 }
 
 flush :: proc() {
@@ -126,7 +121,7 @@ flush :: proc() {
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 	append(&instances,
 		Instance{
-			dest   = {r.x, r.y, r.x + r.w, r.y + r.h},
+			dest   = {r.pos, r.pos + r.size},
 			src    = {},
 			color  = color,
 			radius = radius,
@@ -136,32 +131,25 @@ draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 	)
 }
 
-draw_rect_vec :: proc(pos, size: Vec2, color: [4]Color, radius := f32(0)) {
-	draw_rect(Rect{pos.x, pos.y, size.x, size.y}, color, radius)
-}
-
 draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 	top_left := center - radius
-	draw_rect_vec(top_left, radius * 2, color, radius)
+	draw_rect({top_left, radius * 2}, color, radius)
 }
 
-draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := WHITE, radius := f32(0)) {
+draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
 	if tex.index == 0 do return
 
-	tw := cast(f32)tex.size.x
-	th := cast(f32)tex.size.y
+	size := cast(Vec2)tex.size
 
 	src_uv := Rect{
-		src.x / tw,
-		src.y / th,
-		(src.x + src.w) / tw,
-		(src.y + src.h) / th,
+		src.pos / size,
+		(src.pos + src.size) / size,
 	}
 
 	append(&instances,
 		Instance{
 			src     = src_uv,
-			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
+			dest    = {dest.pos, dest.pos + dest.size},
 			color   = tint,
 			radius  = radius,
 			kind    = .Texture,
@@ -170,43 +158,34 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := WHITE, radi
 	)
 }
 
-draw_texture :: proc(tex: Texture, rect: Rect, tint := WHITE, radius := f32(0)) {
-	draw_texture_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, tint, radius)
+draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
+	draw_texture_ex(tex, {{0, 0}, {f32(tex.size.x), f32(tex.size.y)}}, rect, tint, radius)
 }
 
-draw_msdf_ex :: proc(
-	tex: Texture,
-	src: Rect,
-	dest: Rect,
-	px_range: f32,
-	tint := WHITE,
-) {
+draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
 	if tex.index == 0 do return
 
-	tw := cast(f32)tex.size.x
-	th := cast(f32)tex.size.y
+	size := cast(Vec2)tex.size
 
 	src_uv := Rect{
-		src.x / tw,
-		src.y / th,
-		(src.x + src.w) / tw,
-		(src.y + src.h) / th,
+		src.pos / size,
+		(src.pos + src.size) / size,
 	}
 
 	append(&instances,
 		Instance{
 			src     = src_uv,
-			dest    = {dest.x, dest.y, dest.x + dest.w, dest.y + dest.h},
+			dest    = {dest.pos, dest.pos + dest.size},
 			color   = tint,
-			radius  = px_range / tw,
+			radius  = px_range / size.x,
 			kind    = .MSDF,
 			tex_idx = u32(tex.index),
 		},
 	)
 }
 
-draw_msdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := WHITE) {
-	draw_msdf_ex(tex, {0, 0, f32(tex.size.x), f32(tex.size.y)}, rect, px_range, tint)
+draw_msdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
+	draw_msdf_ex(tex, {{0, 0}, {f32(tex.size.x), f32(tex.size.y)}}, rect, px_range, tint)
 }
 
 // Text Rendering
@@ -216,7 +195,7 @@ draw_text :: proc {
 	draw_text_rect,
 }
 
-draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := WHITE) {
+draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Color)WHITE) {
 	if text == "" do return
 	font := font
 
@@ -240,17 +219,17 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := WHITE) {
 		glyph := font.glyphs[char] or_else font.glyphs['?']
 
 		dest := Rect{
-			x + (glyph.planeBounds.left * font_scale),
-			y - (glyph.planeBounds.top * font_scale),
-			x + (glyph.planeBounds.right * font_scale),
-			y - (glyph.planeBounds.bottom * font_scale),
+			{x + (glyph.planeBounds.left * font_scale),
+			y - (glyph.planeBounds.top * font_scale)},
+			{x + (glyph.planeBounds.right * font_scale),
+			y - (glyph.planeBounds.bottom * font_scale)},
 		}
 
 		src := Rect{
-			glyph.atlasBounds.left / atlas_w,
-			1 - (glyph.atlasBounds.top / atlas_h),
-			glyph.atlasBounds.right / atlas_w,
-			1 - (glyph.atlasBounds.bottom / atlas_h),
+			{glyph.atlasBounds.left / atlas_w,
+			1 - (glyph.atlasBounds.top / atlas_h)},
+			{glyph.atlasBounds.right / atlas_w,
+			1 - (glyph.atlasBounds.bottom / atlas_h)},
 		}
 
 		append(&instances,
@@ -268,58 +247,49 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := WHITE) {
 	}
 }
 
-draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := WHITE, center_x := false, center_y := true) {
+draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast([4]Color)WHITE, center_x := false) {
 	if text == "" do return
 	font := font
 
-	x := bounds.x
-	y := bounds.y
-
-	if center_x || center_y {
-		size := measure_text(text, font_size)
-		if center_x {
-			x = bounds.x + (bounds.w - size.x) * 0.5
-		}
-		if center_y {
-			font_scale := font_size / font.metrics.emSize
-			line_h := font.metrics.lineHeight * font_scale
-			y = bounds.y + (bounds.h - line_h) * 0.5
-		}
+	size := measure_text(text, font_size)
+	x := bounds.pos.x
+	if center_x {
+		x = bounds.pos.x + (bounds.size.x - size.x) * 0.5
 	}
+
+	font_scale := font_size / font.metrics.emSize
+	line_h := font.metrics.lineHeight * font_scale
+	y := bounds.pos.y + (bounds.size.y - line_h) * 0.5
 
 	draw_text_vec(text, {x, y}, font_size, color)
 }
 
-draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color, center_x := false, center_y := true) {
-	if text == "" || bounds.w <= 0 do return
-	font := font
+draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color) {
+	if text == "" || bounds.size.x <= 0 do return
 
-	if measure_text(text, font_size).x <= bounds.w {
-		draw_text_rect(text, bounds, font_size, color, center_x, center_y)
+	size := measure_text(text, font_size)
+	if size.x <= bounds.size.x {
+		draw_text_rect(text, bounds, font_size, color)
 		return
 	}
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale
 
-	x := bounds.x
-	y := bounds.y + (font.metrics.ascender * font_scale)
-
-	if center_y {
-		y = bounds.y + (bounds.h - line_h) * 0.5 + (font.metrics.ascender * font_scale)
-	}
+	x := bounds.pos.x
+	y := bounds.pos.y + (bounds.size.y - line_h) * 0.5 + (font.metrics.ascender * font_scale)
 
 	atlas_w := cast(f32)font.atlas.size.x
 	atlas_h := cast(f32)font.atlas.size.y
 	unit_range := 8 / atlas_w
 
-	max_w := bounds.w
-	fade_w := min(30, max_w)
-	fade_start := bounds.x + max_w - fade_w
+	max_w := bounds.size.x
+	fade_w := min(20, max_w)
+	fade_start := bounds.pos.x + max_w - fade_w
 
 	for char in text {
 		if char == '\n' {
-			x = bounds.x
+			x = bounds.pos.x
 			y += line_h
 			continue
 		}
@@ -329,7 +299,7 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 		left_x := x + (glyph.planeBounds.left * font_scale)
 		right_x := x + (glyph.planeBounds.right * font_scale)
 
-		if left_x > bounds.x + max_w {
+		if left_x > bounds.pos.x + max_w {
 			break
 		}
 
@@ -354,17 +324,17 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 		c := [4]Color{color_tl, color_tr, color_bl, color_br}
 
 		dest := Rect{
-			left_x,
-			y - (glyph.planeBounds.top * font_scale),
-			right_x,
-			y - (glyph.planeBounds.bottom * font_scale),
+			{left_x,
+			y - (glyph.planeBounds.top * font_scale)},
+			{right_x,
+			y - (glyph.planeBounds.bottom * font_scale)},
 		}
 
 		src := Rect{
-			glyph.atlasBounds.left / atlas_w,
-			1 - (glyph.atlasBounds.top / atlas_h),
-			glyph.atlasBounds.right / atlas_w,
-			1 - (glyph.atlasBounds.bottom / atlas_h),
+			{glyph.atlasBounds.left / atlas_w,
+			1 - (glyph.atlasBounds.top / atlas_h)},
+			{glyph.atlasBounds.right / atlas_w,
+			1 - (glyph.atlasBounds.bottom / atlas_h)},
 		}
 
 		append(&instances,

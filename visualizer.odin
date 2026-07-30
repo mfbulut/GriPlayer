@@ -133,24 +133,23 @@ visualizer_update :: proc() {
 }
 
 draw_visualizer :: proc(bounds: fx.Rect) {
-	if bounds.w <= 0 || bounds.h <= 0 do return
-	top_space := min(f32(20), bounds.h)
-	content := fx.Rect{bounds.x, bounds.y + top_space, bounds.w, bounds.h - top_space}
-	if content.h <= 0 do return
+	if bounds.size.x <= 0 || bounds.size.y <= 0 do return
+	content := fx.Rect{{bounds.pos.x, bounds.pos.y}, {bounds.size.x, bounds.size.y}}
+	if content.size.y <= 0 do return
 
 	gap := f32(1)
-	bar_width := max((content.w - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS, 1)
+	bar_width := max((content.size.x - gap * (SPECTRUM_BANDS - 1)) / SPECTRUM_BANDS, 1)
 	for level, index in spectrum {
-		height := max(content.h * level, 1)
-		x := content.x + f32(index) * (bar_width + gap)
+		height := max(content.size.y * level, 1)
+		x := content.pos.x + f32(index) * (bar_width + gap)
 		color := COLOR_ACCENT
 		if len(visualizer_palette) > 0 {
 			color = visualizer_color_at(f32(index) / f32(SPECTRUM_BANDS - 1))
 		}
-
-		fx.draw_rect({x, content.y + content.h - height, bar_width, height}, fx.color_opacity(color, 0.7), 1)
-		peak_y := content.y + content.h - content.h * spectrum_peak[index]
-		fx.draw_rect({x, peak_y, bar_width, 1}, color)
+		c := color
+		fx.draw_rect({{x, content.pos.y + content.size.y - height}, {bar_width, height}}, c, 1)
+		peak_y := content.pos.y + content.size.y - content.size.y * spectrum_peak[index]
+		fx.draw_rect({{x, peak_y}, {bar_width, 1}}, color)
 	}
 }
 
@@ -218,7 +217,7 @@ visualizer_create_palette :: proc(pixels: []fx.Color) {
 	}
 
 	slice.sort_by(buckets[:], proc(a, b: Palette_Bucket) -> bool {return a.score > b.score})
-	
+
 	for bucket in buckets {
 		if bucket.count == 0 do break
 		color := cast(fx.Color)(bucket.sum / bucket.count)

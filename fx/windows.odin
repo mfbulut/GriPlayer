@@ -2,6 +2,9 @@ package fx
 
 import "base:runtime"
 import "core:time"
+import "core:mem"
+import "core:unicode"
+import "core:unicode/utf16"
 import win "core:sys/windows"
 
 Cursor :: enum {
@@ -23,8 +26,10 @@ window: struct {
 	key_state:      Key_States,
 	cursor:         Cursor,
 	mouse_pos:      Vec2,
+	mouse_delta:    Vec2,
 	mouse_inside:   bool,
 	mouse_scroll:   Vec2,
+	text_input:     [dynamic; 32]rune,
 	prev_time:      time.Time,
 	frame_time:     f32,
 	frame_callback: proc(),
@@ -98,6 +103,10 @@ mouse_pos :: proc() -> Vec2 {
 	return window.mouse_pos
 }
 
+mouse_delta :: proc() -> Vec2 {
+	return window.mouse_delta
+}
+
 mouse_scroll :: proc() -> Vec2 {
 	return window.mouse_scroll
 }
@@ -142,8 +151,60 @@ window_is_minimized :: proc() -> bool {
 	return cast(bool)win.IsIconic(window.hwnd)
 }
 
+text_input :: proc() -> []rune {
+	return window.text_input[:]
+}
+
+get_clipboard :: proc(allocator := context.temp_allocator) -> (text: string, ok: bool) {
+	win.OpenClipboard(window.hwnd) or_return
+	defer win.CloseClipboard()
+
+	handle := win.GetClipboardData(win.CF_UNICODETEXT)
+	(handle != nil) or_return
+
+	global := win.HGLOBAL(handle)
+
+	ptr := win.GlobalLock(global)
+	(ptr != nil) or_return
+
+	str_utf8, allocator_err := win.wstring_to_utf8(win.wstring(ptr), -1, allocator)
+	(allocator_err == nil) or_return
+
+	win.GlobalUnlock(global)
+
+	return str_utf8, true
+}
+
+set_clipboard :: proc(text: string) -> (ok: bool) {
+	win.OpenClipboard(window.hwnd) or_return
+	defer win.CloseClipboard()
+
+	text := win.utf8_to_utf16(text, context.temp_allocator)
+	(text != nil) or_return
+
+	data := win.GlobalAlloc(win.GMEM_MOVEABLE, len(text) * size_of(win.WCHAR) + 2)
+	(data != nil) or_return
+	defer if !ok {win.GlobalFree(data)}
+
+	{
+		data := cast([^]byte)win.GlobalLock(win.HGLOBAL(data))
+		(data != nil) or_return
+		defer win.GlobalUnlock(win.HGLOBAL(data))
+		mem.copy_non_overlapping(data, raw_data(text), len(text) * size_of(win.WCHAR))
+		data[len(text) * size_of(win.WCHAR) + 0] = 0
+		data[len(text) * size_of(win.WCHAR) + 1] = 0
+	}
+
+	ret := win.SetClipboardData(win.CF_UNICODETEXT, win.HANDLE(data))
+	(ret != nil) or_return
+
+	return true
+}
+
 update :: proc(poll_msg := true) {
+	prev_mouse_pos := window.mouse_pos
 	window.mouse_scroll = {0, 0}
+	clear(&window.text_input)
 	for &state in window.key_state {
 		state -= {.Pressed, .Released, .Repeat}
 	}
@@ -160,6 +221,12 @@ update :: proc(poll_msg := true) {
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
 	window.prev_time = cur_time
 	window.cursor = .Arrow
+
+	if window.mouse_pos.x >= 0 && prev_mouse_pos.x >= 0 {
+		window.mouse_delta = window.mouse_pos - prev_mouse_pos
+	} else {
+		window.mouse_delta = {0, 0}
+	}
 
 	if window.frame_callback != nil {
 		window.frame_callback()
@@ -319,6 +386,37 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 
 	case win.WM_SYSCHAR:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+	case win.WM_CHAR:
+		@(static) high_surrogate: rune
+		w := cast(rune)wparam
+
+		is_high_surrogate := (w >= 0xD800 && w <= 0xDBFF)
+		is_low_surrogate := (w >= 0xDC00 && w <= 0xDFFF)
+
+		codepoint := unicode.REPLACEMENT_CHAR
+		if is_high_surrogate {
+			high_surrogate = w
+			break
+		} else if is_low_surrogate {
+			if high_surrogate != 0 {
+				codepoint = utf16.decode_surrogate_pair(high_surrogate, w)
+				high_surrogate = 0
+			} else {
+				break
+			}
+		} else {
+			codepoint = w
+			high_surrogate = 0
+		}
+
+		if codepoint == unicode.REPLACEMENT_CHAR {
+			break
+		}
+
+		if unicode.is_graphic(codepoint) {
+			append(&window.text_input, codepoint)
+		}
 
 	case:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
