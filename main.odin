@@ -178,6 +178,7 @@ frame :: proc() {
 
 						layout_row({-1}, -1)
 						active_marker := f32(-1)
+						list_id := search.active ? "Search_Results" : playlist.name
 						songs := search.active ? search.results[:] : playlist.songs[:]
 						for song, i in songs {
 							if song == player.music {
@@ -186,7 +187,7 @@ frame :: proc() {
 							}
 						}
 
-						if begin("SongsList", scroll = true, bg = COLOR_SURFACE, pad = 8, gap = 4, marker = active_marker) {
+						if begin(list_id, scroll = true, bg = COLOR_SURFACE, pad = 8, gap = 4, marker = active_marker) {
 							for song, i in songs {
 								layout_row({-1}, 50)
 								if .SUBMIT in song_row(song, i, player.music == song, search.active ? .Title : playlist.sort) {
@@ -434,6 +435,7 @@ frame :: proc() {
 								active_amount := animate(
 									child_id(row_id, "active"),
 									is_active ? f32(1) : f32(0),
+									0.1, .Linear
 								)
 
 								hover_amount := .HOVER in hit ? f32(1) : f32(0)
@@ -483,7 +485,7 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 }
 
 playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Result_Set) {
-	if begin(playlist.name, pad = 6) {
+	if begin("Playlist_Row", pad = 6) {
 		layout := get_layout()
 		if !fx.rect_visible(layout.rect) do return {}
 
@@ -510,7 +512,7 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 }
 
 song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
-	if begin(song.fullpath, pad = 5, gap = 10) {
+	if begin("Song_Row", pad = 5, gap = 10) {
 		layout := get_layout()
 		if !fx.rect_visible(layout.rect) do return {}
 

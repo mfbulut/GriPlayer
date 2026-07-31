@@ -9,9 +9,10 @@ import "fx"
 Id :: distinct u64
 
 Scroll_State :: struct {
-	scroll:        fx.Vec2,
-	scroll_target: fx.Vec2,
-	content_size:  fx.Vec2,
+	scroll:            fx.Vec2,
+	scroll_target:     fx.Vec2,
+	content_size:      fx.Vec2,
+	drag_start_scroll: fx.Vec2,
 }
 
 Layout :: struct {
@@ -28,6 +29,7 @@ Layout :: struct {
 
 ctx : struct {
 	hover_id, focus_id: Id,
+	drag_start:    fx.Vec2,
 	scroll_states: map[Id]Scroll_State,
 	layout_stack:  [dynamic]Layout,
 }

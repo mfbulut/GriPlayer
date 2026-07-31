@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import "fx"
 
 Icon :: enum {
@@ -96,7 +97,7 @@ mouse_over :: proc(rect: fx.Rect) -> bool {
 			return false
 		}
 	}
-	
+
 	return fx.point_in_rect(rect, fx.mouse_pos()) && fx.rect_visible({fx.mouse_pos(), {1, 1}})
 }
 
@@ -130,6 +131,7 @@ update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
 		if hover do res += {.HOVER}
 		if fx.key_is_pressed(.Mouse_Left) || fx.key_is_pressed(.Mouse_Right) {
 			ctx.focus_id = id
+			ctx.drag_start = fx.mouse_pos()
 			res += {.ACTIVE}
 		} else if !hover {
 			ctx.hover_id = 0
@@ -281,24 +283,37 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 		if fx.key_is_down(.Mouse_Left) {
 			scroll_ratio := maxscroll / max(1.0, base.size[i] - thumb.size[i])
 
-			if fx.key_is_pressed(.Mouse_Left) && ctx.focus_id == id {
-				target_pos := fx.mouse_pos()[i] - thumb.size[i] * 0.5
-				state.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
-				state.scroll_target[i] = state.scroll[i]
-				ctx.focus_id = id_thumb
-			} else if ctx.focus_id == id_thumb {
-				state.scroll[i] += fx.mouse_delta()[i] * scroll_ratio
+			if fx.key_is_pressed(.Mouse_Left) {
+				if ctx.focus_id == id {
+					target_pos := fx.mouse_pos()[i] - thumb.size[i] * 0.5
+					state.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
+					state.scroll_target[i] = state.scroll[i]
+					ctx.focus_id = id_thumb
+					ctx.drag_start = fx.mouse_pos()
+				}
+				if ctx.focus_id == id_thumb {
+					state.drag_start_scroll = state.scroll
+				}
+			}
+
+			if ctx.focus_id == id_thumb {
+				delta := fx.mouse_pos() - ctx.drag_start
+				state.scroll[i] = clamp(state.drag_start_scroll[i] + delta[i] * scroll_ratio, 0.0, maxscroll)
 				state.scroll_target[i] = state.scroll[i]
 			}
 		}
 
 		state.scroll_target[i] = clamp(state.scroll_target[i], 0.0, maxscroll)
-		scroll_id := child_id(id, "scroll")
 
 		if ctx.focus_id == id_thumb {
-			animation_cancel(scroll_id)
+			state.scroll[i] = state.scroll_target[i]
 		} else {
-			state.scroll[i] = animate(scroll_id, state.scroll_target[i], 0.16)
+			dt := fx.frame_time()
+			t := 1.0 - math.exp(-20.0 * dt)
+			state.scroll[i] += (state.scroll_target[i] - state.scroll[i]) * t
+			if abs(state.scroll_target[i] - state.scroll[i]) < 0.001 {
+				state.scroll[i] = state.scroll_target[i]
+			}
 		}
 
 		state.scroll[i] = clamp(state.scroll[i], 0.0, maxscroll)
