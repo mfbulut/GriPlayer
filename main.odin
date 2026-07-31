@@ -21,9 +21,11 @@ Player_Panel :: enum {
 
 player_panel: Player_Panel
 
-lyrics_synced := true
+
 selected_playlist := 0
 scrub_time := f32(-1)
+lyrics_synced := true
+lyrics_sync_now := false
 
 current_tab: enum {
 	Both,
@@ -392,8 +394,10 @@ frame :: proc() {
 					panel_btn := icon_button("panel_cycle", cycle_icon, radius = 999)
 					if .SUBMIT in panel_btn {
 						player_panel = Player_Panel((int(player_panel) + 1) % 3)
+						lyrics_sync_now = true
 					}else if .SECONDARY in panel_btn {
 						player_panel = Player_Panel((int(player_panel) - 1) %% 3)
+						lyrics_sync_now = true
 					}
 				}
 
@@ -433,7 +437,12 @@ frame :: proc() {
 							}
 
 							if lyrics_synced && !found {
-								lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+								if lyrics_sync_now {
+									lyrics_cnt.scroll_target.y = 0
+									lyrics_sync_now = false
+								} else {
+									lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+								}
 								lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
 							}
 
@@ -446,7 +455,14 @@ frame :: proc() {
 									row_center := row.pos.y + row.size.y * 0.5
 									container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
 									target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
-									lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+
+									if lyrics_sync_now {
+										lyrics_cnt.scroll_target.y = target_scroll
+										lyrics_sync_now = false
+									} else {
+										lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
+									}
+
 									lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
 								}
 

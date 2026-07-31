@@ -118,8 +118,8 @@ update_search :: proc() {
 	clear(&search.results)
 
 	state := get_scroll_state(get_id("SongsList"))
-	state.scroll.y = 0
 	state.scroll_target.y = 0
+	state.scroll.y = 0
 
 	query := strings.to_lower(strings.trim_space(query_text), context.temp_allocator)
 	if query == "" {

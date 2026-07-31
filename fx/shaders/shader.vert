@@ -5,7 +5,7 @@ layout(push_constant) uniform PushConstants {
 };
 
 struct Instance {
-    vec4 dst;        // x0, y0, x1, y1 in pixels
+    vec4 dest;       // x0, y0, x1, y1 in pixels
     vec4 src;        // u0, v0, u1, v1 in UV
     uvec4 colors;    // TL, TR, BL, BR
     float radius;
@@ -44,15 +44,15 @@ void main() {
         (vid & 2u) != 0u ? 1.0 : 0.0
     );
 
-    vec2 half_size = (inst.dst.zw - inst.dst.xy) * 0.5;
+    vec2 half_size = (inst.dest.zw - inst.dest.xy) * 0.5;
     vec2 local = corner * 2.0 - 1.0;
 
     vec2 pixel_pos;
     if (inst.kind == 3u) {
-        pixel_pos = (vid == 0u) ? inst.dst.xy : ((vid == 1u) ? inst.dst.zw : ((vid == 2u) ? inst.src.xy : inst.src.zw));
+        pixel_pos = (vid == 0u) ? inst.dest.xy : ((vid == 1u) ? inst.dest.zw : ((vid == 2u) ? inst.src.xy : inst.src.zw));
         out_uv = corner;
     } else {
-        pixel_pos = mix(inst.dst.xy, inst.dst.zw, corner);
+        pixel_pos = mix(inst.dest.xy, inst.dest.zw, corner);
         out_uv = mix(inst.src.xy, inst.src.zw, corner);
     }
 

@@ -8,7 +8,7 @@ Instance :: struct #align(16) {
 	color:  [4]Color,  // TL, TR, BL, BR
 	radius: f32,
 	kind:   enum u32 { Rect, Texture, MSDF, Quad },
-	tex_idx: u32,
+	texture_index: u32,
 }
 
 // Font
@@ -168,7 +168,7 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Col
 			color   = tint,
 			radius  = radius,
 			kind    = .Texture,
-			tex_idx = u32(tex.index),
+			texture_index = u32(tex.index),
 		},
 	)
 }
@@ -195,7 +195,7 @@ draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint :=
 			color   = tint,
 			radius  = px_range / size.x,
 			kind    = .MSDF,
-			tex_idx = u32(tex.index),
+			texture_index = u32(tex.index),
 		},
 	)
 }
@@ -257,7 +257,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]
 				color   = color,
 				radius  = unit_range,
 				kind    = .MSDF,
-				tex_idx = u32(font.atlas.index),
+				texture_index = u32(font.atlas.index),
 			},
 		)
 
@@ -362,7 +362,7 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 				color   = c,
 				radius  = unit_range,
 				kind    = .MSDF,
-				tex_idx = u32(font.atlas.index),
+				texture_index = u32(font.atlas.index),
 			},
 		)
 
