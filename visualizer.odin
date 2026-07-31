@@ -82,7 +82,7 @@ visualizer_update :: proc() {
 
 	fft_run()
 
-	sample_rate := max(f32(audio.sample_rate()), 1)
+	sample_rate := max(f32(audio.sample_rate), 1)
 	nyquist := sample_rate * 0.5
 	max_frequency := min(SPECTRUM_MAX_FREQUENCY, nyquist * 0.95)
 	min_bin := clamp(

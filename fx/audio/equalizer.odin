@@ -11,7 +11,7 @@ EqBand :: struct {
 }
 
 eq_bands: [10]EqBand
-preamp_db := f32(0.0)
+pregain_db := f32(0.0)
 
 eq_init :: proc() {
     frequencies := [10]f32{31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000}
@@ -38,7 +38,7 @@ eq_reset :: proc() {
         eq_bands[i].gain_db = 0
         eq_recalculate_band(i)
     }
-    preamp_db = 0
+    pregain_db = 0
 }
 
 eq_recalculate_all :: proc() {
@@ -51,7 +51,7 @@ eq_recalculate_band :: proc(i: int) {
     band := &eq_bands[i]
 
     A := math.pow(10, band.gain_db / 40)
-    omega := 2 * math.PI * band.freq / f32(state.sample_rate)
+    omega := 2 * math.PI * band.freq / f32(sample_rate)
     sn := math.sin(omega)
     cs := math.cos(omega)
     alpha := sn / (2 * band.q)
@@ -71,7 +71,7 @@ eq_recalculate_band :: proc(i: int) {
 }
 
 eq_process :: proc(samples: [][2]f32) {
-    preamp_gain := math.pow(10, preamp_db / 20.0)
+    preamp_gain := math.pow(10, pregain_db / 20.0)
 
     for &sample in samples {
         sample[0] *= preamp_gain

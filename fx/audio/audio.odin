@@ -26,11 +26,11 @@ state: struct {
     render_client: ^wasapi.IAudioRenderClient,
     decoder: Decoder,
     buffer_size: u32,
-    sample_rate: u32,
     total_pcm: i64,
     channels: u32,
 }
 
+sample_rate := u32(48000)
 volume := f32(0.5)
 muted := false
 
@@ -43,7 +43,7 @@ initialize :: proc() {
     eq_init()
 }
 
-init_wasapi :: proc(sample_rate: u32) {
+init_wasapi :: proc(new_sample_rate: u32) {
     if state.client != nil {
         state.client->Stop()
         state.client->Release()
@@ -54,29 +54,26 @@ init_wasapi :: proc(sample_rate: u32) {
 
     state.device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&state.client)
 
-    KSDATAFORMAT_SUBTYPE_IEEE_FLOAT := windows.GUID {0x00000003,0x0000,0x0010,{0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}
-
     format := windows.WAVEFORMATEXTENSIBLE {
         Format = {
             wFormatTag = windows.WAVE_FORMAT_EXTENSIBLE,
             nChannels = 2,
-            nSamplesPerSec = sample_rate,
-            nAvgBytesPerSec = 32 * 2 * sample_rate / 8,
+            nSamplesPerSec = new_sample_rate,
+            nAvgBytesPerSec = 32 * 2 * new_sample_rate / 8,
             nBlockAlign = 32 * 2 / 8,
             wBitsPerSample = 32,
             cbSize = size_of(windows.WAVEFORMATEXTENSIBLE) - size_of(windows.WAVEFORMATEX),
         },
         Samples = {wValidBitsPerSample = 32},
         dwChannelMask = {.FRONT_LEFT, .FRONT_RIGHT},
-        SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+        SubFormat = {0x00000003,0x0000,0x0010,{0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}},
     }
 
     stream_flags := cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_AUTOCONVERTPCM | cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY
-
     state.client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
     state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
     state.client->GetBufferSize(&state.buffer_size)
-    state.sample_rate = sample_rate
+    sample_rate = new_sample_rate
     eq_recalculate_all()
 }
 
@@ -99,7 +96,7 @@ open :: proc(path: string, gapless := false) -> bool {
     }
 
     state.decoder = nil
-    prev_sample_rate := state.sample_rate
+    prev_sample_rate := sample_rate
     ext := strings.to_lower(os.ext(path), context.temp_allocator)
 
     switch ext {
@@ -107,7 +104,7 @@ open :: proc(path: string, gapless := false) -> bool {
         if of := opusfile.open_file(path); of != nil {
             opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
             state.decoder = of
-            state.sample_rate = 48000
+            sample_rate = 48000
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
         } else {
@@ -118,13 +115,13 @@ open :: proc(path: string, gapless := false) -> bool {
         if vf := vorbisfile.open_file(path); vf != nil {
             state.decoder = vf
             info := vorbisfile.info(vf, -1)
-            state.sample_rate = u32(info.rate)
+            sample_rate = u32(info.rate)
             state.channels = u32(info.channels)
             state.total_pcm = vorbisfile.pcm_total(vf, -1)
         } else if of := opusfile.open_file(path); of != nil {
             opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
             state.decoder = of
-            state.sample_rate = 48000
+            sample_rate = 48000
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
         } else {
@@ -133,8 +130,8 @@ open :: proc(path: string, gapless := false) -> bool {
     case ".mp3":
         if mp3 := drmp3.open_file(path); mp3 != nil {
             state.decoder = mp3
-            state.sample_rate = u32(drmp3.get_sampleRate(mp3))
-            state.channels = u32(drmp3.get_channels(mp3))
+            sample_rate = drmp3.get_sampleRate(mp3)
+            state.channels = drmp3.get_channels(mp3)
             state.total_pcm = i64(drmp3.get_pcm_frame_count(mp3))
         } else {
             return false
@@ -142,8 +139,8 @@ open :: proc(path: string, gapless := false) -> bool {
     case ".flac":
         if flac := drflac.open_file(path); flac != nil {
             state.decoder = flac
-            state.sample_rate = u32(drflac.get_sampleRate(flac))
-            state.channels = u32(drflac.get_channels(flac))
+            sample_rate = drflac.get_sampleRate(flac)
+            state.channels = drflac.get_channels(flac)
             state.total_pcm = i64(drflac.get_totalPCMFrameCount(flac))
         } else {
             return false
@@ -151,7 +148,7 @@ open :: proc(path: string, gapless := false) -> bool {
     case ".wav":
         if wav := drwav.open_file(path); wav != nil {
             state.decoder = wav
-            state.sample_rate = u32(drwav.get_sampleRate(wav))
+            sample_rate = u32(drwav.get_sampleRate(wav))
             state.channels = u32(drwav.get_channels(wav))
             state.total_pcm = i64(drwav.get_totalPCMFrameCount(wav))
         } else {
@@ -159,8 +156,8 @@ open :: proc(path: string, gapless := false) -> bool {
         }
     }
 
-    if state.sample_rate != prev_sample_rate {
-        init_wasapi(state.sample_rate)
+    if sample_rate != prev_sample_rate {
+        init_wasapi(sample_rate)
     } else if gapless == false {
         reset()
     }
@@ -276,10 +273,9 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
         callback(samples)
     }
 
-    current_vol := muted ? f32(0) : (volume * volume) * 3
+    current_vol := muted ? 0 : (volume * volume)
     for &sample in samples {
-        sample[0] *= current_vol
-        sample[1] *= current_vol
+        sample *= current_vol
     }
 
     state.render_client->ReleaseBuffer(u32(frames_read), 0)
@@ -289,7 +285,7 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
 
 seek :: proc(position: f32) {
     if state.decoder == nil do return
-    target_pcm := i64(position * f32(state.sample_rate))
+    target_pcm := i64(position * f32(sample_rate))
     target_pcm = clamp(target_pcm, 0, state.total_pcm - 1)
 
     switch d in state.decoder {
@@ -324,16 +320,13 @@ position :: proc() -> f32 {
     case:
         return 0
     }
-    return f32(current_pcm) / f32(state.sample_rate)
+
+    return f32(current_pcm) / f32(sample_rate)
 }
 
 duration :: proc() -> f32 {
     if state.decoder == nil do return 0
-    return f32(state.total_pcm) / f32(state.sample_rate)
-}
-
-sample_rate :: proc() -> u32 {
-    return state.sample_rate
+    return f32(state.total_pcm) / f32(sample_rate)
 }
 
 pause :: proc() {

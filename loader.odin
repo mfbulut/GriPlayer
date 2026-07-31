@@ -79,15 +79,7 @@ loading_finished: bool
 polling_finished: bool
 
 loader_start :: proc() {
-	if dir, dir_err := os.user_data_dir(context.temp_allocator); dir_err == nil {
-		if app_dir, app_err := os.join_path({dir, "GriPlayer"}, context.temp_allocator); app_err == nil {
-			if volume_path, vol_err := os.join_path({app_dir, "volume.bin"}, context.temp_allocator); vol_err == nil {
-				if data, err := os.read_entire_file(volume_path, context.temp_allocator); err == nil {
-					audio.volume = (cast(^f32)raw_data(data))^
-				}
-			}
-		}
-	}
+	load_settings()
 
 	append(&playlists, Playlist{
 		name = "Liked",
@@ -391,6 +383,48 @@ record_listen :: proc(song: ^Music) {
 	for &playlist in playlists do playlist_sort(&playlist)
 }
 
+Audio_Settings :: struct {
+	volume:     f32,
+	pregain_db: f32,
+	band_gains: [10]f32,
+}
+
+save_settings :: proc() -> os.Error {
+	dir := os.user_data_dir(context.temp_allocator) or_return
+	app_dir := os.join_path({dir, "GriPlayer"}, context.temp_allocator) or_return
+	os.make_directory(app_dir) or_return
+	settings_path := os.join_path({app_dir, "volume.bin"}, context.temp_allocator) or_return
+
+	settings := Audio_Settings{
+		volume = audio.volume,
+		pregain_db = audio.pregain_db,
+	}
+
+	for i in 0..<10 {
+		settings.band_gains[i] = audio.eq_bands[i].gain_db
+	}
+
+	os.write_entire_file(settings_path, slice.bytes_from_ptr(&settings, size_of(Audio_Settings))) or_return
+}
+
+load_settings :: proc() -> os.Error {
+	dir := os.user_data_dir(context.temp_allocator) or_return
+	app_dir := os.join_path({dir, "GriPlayer"}, context.temp_allocator) or_return
+	settings_path := os.join_path({app_dir, "volume.bin"}, context.temp_allocator) or_return
+
+	data := os.read_entire_file(settings_path, context.temp_allocator) or_return
+
+	if len(data) == size_of(Audio_Settings) {
+		settings := (cast(^Audio_Settings)raw_data(data))^
+		audio.volume = settings.volume
+		audio.pregain_db = settings.pregain_db
+		for i in 0..<10 {
+			audio.eq_bands[i].gain_db = settings.band_gains[i]
+		}
+		audio.eq_recalculate_all()
+	}
+}
+
 cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
 	dir := os.user_data_dir(context.temp_allocator) or_return
 	path := os.join_path({dir, "GriPlayer", "cache.cbor"}, context.temp_allocator) or_return
@@ -411,8 +445,7 @@ cache_save :: proc() -> os.Error {
 	os.make_directory(app_dir)
 	path := os.join_path({app_dir, "cache.cbor"}, context.allocator) or_return
 
-	volume_path := os.join_path({app_dir, "volume.bin"}, context.allocator) or_return
-	os.write_entire_file(volume_path, slice.bytes_from_ptr(&audio.volume, 4)) or_return
+	save_settings()
 
 	songs := make(map[string]Music, 1024)
 

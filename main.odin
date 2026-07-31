@@ -494,10 +494,17 @@ frame :: proc() {
 }
 
 draw_equalizer :: proc() {
-	if begin("Equalizer", bg = COLOR_SURFACE, pad = 16, gap = 16) {
-		layout_row({-1, 56}, 32, gap = 12)
+	if begin("Equalizer", bg = COLOR_SURFACE, pad = 36, gap = 12) {
+		layout_row({64, -1, 64, 56}, 28)
+		label("Pre-gain", 12)
 
-		label("Equalizer")
+		pregain_res, _ := slider(get_id("pregain"), &audio.pregain_db, -12, 12)
+		if .HOVER in pregain_res && fx.mouse_scroll().y != 0 {
+			audio.pregain_db = clamp(audio.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
+		}
+
+		pregain_text := audio.pregain_db > 0 ? fmt.tprintf("+%.1f dB", audio.pregain_db) : (audio.pregain_db < 0 ? fmt.tprintf("%.1f dB", audio.pregain_db) : "0.0 dB")
+		label(pregain_text, 12)
 
 		if .SUBMIT in button("Reset", 12) {
 			audio.eq_reset()
@@ -512,20 +519,21 @@ draw_equalizer :: proc() {
 			{canvas.size.x, canvas.size.y - margin * 2},
 		}
 
-		col_w := canvas.size.x / 10.0
+		col_w := canvas.size.x / 9.0
 
 		nodes: [10]fx.Vec2
 		gains: [10]f32
 		active_col := -1
 
 		for i in 0..<10 {
-			nodes[i].x = canvas.pos.x + (f32(i) + 0.5) * col_w
+			nodes[i].x = canvas.pos.x + (f32(i)) * col_w
 			gains[i] = audio.eq_get_gain(i)
 
 			col_rect := fx.Rect{
-				{canvas.pos.x + f32(i) * col_w, canvas.pos.y},
+				{canvas.pos.x + (f32(i) - 0.5) * col_w, canvas.pos.y},
 				{col_w, canvas.size.y},
 			}
+
 			col_id := get_id(fmt.tprintf("eq_col_%d", i))
 			res := update_control(col_id, col_rect)
 
