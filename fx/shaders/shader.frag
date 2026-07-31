@@ -49,14 +49,12 @@ void main() {
         tex_color = vec4(1.0, 1.0, 1.0, opacity);
     }
 
-    if (in_kind == KIND_RECT || (in_kind == KIND_TEX2D && in_radius > 0.0)) {
-        if (in_radius > 0.0) {
-            float safe_radius = min(in_radius, min(in_half_size.x, in_half_size.y));
-            float dist = rect_sdf(in_sdf_pos, in_half_size, safe_radius);
-            float aa = fwidth(dist);
-            float feather = aa * 0.5;
-            alpha = 1.0 - smoothstep(-feather, feather, dist);
-        }
+    if (in_kind == KIND_RECT || in_kind == KIND_TEX2D) {
+        float safe_radius = min(in_radius, min(in_half_size.x, in_half_size.y));
+        float dist = rect_sdf(in_sdf_pos, in_half_size, safe_radius);
+        float aa = fwidth(dist);
+        float feather = aa * 0.5;
+        alpha = 1.0 - smoothstep(-feather, feather, dist);
     }
 
     out_color = in_color * tex_color;

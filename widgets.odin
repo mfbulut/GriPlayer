@@ -30,6 +30,7 @@ Icon :: enum {
 	Time_Descending,
 	Date_Ascending,
 	Date_Descending,
+	Equalizer,
 }
 
 sort_icons := [2][Playlist_Sort]Icon{

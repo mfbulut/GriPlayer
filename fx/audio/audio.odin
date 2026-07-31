@@ -40,6 +40,7 @@ initialize :: proc() {
     windows.CoCreateInstance(wasapi.CLSID_MMDeviceEnumerator, nil, windows.CLSCTX_INPROC_SERVER, wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
     enumerator->GetDefaultAudioEndpoint(.Render, .Console, &state.device)
     init_wasapi(48000)
+    eq_init()
 }
 
 init_wasapi :: proc(sample_rate: u32) {
@@ -76,6 +77,7 @@ init_wasapi :: proc(sample_rate: u32) {
     state.client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&state.render_client)
     state.client->GetBufferSize(&state.buffer_size)
     state.sample_rate = sample_rate
+    eq_recalculate_all()
 }
 
 open :: proc(path: string, gapless := false) -> bool {
@@ -267,6 +269,8 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     }
 
     samples := slice.from_ptr(cast(^[2]f32)buffer, int(frames_read))
+
+    eq_process(samples)
 
     if callback != nil {
         callback(samples)

@@ -7,7 +7,7 @@ Instance :: struct #align(16) {
 	src:    Rect,      // u0, v0, u1, v1
 	color:  [4]Color,  // TL, TR, BL, BR
 	radius: f32,
-	kind:   enum u32 { Rect, Texture, MSDF },
+	kind:   enum u32 { Rect, Texture, MSDF, Quad },
 	tex_idx: u32,
 }
 
@@ -130,7 +130,17 @@ draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 			color  = color,
 			radius = radius,
 			kind   = .Rect,
-			tex_idx = 0,
+		},
+	)
+}
+
+draw_quad :: proc(p0, p1, p2, p3: Vec2, color: [4]Color) {
+	append(&instances,
+		Instance{
+			dest    = {p0, p1},
+			src     = {p2, p3},
+			color   = color,
+			kind    = .Quad,
 		},
 	)
 }

@@ -45,14 +45,17 @@ void main() {
     );
 
     vec2 half_size = (inst.dst.zw - inst.dst.xy) * 0.5;
-    vec2 center = inst.dst.xy + half_size;
+    vec2 local = corner * 2.0 - 1.0;
 
-    vec2 local = corner * 2.0 - 1.0;  // -1 to +1
-    vec2 pixel_pos = local * half_size + center;
+    vec2 pixel_pos;
+    if (inst.kind == 3u) {
+        pixel_pos = (vid == 0u) ? inst.dst.xy : ((vid == 1u) ? inst.dst.zw : ((vid == 2u) ? inst.src.xy : inst.src.zw));
+    } else {
+        pixel_pos = mix(inst.dst.xy, inst.dst.zw, corner);
+    }
 
     gl_Position = vec4(
-        pixel_pos.x / screen_size.x * 2.0 - 1.0,
-        pixel_pos.y / screen_size.y * 2.0 - 1.0,
+        pixel_pos / screen_size * 2.0 - 1.0,
         0.0, 1.0
     );
 

@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math/linalg"
 import "core:time"
 import "core:time/timezone"
 import "core:strings"
@@ -11,7 +12,15 @@ import "fx/audio"
 import "fx/smtc"
 
 utc_offset: i64
-queue_active := false
+
+Player_Panel :: enum {
+	Lyrics,
+	Queue,
+	Equalizer,
+}
+
+player_panel: Player_Panel
+
 lyrics_synced := true
 selected_playlist := 0
 scrub_time := f32(-1)
@@ -230,7 +239,7 @@ frame :: proc() {
 						draw_cover(cover_region, layout_next(), radius = 8)
 
 						if begin("NowPlayingInfo", pad = 8, gap = 8) {
-							layout_row({-1, 32}, 32)
+							layout_row({-1}, 32)
 							title_bounds := layout_next()
 							fx.draw_text_faded(
 								player.music.title,
@@ -238,10 +247,6 @@ frame :: proc() {
 								27,
 								COLOR_TEXT,
 							)
-
-							if .SUBMIT in icon_button("queue_toggle", .Queue, active = queue_active) {
-								queue_active = !queue_active
-							}
 
 							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 16).x : 0
 							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 16).x : 0
@@ -348,7 +353,8 @@ frame :: proc() {
 						)
 					}
 
-					layout_row({-1, 36, 36, 36, 36, 36, -1}, 36)
+					layout_row({36, -1, 36, 36, 36, 36, 36, -1, 36}, 36)
+					layout_next()
 					layout_next()
 
 					if .SUBMIT in
@@ -375,15 +381,29 @@ frame :: proc() {
 					}
 
 					layout_next()
+
+					cycle_icon := Icon.Note
+					#partial switch player_panel {
+					case .Lyrics:    cycle_icon = .Note
+					case .Queue:     cycle_icon = .Queue
+					case .Equalizer: cycle_icon = .Equalizer
+					}
+
+					if .SUBMIT in icon_button("panel_cycle", cycle_icon, radius = 999) {
+						player_panel = Player_Panel((int(player_panel) + 1) % 3)
+					}
 				}
 
 				layout_row({-1}, -1)
 
 				active, found := current_lyric()
 
-				if queue_active {
+				switch player_panel {
+				case .Queue:
 					draw_queue()
-				} else {
+				case .Equalizer:
+					draw_equalizer()
+				case .Lyrics:
 					lyrics_marker := f32(-1)
 					if player.music != nil && len(player.music.lyrics) > 0 {
 						if found do lyrics_marker = (f32(active) + 0.5) / f32(len(player.music.lyrics))
@@ -468,6 +488,138 @@ frame :: proc() {
 
 	draw_context_menu()
 	free_all(context.temp_allocator)
+}
+
+draw_equalizer :: proc() {
+	if begin("Equalizer", bg = COLOR_SURFACE, pad = 16, gap = 8) {
+		layout_row({-1, 56, 56}, 28, gap = 6)
+		label("Equalizer", 15)
+
+		eq_btn_label := audio.eq_enabled ? "ON" : "OFF"
+		if .SUBMIT in button(eq_btn_label, 12, active = audio.eq_enabled) {
+			audio.eq_enabled = !audio.eq_enabled
+		}
+
+		if .SUBMIT in button("Reset", 12) {
+			audio.eq_reset()
+		}
+
+		layout_row({-1}, -1)
+		canvas := layout_next()
+
+		top_margin := f32(20)
+		bot_margin := f32(20)
+		graph_y    := canvas.pos.y + top_margin
+		graph_h    := max(canvas.size.y - top_margin - bot_margin, 10)
+		bottom_y   := graph_y + graph_h
+		zero_y     := graph_y + graph_h * 0.5
+		col_w      := canvas.size.x / 10.0
+
+		node_x: [10]f32
+		node_y: [10]f32
+		gains:  [10]f32
+		active_col := -1
+
+		for i in 0..<10 {
+			node_x[i] = canvas.pos.x + (f32(i) + 0.5) * col_w
+			gains[i] = audio.eq_get_gain(i)
+
+			col_rect := fx.Rect{
+				{canvas.pos.x + f32(i) * col_w, canvas.pos.y},
+				{col_w, canvas.size.y},
+			}
+			col_id := get_id(fmt.tprintf("eq_col_%d", i))
+			res := update_control(col_id, col_rect)
+
+			if ctx.focus_id == col_id && fx.key_is_down(.Mouse_Left) {
+				new_v := 12.0 - (fx.mouse_pos().y - graph_y) * 24.0 / max(graph_h, 1)
+				new_v = clamp(new_v, -12.0, 12.0)
+				audio.eq_set_gain(i, new_v)
+				gains[i] = new_v
+			}
+
+			if .HOVER in res && fx.mouse_scroll().y != 0 {
+				new_v := clamp(gains[i] + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
+				audio.eq_set_gain(i, new_v)
+				gains[i] = new_v
+			}
+
+			if .HOVER in res || .ACTIVE in res || ctx.focus_id == col_id {
+				active_col = i
+				fx.set_cursor(.Hand)
+			}
+
+			ratio := clamp((gains[i] - (-12.0)) / 24.0, 0.0, 1.0)
+			node_y[i] = graph_y + (1.0 - ratio) * graph_h
+		}
+
+		fx.draw_rect({{canvas.pos.x, zero_y - 0.5}, {canvas.size.x, 1}}, fx.color_opacity(COLOR_BORDER, 0.4))
+
+		for i in 0..<10 {
+			is_act := i == active_col
+			guide_color := fx.color_opacity(COLOR_BORDER, is_act ? 0.6 : 0.2)
+			fx.draw_rect({{node_x[i] - 1, graph_y}, {2, graph_h}}, guide_color)
+		}
+
+		top_grad := fx.color_opacity(COLOR_ACCENT, 0.30)
+		bot_grad := fx.color_opacity(COLOR_ACCENT, 0.01)
+		prev_pos := fx.Vec2{node_x[0], node_y[0]}
+
+		steps_per_seg := 8
+
+		for seg in 0..<9 {
+			p0_y := node_y[max(seg - 1, 0)]
+			p1_y := node_y[seg]
+			p2_y := node_y[seg + 1]
+			p3_y := node_y[min(seg + 2, 9)]
+
+			p0_x := node_x[max(seg - 1, 0)]
+			p1_x := node_x[seg]
+			p2_x := node_x[seg + 1]
+			p3_x := node_x[min(seg + 2, 9)]
+
+			for step in 1..=steps_per_seg {
+				t := f32(step) / f32(steps_per_seg)
+				cur_pos := linalg.catmull_rom(fx.Vec2{p0_x, p0_y}, fx.Vec2{p1_x, p1_y}, fx.Vec2{p2_x, p2_y}, fx.Vec2{p3_x, p3_y}, t)
+
+				p0_fill := fx.Vec2{prev_pos.x, prev_pos.y}
+				p1_fill := fx.Vec2{cur_pos.x, cur_pos.y}
+				p2_fill := fx.Vec2{prev_pos.x, bottom_y}
+				p3_fill := fx.Vec2{cur_pos.x, bottom_y}
+				fx.draw_quad(p0_fill, p1_fill, p2_fill, p3_fill, {top_grad, top_grad, bot_grad, bot_grad})
+
+				p0_line := fx.Vec2{prev_pos.x, prev_pos.y - 1.25}
+				p1_line := fx.Vec2{cur_pos.x, cur_pos.y - 1.25}
+				p2_line := fx.Vec2{prev_pos.x, prev_pos.y + 1.25}
+				p3_line := fx.Vec2{cur_pos.x, cur_pos.y + 1.25}
+				fx.draw_quad(p0_line, p1_line, p2_line, p3_line, COLOR_ACCENT)
+
+				prev_pos = cur_pos
+			}
+		}
+
+		labels := [10]string{"31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"}
+
+		for i in 0..<10 {
+			is_act := i == active_col
+			pos := fx.Vec2{node_x[i], node_y[i]}
+
+			if is_act {
+				fx.draw_circle(pos, 7.5, fx.color_opacity(COLOR_ACCENT, 0.45))
+			}
+
+			fx.draw_circle(pos, 4.5, COLOR_ACCENT)
+			fx.draw_circle(pos, 2.0, COLOR_TEXT)
+
+			gain_text := gains[i] > 0 ? fmt.tprintf("+%.1f", gains[i]) : (gains[i] < 0 ? fmt.tprintf("%.1f", gains[i]) : "0")
+			gain_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y + 2}, {col_w, 16}}
+			gain_color := is_act ? COLOR_TEXT : COLOR_MUTED
+			fx.draw_text_rect(gain_text, gain_rect, 10, gain_color, true)
+
+			label_rect := fx.Rect{{node_x[i] - col_w * 0.5, bottom_y + 2}, {col_w, 16}}
+			fx.draw_text_rect(labels[i], label_rect, 10, COLOR_MUTED, true)
+		}
+	}
 }
 
 draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
