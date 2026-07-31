@@ -311,6 +311,10 @@ frame :: proc() {
 
 					prog_res, prog_bounds := slider(get_id("progress"), &position, 0, max(duration, 1), preview = true)
 
+					if .HOVER in prog_res && fx.mouse_scroll().y != 0 {
+						player_seek(max(audio.position() + fx.mouse_scroll().y * 5, 0))
+					}
+
 					if .CHANGE in prog_res {
 						scrub_time = position
 						lyrics_synced = true

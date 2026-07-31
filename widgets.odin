@@ -275,6 +275,8 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 		base := body
 		base.pos[1-i] += base.size[1-i]
 		base.size[1-i] = 4
+		base.pos[i] += 8
+		base.size[i] = max(0, base.size[i] - 16)
 
 		thumb := base
 		thumb.size[i] = clamp(base.size[i] * body.size[i] / cs[i], 30, base.size[i])
