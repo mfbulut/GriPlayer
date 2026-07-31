@@ -57,11 +57,11 @@ draw_queue :: proc() {
 		// Explicit Queue
 		for song, i in player.queue {
 			if queue_drag.song != nil && queue_drag.target_arr == &player.queue && queue_drag.target_index == i {
-				layout_row({-1}, 56)
+				layout_row({-1}, 48)
 				layout_next()
 			}
 
-			layout_row({-1}, 56)
+			layout_row({-1}, 48)
 			bounds := layout_next()
 
 			row_id := get_id(fmt.tprintf("queue_%d", i))
@@ -72,7 +72,7 @@ draw_queue :: proc() {
 		}
 
 		if queue_drag.song != nil && queue_drag.target_arr == &player.queue && queue_drag.target_index == len(player.queue) {
-			layout_row({-1}, 56)
+			layout_row({-1}, 48)
 			layout_next()
 		}
 
@@ -102,11 +102,11 @@ draw_queue :: proc() {
 			song := player.songs[i]
 
 			if queue_drag.song != nil && queue_drag.target_arr == &player.songs && queue_drag.target_index == i {
-				layout_row({-1}, 56)
+				layout_row({-1}, 48)
 				layout_next()
 			}
 
-			layout_row({-1}, 56)
+			layout_row({-1}, 48)
 			bounds := layout_next()
 
 			row_id := get_id(fmt.tprintf("playlist_%d", i))
@@ -117,7 +117,7 @@ draw_queue :: proc() {
 		}
 
 		if queue_drag.song != nil && queue_drag.target_arr == &player.songs && queue_drag.target_index == len(player.songs) {
-			layout_row({-1}, 56)
+			layout_row({-1}, 48)
 			layout_next()
 		}
 	}
@@ -125,7 +125,7 @@ draw_queue :: proc() {
 	if queue_drag.song != nil {
 		overlay_bounds := fx.Rect {
 			{queue_drag.row_x, fx.mouse_pos().y - queue_drag.grab_offset},
-			{queue_drag.row_w, 56}
+			{queue_drag.row_w, 48}
 		}
 
 		fx.draw_rect(fx.rect_expand(overlay_bounds, 1), COLOR_ACCENT, 7)
@@ -140,7 +140,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 
 	pad := f32(6)
 	handle_bounds := fx.Rect{bounds.pos, {38, bounds.size.y}}
-	remove_bounds := fx.Rect{{bounds.pos.x + bounds.size.x - 36 - pad, bounds.pos.y + 10}, {36, 36}}
+	remove_bounds := fx.Rect{{bounds.pos.x + bounds.size.x - 36 - pad, bounds.pos.y + (bounds.size.y - 36) * 0.5}, {36, 36}}
 	body_bounds   := fx.Rect{
 		{handle_bounds.pos.x + handle_bounds.size.x, bounds.pos.y},
 		{max(remove_bounds.pos.x - handle_bounds.pos.x - handle_bounds.size.x, 0), bounds.size.y}
@@ -210,24 +210,24 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 		}
 	}
 
-	cover_size := f32(40)
+	cover_size := f32(36)
 	cover_bounds := fx.Rect {
 		{handle_bounds.pos.x + handle_bounds.size.x + pad, bounds.pos.y + (bounds.size.y - cover_size) * 0.5},
 		{cover_size, cover_size},
 	}
 
-	cover_bg := .ACTIVE in res ? fx.Color{72, 80, 94, 255} : COLOR_BORDER
+	cover_bg := .ACTIVE in res ? ACTIVE_COVER_BG : COLOR_BORDER
 	draw_cover(song.thumbnail, cover_bounds, cover_bg)
 
 	text_x := cover_bounds.pos.x + cover_bounds.size.x + 10
 	text_w := max(remove_bounds.pos.x - text_x - pad, 0)
 
-	title_bounds := fx.Rect{{text_x, bounds.pos.y + 10}, {text_w, 18}}
+	title_bounds := fx.Rect{{text_x, bounds.pos.y + 6}, {text_w, 18}}
 	fx.draw_text_faded(song.title, title_bounds, 14, COLOR_TEXT)
 
 	secondary := song.artist
 	if secondary == "" do secondary = song.album
-	artist_bounds := fx.Rect{{text_x, bounds.pos.y + 28}, {text_w, 15}}
+	artist_bounds := fx.Rect{{text_x, bounds.pos.y + 24}, {text_w, 15}}
 	fx.draw_text_faded(secondary, artist_bounds, 11, COLOR_MUTED)
 
 	cross_color := ui_color(LINK_COLOR, remove_res)
@@ -245,7 +245,7 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 	if queue_drag.song == nil do return
 
 	content_top := layout.body.pos.y
-	drag_center := fx.mouse_pos().y - queue_drag.grab_offset + 56.0 * 0.5
+	drag_center := fx.mouse_pos().y - queue_drag.grab_offset + 48.0 * 0.5
 
 	best_distance := f32(1e30)
 	best_arr := queue_drag.target_arr
@@ -253,7 +253,7 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 
 	// Queue slots
 	for i in 0..=len(player.queue) {
-		center := content_top + 56.0 * 0.5 + f32(i) * 56.0
+		center := content_top + 48.0 * 0.5 + f32(i) * 48.0
 		if distance := abs(drag_center - center); distance < best_distance {
 			best_distance, best_arr, best_index = distance, &player.queue, i
 		}
@@ -263,10 +263,10 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 	playlist_start := clamp(player.cursor + 1, 0, len(player.songs))
 	playlist_count := len(player.songs) - playlist_start
 
-	playlist_top := content_top + f32(len(player.queue)) * 56.0 + 42.0
+	playlist_top := content_top + f32(len(player.queue)) * 48.0 + 42.0
 
 	for i in 0..=playlist_count {
-		center := playlist_top + 56.0 * 0.5 + f32(i) * 56.0
+		center := playlist_top + 48.0 * 0.5 + f32(i) * 48.0
 		if distance := abs(drag_center - center); distance < best_distance {
 			best_distance, best_arr, best_index = distance, &player.songs, playlist_start + i
 		}

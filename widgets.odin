@@ -70,7 +70,9 @@ COLOR_TEXT          :: fx.Color{240, 245, 255, 255}
 COLOR_MUTED         :: fx.Color{150, 160, 175, 255}
 COLOR_ACCENT        :: fx.Color{30, 100, 160, 255}
 
-// TODO Fix colors
+ACTIVE_COVER_BG      :: fx.Color{72, 80, 94, 255}
+SLIDER_PREVIEW_COLOR :: fx.Color{100, 110, 120, 255}
+
 LINK_COLOR           := UI_Color{COLOR_MUTED, COLOR_TEXT, COLOR_TEXT}
 
 BUTTON_COLOR         := UI_Color{fx.Color{40, 44, 52, 255}, fx.Color{48, 52, 60, 255}, fx.Color{60, 66, 76, 255}}
@@ -250,7 +252,7 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 		if hover_ratio > ratio {
 			preview_track.pos.x += track.size.x * ratio
 			preview_track.size.x = track.size.x * (hover_ratio - ratio)
-			fx.draw_rect(preview_track, fx.Color{100, 110, 120, 255}, 2.0)
+			fx.draw_rect(preview_track, SLIDER_PREVIEW_COLOR, 2.0)
 		}
 	}
 

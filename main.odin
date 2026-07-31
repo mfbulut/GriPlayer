@@ -189,7 +189,7 @@ frame :: proc() {
 
 						if begin(list_id, scroll = true, bg = COLOR_SURFACE, pad = 8, gap = 4, marker = active_marker) {
 							for song, i in songs {
-								layout_row({-1}, 50)
+								layout_row({-1}, 48)
 								if .SUBMIT in song_row(song, i, player.music == song, search.active ? .Title : playlist.sort) {
 									player_start_playlist(songs, i)
 								}
@@ -557,17 +557,17 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 			right_width = fx.measure_text(right_text, 12).x
 		}
 
-		layout_row({40, -1, right_width}, -1)
+		layout_row({38, -1, right_width}, -1)
 
-		cover_bg := is_active || .ACTIVE in res ? fx.Color{72, 80, 94, 255} : COLOR_BORDER
+		cover_bg := is_active || .ACTIVE in res ? ACTIVE_COVER_BG : COLOR_BORDER
 		draw_cover(song.thumbnail, layout_next(), cover_bg)
 
 		text_bounds := layout_next()
-		title_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 7}, {text_bounds.size.x, 18}}
+		title_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 6}, {text_bounds.size.x, 18}}
 		fx.draw_text_faded(song.title, title_bounds, 14, COLOR_TEXT)
 
 		secondary := song.artist
-		artist_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 25}, {text_bounds.size.x, 15}}
+		artist_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 24}, {text_bounds.size.x, 15}}
 		fx.draw_text_faded(secondary, artist_bounds, 11, COLOR_MUTED)
 
 		right_bounds := layout_next()
