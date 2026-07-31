@@ -15,23 +15,21 @@ Scroll_State :: struct {
 }
 
 Layout :: struct {
-	id:                  Id,
-	rect, body:          fx.Rect,
-	position, size, max: fx.Vec2,
-	widths:              [32]f32,
-	items_count:         int,
-	item_index:          int,
-	next_row:            f32,
-	gap:                 f32,
-	bg_color:            fx.Color,
+	id:             Id,
+	rect, body:     fx.Rect,
+	pos, size, max: fx.Vec2,
+	widths:         [32]f32,
+	items_count:    int,
+	item_index:     int,
+	next_row:       f32,
+	gap:            f32,
+	bg_color:       fx.Color,
 }
 
 ctx : struct {
-	frame: int,
-	hover_id, focus_id, scroll_id: Id,
-	scroll_states:      map[Id]Scroll_State,
-	layout_stack:    [dynamic]Layout,
-	clip_stack:      [dynamic]fx.Rect,
+	hover_id, focus_id: Id,
+	scroll_states: map[Id]Scroll_State,
+	layout_stack:  [dynamic]Layout,
 }
 
 @(deferred_in=end)
@@ -61,13 +59,13 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scro
 
 		layout_body := fx.rect_shrink(body, pad)
 		layout.body = fx.Rect{layout_body.pos - state.scroll, layout_body.size}
-		push_clip_rect(body)
+		fx.set_scissor(body)
 	} else {
 		layout.body = fx.rect_shrink(body, pad)
 	}
 
 	append(&ctx.layout_stack, layout)
-	
+
 	return true
 }
 
@@ -101,21 +99,10 @@ end :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll
 			}
 		}
 
-		pop_clip_rect()
+		fx.reset_scissor()
 	}
 
 	pop(&ctx.layout_stack)
-}
-
-update_ui :: proc() {
-	if ctx.scroll_id != 0 {
-		state := get_scroll_state(ctx.scroll_id)
-		state.scroll_target.x += fx.mouse_scroll().x * 60
-		state.scroll_target.y += fx.mouse_scroll().y * -60
-	}
-
-	ctx.scroll_id = 0
-	ctx.frame += 1
 }
 
 get_id :: proc(str: string) -> Id {
@@ -126,21 +113,6 @@ get_id :: proc(str: string) -> Id {
 
 child_id :: proc(id: Id, str: string) -> Id {
 	return Id(hash.fnv64a(transmute([]byte)str, u64(id)))
-}
-
-push_clip_rect :: proc(rect: fx.Rect) {
-	append(&ctx.clip_stack, rect)
-	fx.set_scissor(get_clip_rect())
-}
-
-pop_clip_rect :: proc() {
-	pop(&ctx.clip_stack)
-	fx.set_scissor(get_clip_rect())
-}
-
-get_clip_rect :: proc() -> fx.Rect {
-	if len(ctx.clip_stack) == 0 do return fx.Rect{{0, 0}, {99999, 99999}}
-	return ctx.clip_stack[len(ctx.clip_stack) - 1]
 }
 
 get_scroll_state :: proc(id: Id) -> ^Scroll_State {
@@ -160,7 +132,7 @@ layout_row :: proc(widths: []f32, height: f32 = 0, gap: f32 = -1) {
 
 	if len(widths) > 0 do copy(layout.widths[:], widths[:])
 	layout.items_count = len(widths)
-	layout.position = fx.Vec2{0, layout.next_row}
+	layout.pos = fx.Vec2{0, layout.next_row}
 	layout.size.y = height
 	layout.item_index = 0
 
@@ -189,18 +161,18 @@ layout_next :: proc() -> (res: fx.Rect) {
 	layout := get_layout()
 
 	if layout.item_index == layout.items_count {
-		layout.position = fx.Vec2{0, layout.next_row}
+		layout.pos = fx.Vec2{0, layout.next_row}
 		layout.item_index = 0
 	}
 
-	res.pos = layout.position
+	res.pos = layout.pos
 	res.size.x = layout.items_count > 0 ? layout.widths[layout.item_index] : layout.size.x
 	res.size.y = layout.size.y
 	if res.size.x < 0 { res.size.x += layout.body.size.x - res.pos.x + 1 }
 	if res.size.y < 0 { res.size.y += layout.body.size.y - res.pos.y + 1 }
 
 	layout.item_index += 1
-	layout.position.x += res.size.x + layout.gap
+	layout.pos.x += res.size.x + layout.gap
 	layout.next_row = max(layout.next_row, res.pos.y + res.size.y + layout.gap)
 
 	res.pos += layout.body.pos

@@ -96,7 +96,8 @@ mouse_over :: proc(rect: fx.Rect) -> bool {
 			return false
 		}
 	}
-	return fx.point_in_rect(rect, fx.mouse_pos()) && fx.point_in_rect(get_clip_rect(), fx.mouse_pos())
+	
+	return fx.point_in_rect(rect, fx.mouse_pos()) && fx.rect_visible({fx.mouse_pos(), {1, 1}})
 }
 
 update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
@@ -151,7 +152,7 @@ link :: proc(id: Id, text: string, font_size: f32 = 14) -> (res: Result_Set) {
 
 	res = update_control(id, bounds)
 
-	color := animate(id, ui_color(LINK_COLOR, res))
+	color := ui_color(LINK_COLOR, res)
 	fx.draw_text_faded(text, bounds, font_size, color)
 
 	amount := animate(child_id(id, "amount"), .HOVER in res ? f32(1) : f32(0))
@@ -233,12 +234,12 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 		size = {base.size.x, 3.5},
 	}
 
-	track_color := animate(child_id(id, "track_color"), ui_color(SCROLLBAR_COLOR, res))
+	track_color := ui_color(SCROLLBAR_COLOR, res)
 	fx.draw_rect(track, track_color, 2.0)
 
 	fill_track := track
 	fill_track.size.x = track.size.x * ratio
-	fill_color := animate(child_id(id, "fill_color"), ui_color(fill, res))
+	fill_color := ui_color(fill, res)
 	fx.draw_rect(fill_track, fill_color, 2.0)
 
 	if preview && .HOVER in res && !(.ACTIVE in res) {
@@ -251,8 +252,7 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 		}
 	}
 
-	thumb_size_target: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
-	thumb_size := animate(child_id(id, "thumb_size"), thumb_size_target)
+	thumb_size: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
 	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
 	fx.draw_circle(thumb_pos, thumb_size, fill_color)
 
@@ -318,7 +318,8 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 		}
 
 		if mouse_over(body) || mouse_over(base) {
-			ctx.scroll_id = layout_id
+			state.scroll_target.x += fx.mouse_scroll().x * 60
+			state.scroll_target.y += fx.mouse_scroll().y * -60
 		}
 	} else {
 		state.scroll[i] = 0

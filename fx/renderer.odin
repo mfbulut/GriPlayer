@@ -91,6 +91,10 @@ set_scissor :: proc(rect: Rect) {
 	}
 }
 
+reset_scissor :: proc() {
+	set_scissor({{0,0}, window_size()})
+}
+
 flush :: proc() {
 	if len(instances) == 0 do return
 
@@ -110,17 +114,14 @@ flush :: proc() {
 	})
 }
 
-should_draw :: #force_inline proc(rect: Rect, color: [4]Color) -> bool {
+rect_visible :: proc(rect: Rect) -> bool {
 	if rect.size.x <= 0 || rect.size.y <= 0  do return false
-	if color[0].a == 0 && color[1].a == 0 && color[2].a == 0 && color[3].a == 0 do return false
-
 	if !rect_overlaps(rect, scissor) do return false
-
 	return true
 }
 
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
-	if !should_draw(r, color) do return
+	if !rect_visible(r) do return
 
 	append(&instances,
 		Instance{
@@ -140,7 +141,7 @@ draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
 }
 
 draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
-	if !should_draw(dest, tint) do return
+	if !rect_visible(dest) do return
 	if tex.index == 0 do return
 
 	size := cast(Vec2)tex.size
@@ -167,7 +168,7 @@ draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radi
 }
 
 draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
-	if !should_draw(dest, tint) do return
+	if !rect_visible(dest) do return
 	if tex.index == 0 do return
 
 	size := cast(Vec2)tex.size
@@ -204,8 +205,7 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]
 	if text == "" do return
 
 	size := measure_text(text, font_size)
-	if !should_draw({pos, size}, color) do return
-	font := font
+	if !rect_visible({pos, size}) do return
 
 	font_scale := font_size / font.metrics.emSize
 	line_h := font.metrics.lineHeight * font_scale
@@ -257,7 +257,6 @@ draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]
 
 draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast([4]Color)WHITE, center_x := false) {
 	if text == "" do return
-	font := font
 
 	size := measure_text(text, font_size)
 	x := bounds.pos.x
@@ -274,7 +273,7 @@ draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast
 
 draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color) {
 	if text == "" || bounds.size.x <= 0 do return
-	if !should_draw(bounds, {color, color, color, color}) do return
+	if !rect_visible(bounds) do return
 
 	size := measure_text(text, font_size)
 	if size.x <= bounds.size.x {

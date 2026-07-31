@@ -84,7 +84,7 @@ draw_queue :: proc() {
 		local_divider_y := divider_bounds.pos.y - layout.body.pos.y
 		divider_bounds.pos.y = animate(divider_id, local_divider_y) + layout.body.pos.y
 
-		if fx.rect_overlaps(divider_bounds, get_clip_rect()) {
+		if fx.rect_visible(divider_bounds) {
 			text_width := fx.measure_text("Playlist", 11).x + 18
 			center := divider_bounds.pos.x + divider_bounds.size.x * 0.5
 			line_y := divider_bounds.pos.y + divider_bounds.size.y * 0.5
@@ -134,7 +134,7 @@ draw_queue :: proc() {
 }
 
 draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
-	if !fx.rect_overlaps(bounds, get_clip_rect()) && !is_overlay do return
+	if !fx.rect_visible(bounds) && !is_overlay do return
 
 	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, index))
 

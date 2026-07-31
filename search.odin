@@ -213,13 +213,11 @@ draw_search_box :: proc() {
 
 		if badge_width > 0.5 {
 			rect := layout_next()
-			push_clip_rect(rect)
 			fx.draw_rect(rect, COLOR_ACCENT, 6)
 			filter_icon := search.filter_type == .Artist ? Icon.Artist : Icon.Album
 			filter_rect := fx.Rect{{rect.pos.x + 5, rect.pos.y}, {16, rect.size.y}}
 			draw_icon(filter_icon, filter_rect, 16, fx.WHITE)
 			fx.draw_text_faded(search.filter, fx.Rect{{rect.pos.x + 24, rect.pos.y}, {badge_width - 32, rect.size.y}}, 10, fx.WHITE)
-			pop_clip_rect()
 		}
 
 		text_rect := layout_next()
@@ -394,7 +392,7 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 		scroll_x = caret_x - text_bounds.size.x + 10
 	}
 
-	push_clip_rect(text_bounds)
+	fx.set_scissor(text_bounds)
 
 	lo, hi := edit.sorted_selection(&textbox)
 
@@ -444,5 +442,5 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 		}
 	}
 
-	pop_clip_rect()
+	fx.reset_scissor()
 }

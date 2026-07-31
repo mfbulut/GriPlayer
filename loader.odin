@@ -412,7 +412,7 @@ cache_save :: proc() -> os.Error {
 	path := os.join_path({app_dir, "cache.cbor"}, context.allocator) or_return
 
 	volume_path := os.join_path({app_dir, "volume.bin"}, context.allocator) or_return
-	os.write_entire_file(volume_path, slice.bytes_from_ptr(&audio.volume, 1)) or_return
+	os.write_entire_file(volume_path, slice.bytes_from_ptr(&audio.volume, 4)) or_return
 
 	songs := make(map[string]Music, 1024)
 

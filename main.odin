@@ -57,7 +57,6 @@ frame :: proc() {
 	handle_keyboard_input()
 	player_update()
 	animation_update_all()
-	update_ui()
 
 	if player.playing && player.music != nil {
 		player.music.playtime += fx.frame_time()
@@ -427,7 +426,7 @@ frame :: proc() {
 									lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
 								}
 
-								if !fx.rect_overlaps(row, get_clip_rect()) do continue
+								if !fx.rect_visible(row) do continue
 
 								row_id := get_id(fmt.tprintf("lyric_%d", i))
 								hit := update_control(row_id, row)
@@ -470,7 +469,6 @@ frame :: proc() {
 }
 
 draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BORDER, radius := f32(6)) {
-	if !fx.rect_overlaps(bounds, get_clip_rect()) do return
 	if region.texture.index != 0 {
 		size := region.source.size
 		crop := min(size.x, size.y)
@@ -487,7 +485,7 @@ draw_cover :: proc(region: AtlasRegion, bounds: fx.Rect, background := COLOR_BOR
 playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Result_Set) {
 	if begin(playlist.name, pad = 6) {
 		layout := get_layout()
-		if !fx.rect_overlaps(layout.rect, get_clip_rect()) do return {}
+		if !fx.rect_visible(layout.rect) do return {}
 
 		id := get_id(playlist.name)
 		res = update_control(id, layout.rect)
@@ -514,7 +512,7 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .Title) -> (res: Result_Set) {
 	if begin(song.fullpath, pad = 5, gap = 10) {
 		layout := get_layout()
-		if !fx.rect_overlaps(layout.rect, get_clip_rect()) do return {}
+		if !fx.rect_visible(layout.rect) do return {}
 
 		id := get_id(song.fullpath)
 		res = update_control(id, layout.rect)
