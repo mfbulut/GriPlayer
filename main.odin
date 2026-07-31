@@ -515,6 +515,9 @@ draw_equalizer :: proc() {
 		label("Pre-gain", 12)
 
 		pregain_res, _ := slider(get_id("pregain"), &audio.pregain_db, -12, 12)
+		if .SECONDARY in pregain_res {
+			audio.pregain_db = 0
+		}
 		if .HOVER in pregain_res && fx.mouse_scroll().y != 0 {
 			audio.pregain_db = clamp(audio.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
 		}
@@ -558,6 +561,11 @@ draw_equalizer :: proc() {
 				new_v = clamp(new_v, -12.0, 12.0)
 				audio.eq_set_gain(i, new_v)
 				gains[i] = new_v
+			}
+
+			if .SECONDARY in res {
+				audio.eq_set_gain(i, 0.0)
+				gains[i] = 0.0
 			}
 
 			if .HOVER in res && fx.mouse_scroll().y != 0 {
@@ -715,7 +723,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		#partial switch sort {
 		case .Track:
-			right_text = fmt.tprintf("%d", song.track)
+			right_text = fmt.tprintf("#%d", song.track)
 		case .Duration:
 			right_text = format_time(song.duration)
 		case .Playtime:
@@ -723,7 +731,6 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 		case .Last_Listened:
 			if time.to_unix_nanoseconds(song.listen_timestamp) > 0 {
 				local_time := time.Time{ song.listen_timestamp._nsec + utc_offset }
-
 				y1, m1, d1 := time.date(local_time)
 				y2, m2, d2 := time.date(time.now())
 				if y1 == y2 && m1 == m2 && d1 == d2 {
@@ -732,14 +739,15 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				} else {
 					right_text = fmt.tprintf("%02d/%02d", d1, int(m1))
 				}
+			} else {
+				right_text = "—"
 			}
 		case:
-			show_like = true
 			right_width = 36
 		}
 
-		if right_width == 0 {
-			right_width = fx.measure_text(right_text, 12).x
+		if right_text != "" {
+			right_width = fx.measure_text(right_text, 12).x + 2
 		}
 
 		layout_row({38, -1, right_width}, -1)
@@ -757,7 +765,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		right_bounds := layout_next()
 
-		if show_like {
+		if right_text == "" {
 			like_bounds := fx.Rect {
 				{right_bounds.pos.x, right_bounds.pos.y + (right_bounds.size.y - 36) * 0.5},
 				{36, 36},
