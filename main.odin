@@ -491,14 +491,10 @@ frame :: proc() {
 }
 
 draw_equalizer :: proc() {
-	if begin("Equalizer", bg = COLOR_SURFACE, pad = 16, gap = 8) {
-		layout_row({-1, 56, 56}, 28, gap = 6)
-		label("Equalizer", 15)
+	if begin("Equalizer", bg = COLOR_SURFACE, pad = 40, gap = 16) {
+		layout_row({-1, 56}, 32, gap = 12)
 
-		eq_btn_label := audio.eq_enabled ? "ON" : "OFF"
-		if .SUBMIT in button(eq_btn_label, 12, active = audio.eq_enabled) {
-			audio.eq_enabled = !audio.eq_enabled
-		}
+		layout_next()
 
 		if .SUBMIT in button("Reset", 12) {
 			audio.eq_reset()
@@ -507,7 +503,7 @@ draw_equalizer :: proc() {
 		layout_row({-1}, -1)
 		canvas := layout_next()
 
-		top_margin := f32(20)
+		top_margin := f32(40)
 		bot_margin := f32(20)
 		graph_y    := canvas.pos.y + top_margin
 		graph_h    := max(canvas.size.y - top_margin - bot_margin, 10)
@@ -612,12 +608,12 @@ draw_equalizer :: proc() {
 			fx.draw_circle(pos, 2.0, COLOR_TEXT)
 
 			gain_text := gains[i] > 0 ? fmt.tprintf("+%.1f", gains[i]) : (gains[i] < 0 ? fmt.tprintf("%.1f", gains[i]) : "0")
-			gain_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y + 2}, {col_w, 16}}
+			gain_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y}, {col_w, 16}}
 			gain_color := is_act ? COLOR_TEXT : COLOR_MUTED
-			fx.draw_text_rect(gain_text, gain_rect, 10, gain_color, true)
+			fx.draw_text_rect(gain_text, gain_rect, 12, gain_color, true)
 
-			label_rect := fx.Rect{{node_x[i] - col_w * 0.5, bottom_y + 2}, {col_w, 16}}
-			fx.draw_text_rect(labels[i], label_rect, 10, COLOR_MUTED, true)
+			label_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y + canvas.size.y}, {col_w, 16}}
+			fx.draw_text_rect(labels[i], label_rect, 12, COLOR_MUTED, true)
 		}
 	}
 }
