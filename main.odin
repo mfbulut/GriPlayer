@@ -21,7 +21,6 @@ Player_Panel :: enum {
 
 player_panel: Player_Panel
 
-
 selected_playlist := 0
 scrub_time := f32(-1)
 lyrics_synced := true
@@ -60,6 +59,7 @@ main :: proc() {
 
 	fft_init()
 	fx.run(frame)
+	save_settings()
 	cache_save()
 }
 
