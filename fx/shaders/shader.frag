@@ -16,6 +16,7 @@ layout(location = 0) out vec4 out_color;
 #define KIND_RECT  0u
 #define KIND_TEX2D 1u
 #define KIND_MSDF  2u
+#define KIND_QUAD  3u
 
 #define TEXT_THICKNESS 0.6
 
@@ -55,8 +56,15 @@ void main() {
         float aa = fwidth(dist);
         float feather = aa * 0.5;
         alpha = 1.0 - smoothstep(-feather, feather, dist);
+    } else if (in_kind == KIND_QUAD) {
+        float edge_dist = min(in_uv.y, 1.0 - in_uv.y);
+        float aa_width = fwidth(in_uv.y);
+        alpha *= smoothstep(0.0, aa_width * 1.5, edge_dist);
     }
 
     out_color = in_color * tex_color;
     out_color.a *= alpha;
+
+    float noise = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * (2.0 / 255.0);
+    out_color.rgb += noise;
 }

@@ -38,7 +38,7 @@ eq_reset :: proc() {
         eq_bands[i].gain_db = 0
         eq_recalculate_band(i)
     }
-    preamp_db = 0.0
+    preamp_db = 0
 }
 
 eq_recalculate_all :: proc() {
@@ -50,10 +50,8 @@ eq_recalculate_all :: proc() {
 eq_recalculate_band :: proc(i: int) {
     band := &eq_bands[i]
 
-    sr := f32(state.sample_rate)
-
     A := math.pow(10, band.gain_db / 40)
-    omega := 2 * math.PI * band.freq / sr
+    omega := 2 * math.PI * band.freq / f32(state.sample_rate)
     sn := math.sin(omega)
     cs := math.cos(omega)
     alpha := sn / (2 * band.q)

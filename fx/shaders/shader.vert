@@ -50,8 +50,10 @@ void main() {
     vec2 pixel_pos;
     if (inst.kind == 3u) {
         pixel_pos = (vid == 0u) ? inst.dst.xy : ((vid == 1u) ? inst.dst.zw : ((vid == 2u) ? inst.src.xy : inst.src.zw));
+        out_uv = corner;
     } else {
         pixel_pos = mix(inst.dst.xy, inst.dst.zw, corner);
+        out_uv = mix(inst.src.xy, inst.src.zw, corner);
     }
 
     gl_Position = vec4(
@@ -59,7 +61,6 @@ void main() {
         0.0, 1.0
     );
 
-    out_uv = mix(inst.src.xy, inst.src.zw, corner);
     out_color = unpack_color(inst.colors[vid]);
     out_sdf_pos = local * half_size;
     out_half_size = half_size;

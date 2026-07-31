@@ -78,7 +78,7 @@ frame :: proc() {
 
 	fx.clear_window(COLOR_BACKGROUND)
 
-	if fx.window_size().x < 700 {
+	if fx.window_size().x < 800 {
 		if current_tab == .Both {
 			if player.music != nil {
 				current_tab = .Player
@@ -389,8 +389,11 @@ frame :: proc() {
 					case .Equalizer: cycle_icon = .Equalizer
 					}
 
-					if .SUBMIT in icon_button("panel_cycle", cycle_icon, radius = 999) {
+					panel_btn := icon_button("panel_cycle", cycle_icon, radius = 999)
+					if .SUBMIT in panel_btn {
 						player_panel = Player_Panel((int(player_panel) + 1) % 3)
+					}else if .SECONDARY in panel_btn {
+						player_panel = Player_Panel((int(player_panel) - 1) %% 3)
 					}
 				}
 
@@ -491,10 +494,10 @@ frame :: proc() {
 }
 
 draw_equalizer :: proc() {
-	if begin("Equalizer", bg = COLOR_SURFACE, pad = 40, gap = 16) {
+	if begin("Equalizer", bg = COLOR_SURFACE, pad = 16, gap = 16) {
 		layout_row({-1, 56}, 32, gap = 12)
 
-		layout_next()
+		label("Equalizer")
 
 		if .SUBMIT in button("Reset", 12) {
 			audio.eq_reset()
@@ -502,22 +505,21 @@ draw_equalizer :: proc() {
 
 		layout_row({-1}, -1)
 		canvas := layout_next()
+		margin := f32(26)
 
-		top_margin := f32(40)
-		bot_margin := f32(20)
-		graph_y    := canvas.pos.y + top_margin
-		graph_h    := max(canvas.size.y - top_margin - bot_margin, 10)
-		bottom_y   := graph_y + graph_h
-		zero_y     := graph_y + graph_h * 0.5
-		col_w      := canvas.size.x / 10.0
+		graph := fx.Rect{
+			{canvas.pos.x, canvas.pos.y + margin},
+			{canvas.size.x, canvas.size.y - margin * 2},
+		}
 
-		node_x: [10]f32
-		node_y: [10]f32
-		gains:  [10]f32
+		col_w := canvas.size.x / 10.0
+
+		nodes: [10]fx.Vec2
+		gains: [10]f32
 		active_col := -1
 
 		for i in 0..<10 {
-			node_x[i] = canvas.pos.x + (f32(i) + 0.5) * col_w
+			nodes[i].x = canvas.pos.x + (f32(i) + 0.5) * col_w
 			gains[i] = audio.eq_get_gain(i)
 
 			col_rect := fx.Rect{
@@ -528,7 +530,7 @@ draw_equalizer :: proc() {
 			res := update_control(col_id, col_rect)
 
 			if ctx.focus_id == col_id && fx.key_is_down(.Mouse_Left) {
-				new_v := 12.0 - (fx.mouse_pos().y - graph_y) * 24.0 / max(graph_h, 1)
+				new_v := 12.0 - (fx.mouse_pos().y - graph.pos.y) * 24.0 / max(graph.size.y, 1)
 				new_v = clamp(new_v, -12.0, 12.0)
 				audio.eq_set_gain(i, new_v)
 				gains[i] = new_v
@@ -546,37 +548,42 @@ draw_equalizer :: proc() {
 			}
 
 			ratio := clamp((gains[i] - (-12.0)) / 24.0, 0.0, 1.0)
-			node_y[i] = graph_y + (1.0 - ratio) * graph_h
+			nodes[i].y = graph.pos.y + (1.0 - ratio) * graph.size.y
 		}
 
+		zero_y := graph.pos.y + graph.size.y * 0.5
 		fx.draw_rect({{canvas.pos.x, zero_y - 0.5}, {canvas.size.x, 1}}, fx.color_opacity(COLOR_BORDER, 0.4))
 
 		for i in 0..<10 {
 			is_act := i == active_col
 			guide_color := fx.color_opacity(COLOR_BORDER, is_act ? 0.6 : 0.2)
-			fx.draw_rect({{node_x[i] - 1, graph_y}, {2, graph_h}}, guide_color)
+			fx.draw_rect({{nodes[i].x - 1, graph.pos.y}, {2, graph.size.y}}, guide_color)
 		}
 
 		top_grad := fx.color_opacity(COLOR_ACCENT, 0.30)
 		bot_grad := fx.color_opacity(COLOR_ACCENT, 0.01)
-		prev_pos := fx.Vec2{node_x[0], node_y[0]}
+		prev_pos := nodes[0]
+		init_dir := nodes[1] - nodes[0]
+		init_len := linalg.length(init_dir)
+		prev_offset := fx.Vec2{0, 1}
+		if init_len > 0.0001 {
+			prev_offset = fx.Vec2{-init_dir.y / init_len, init_dir.x / init_len}
+		}
 
-		steps_per_seg := 8
+		steps_per_seg := 12
 
 		for seg in 0..<9 {
-			p0_y := node_y[max(seg - 1, 0)]
-			p1_y := node_y[seg]
-			p2_y := node_y[seg + 1]
-			p3_y := node_y[min(seg + 2, 9)]
-
-			p0_x := node_x[max(seg - 1, 0)]
-			p1_x := node_x[seg]
-			p2_x := node_x[seg + 1]
-			p3_x := node_x[min(seg + 2, 9)]
+			p0 := nodes[max(seg - 1, 0)]
+			p1 := nodes[seg]
+			p2 := nodes[seg + 1]
+			p3 := nodes[min(seg + 2, 9)]
 
 			for step in 1..=steps_per_seg {
 				t := f32(step) / f32(steps_per_seg)
-				cur_pos := linalg.catmull_rom(fx.Vec2{p0_x, p0_y}, fx.Vec2{p1_x, p1_y}, fx.Vec2{p2_x, p2_y}, fx.Vec2{p3_x, p3_y}, t)
+				cur_pos := linalg.catmull_rom(fx.Vec2{p0.x, p0.y}, fx.Vec2{p1.x, p1.y}, fx.Vec2{p2.x, p2.y}, fx.Vec2{p3.x, p3.y}, t)
+
+				bottom_y := graph.pos.y + graph.size.y
+				cur_pos.y = clamp(cur_pos.y, graph.pos.y, bottom_y)
 
 				p0_fill := fx.Vec2{prev_pos.x, prev_pos.y}
 				p1_fill := fx.Vec2{cur_pos.x, cur_pos.y}
@@ -584,35 +591,41 @@ draw_equalizer :: proc() {
 				p3_fill := fx.Vec2{cur_pos.x, bottom_y}
 				fx.draw_quad(p0_fill, p1_fill, p2_fill, p3_fill, {top_grad, top_grad, bot_grad, bot_grad})
 
-				p0_line := fx.Vec2{prev_pos.x, prev_pos.y - 1.25}
-				p1_line := fx.Vec2{cur_pos.x, cur_pos.y - 1.25}
-				p2_line := fx.Vec2{prev_pos.x, prev_pos.y + 1.25}
-				p3_line := fx.Vec2{cur_pos.x, cur_pos.y + 1.25}
+				dir := cur_pos - prev_pos
+				dir_len := linalg.length(dir)
+				cur_offset := prev_offset
+				if dir_len > 0.0001 {
+					cur_offset = fx.Vec2{-dir.y / dir_len, dir.x / dir_len}
+				}
+
+				p0_line := prev_pos - prev_offset * 2
+				p1_line := cur_pos - cur_offset * 2
+				p2_line := prev_pos + prev_offset * 2
+				p3_line := cur_pos + cur_offset * 2
 				fx.draw_quad(p0_line, p1_line, p2_line, p3_line, COLOR_ACCENT)
 
 				prev_pos = cur_pos
+				prev_offset = cur_offset
 			}
 		}
 
 		labels := [10]string{"31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"}
-
-		for i in 0..<10 {
+		for pos, i in nodes {
 			is_act := i == active_col
-			pos := fx.Vec2{node_x[i], node_y[i]}
 
 			if is_act {
 				fx.draw_circle(pos, 7.5, fx.color_opacity(COLOR_ACCENT, 0.45))
 			}
 
 			fx.draw_circle(pos, 4.5, COLOR_ACCENT)
-			fx.draw_circle(pos, 2.0, COLOR_TEXT)
+			fx.draw_circle(pos, is_act ? 3.0 : 2.0, COLOR_TEXT)
 
 			gain_text := gains[i] > 0 ? fmt.tprintf("+%.1f", gains[i]) : (gains[i] < 0 ? fmt.tprintf("%.1f", gains[i]) : "0")
-			gain_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y}, {col_w, 16}}
+			gain_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y}, {col_w, 16}}
 			gain_color := is_act ? COLOR_TEXT : COLOR_MUTED
 			fx.draw_text_rect(gain_text, gain_rect, 12, gain_color, true)
 
-			label_rect := fx.Rect{{node_x[i] - col_w * 0.5, canvas.pos.y + canvas.size.y}, {col_w, 16}}
+			label_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y + canvas.size.y - 16}, {col_w, 16}}
 			fx.draw_text_rect(labels[i], label_rect, 12, COLOR_MUTED, true)
 		}
 	}

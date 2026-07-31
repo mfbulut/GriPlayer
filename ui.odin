@@ -188,15 +188,15 @@ Animation :: struct {
 	last_update: time.Tick,
 	progress:    f32,
 	duration:    f32,
-	initial:     fx.Vec4,
-	current:     fx.Vec4,
-	target:      fx.Vec4,
+	initial:     f32,
+	current:     f32,
+	target:      f32,
 	ease:        ease.Ease,
 }
 
 animations: map[Id]Animation
 
-animation_to :: proc(animation_id: Id, target: fx.Vec4, duration: f32, curve: ease.Ease) -> fx.Vec4 {
+animate :: proc(animation_id: Id, target: f32, duration := f32(0.08), curve := ease.Ease.Cubic_Out) -> f32 {
 	if animation_id not_in animations {
 		animations[animation_id] = Animation{
 			last_update = time.tick_now(),
@@ -228,7 +228,7 @@ animation_to :: proc(animation_id: Id, target: fx.Vec4, duration: f32, curve: ea
 		item.current = target
 		item.target = target
 		item.progress = 1
-	}
+	}	
 
 	return item.current
 }
@@ -237,23 +237,9 @@ animation_cancel :: proc(animation_id: Id) {
 	delete_key(&animations, animation_id)
 }
 
-animate_f32 :: proc(id: Id, target: f32, duration := f32(0.08), curve := ease.Ease.Cubic_Out) -> f32 {
-	return animation_to(id, {target, 0, 0, 0}, duration, curve).x
-}
-
-animate_color :: proc(id: Id, target: fx.Color, duration := f32(0.08), curve := ease.Ease.Cubic_Out) -> fx.Color {
-	value := fx.color_to_vec4(target)
-	result := animation_to(id, value, duration, curve)
-	return fx.vec4_to_color(result)
-}
-
-animate :: proc {
-	animate_f32,
-	animate_color,
-}
-
 animation_update_all :: proc() {
 	keys_to_delete := make([dynamic]Id, context.temp_allocator)
+
 	for key, &item in animations {
 		diff := time.tick_since(item.last_update)
 
