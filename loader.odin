@@ -405,6 +405,8 @@ save_settings :: proc() -> os.Error {
 	}
 
 	os.write_entire_file(settings_path, slice.bytes_from_ptr(&settings, size_of(Audio_Settings))) or_return
+
+	return nil
 }
 
 load_settings :: proc() -> os.Error {
@@ -423,6 +425,8 @@ load_settings :: proc() -> os.Error {
 		}
 		audio.eq_recalculate_all()
 	}
+
+	return nil
 }
 
 cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
