@@ -81,7 +81,7 @@ eq_process :: proc(samples: [][2]f32) {
     for &sample in samples {
         for ch in 0 ..< 2 {
             x := sample[ch]
-            for &band, i in eq_bands {
+            for &band in eq_bands {
                 y := band.b0 * x + band.z1[ch]
                 band.z1[ch] = band.b1 * x - band.a1 * y + band.z2[ch]
                 band.z2[ch] = band.b2 * x - band.a2 * y

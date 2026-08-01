@@ -292,8 +292,8 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 		inject_at(queue_drag.target_arr, queue_drag.target_index, song)
 
 		row_id := get_id(fmt.tprintf("%s_%d", prefix, queue_drag.target_index))
-		layout := get_layout()
-		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - layout.body.pos.y
+		row_layout := get_layout()
+		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - row_layout.body.pos.y
 
 		animation_cancel(row_id)
 		animate(row_id, start_local_y)

@@ -142,59 +142,6 @@ window_is_minimized :: proc() -> bool {
 	return cast(bool)win.IsIconic(window.hwnd)
 }
 
-set_always_on_top :: proc(top: bool) {
-	insert_after := top ? win.HWND_TOPMOST : win.HWND_NOTOPMOST
-	win.SetWindowPos(window.hwnd, insert_after, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE)
-}
-
-get_window_rect :: proc() -> Vec4 {
-	rect: win.RECT
-	win.GetWindowRect(window.hwnd, &rect)
-	return Vec4{f32(rect.left), f32(rect.top), f32(rect.right - rect.left), f32(rect.bottom - rect.top)}
-}
-
-set_window_client_size :: proc(rect: Vec4) {
-	x := i32(rect.x)
-	y := i32(rect.y)
-	dw_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
-	ex_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_EXSTYLE)
-
-	scale := dpi_scale()
-	window_rect: win.RECT = {
-		left   = x,
-		top    = y,
-		right  = x + cast(i32)(max(rect.z, 0) * scale),
-		bottom = y + cast(i32)(max(rect.w, 0) * scale),
-	}
-	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
-
-	new_w := window_rect.right - window_rect.left
-	new_h := window_rect.bottom - window_rect.top
-	win.SetWindowPos(window.hwnd, nil, x, y, new_w, new_h, win.SWP_NOZORDER)
-}
-
-start_window_drag :: proc() {
-	if win.GetAsyncKeyState(win.VK_LBUTTON) >= 0 {
-		return
-	}
-	win.ReleaseCapture()
-	window.key_state[Key.Mouse_Left] = {}
-	win.SendMessageW(window.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
-}
-
-set_window_borderless :: proc(borderless: bool) {
-	style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
-	if borderless {
-		style &= ~cast(win.DWORD)(win.WS_CAPTION | win.WS_THICKFRAME | win.WS_MINIMIZEBOX | win.WS_MAXIMIZEBOX | win.WS_SYSMENU)
-		style |= win.WS_POPUP
-	} else {
-		style &= ~cast(win.DWORD)(win.WS_POPUP)
-		style |= win.WS_OVERLAPPEDWINDOW
-	}
-	win.SetWindowLongW(window.hwnd, win.GWL_STYLE, cast(win.LONG)style)
-	win.SetWindowPos(window.hwnd, nil, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOZORDER | win.SWP_FRAMECHANGED)
-}
-
 text_input :: proc() -> []rune {
 	return window.text_input[:]
 }
@@ -211,12 +158,12 @@ get_clipboard :: proc(allocator := context.temp_allocator) -> (text: string, ok:
 	ptr := win.GlobalLock(global)
 	(ptr != nil) or_return
 
-	str_utf8, allocator_err := win.wstring_to_utf8(win.wstring(ptr), -1, allocator)
-	(allocator_err == nil) or_return
+	str, err := win.wstring_to_utf8(win.wstring(ptr), -1, allocator)
+	(err == nil) or_return
 
 	win.GlobalUnlock(global)
 
-	return str_utf8, true
+	return str, true
 }
 
 set_clipboard :: proc(text: string) -> (ok: bool) {
@@ -245,10 +192,63 @@ set_clipboard :: proc(text: string) -> (ok: bool) {
 	return true
 }
 
+set_always_on_top :: proc(top: bool) {
+	insert_after := top ? win.HWND_TOPMOST : win.HWND_NOTOPMOST
+	win.SetWindowPos(window.hwnd, insert_after, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE)
+}
+
+get_window_rect :: proc() -> Vec4 {
+	rect: win.RECT
+	win.GetWindowRect(window.hwnd, &rect)
+	return Vec4{f32(rect.left), f32(rect.top), f32(rect.right - rect.left), f32(rect.bottom - rect.top)}
+}
+
+set_window_rect :: proc(rect: Vec4) {
+	x := i32(rect.x)
+	y := i32(rect.y)
+	dw_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	ex_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_EXSTYLE)
+
+	scale := dpi_scale()
+	window_rect: win.RECT = {
+		x,
+		y,
+		x + cast(i32)(rect.z * scale),
+		y + cast(i32)(rect.w * scale),
+	}
+	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
+
+	new_w := window_rect.right - window_rect.left
+	new_h := window_rect.bottom - window_rect.top
+	win.SetWindowPos(window.hwnd, nil, x, y, new_w, new_h, win.SWP_NOZORDER)
+}
+
+start_window_drag :: proc() {
+	if win.GetAsyncKeyState(win.VK_LBUTTON) >= 0 {
+		return
+	}
+	win.ReleaseCapture()
+	window.key_state[Key.Mouse_Left] = {}
+	win.SendMessageW(window.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
+}
+
+set_window_borderless :: proc(borderless: bool) {
+	style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	if borderless {
+		style &= ~(win.WS_CAPTION | win.WS_THICKFRAME | win.WS_MINIMIZEBOX | win.WS_MAXIMIZEBOX | win.WS_SYSMENU)
+		style |= win.WS_POPUP
+	} else {
+		style &= ~(win.WS_POPUP)
+		style |= win.WS_OVERLAPPEDWINDOW
+	}
+	win.SetWindowLongW(window.hwnd, win.GWL_STYLE, cast(win.LONG)style)
+	win.SetWindowPos(window.hwnd, nil, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOZORDER | win.SWP_FRAMECHANGED)
+}
+
 update :: proc(poll_msg := true) {
-	prev_mouse_pos := window.mouse_pos
 	window.mouse_scroll = {0, 0}
 	clear(&window.text_input)
+
 	for &state in window.key_state {
 		state -= {.Pressed, .Released, .Repeat}
 	}
@@ -426,35 +426,31 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
 
 	case win.WM_CHAR:
-		@(static) high_surrogate: rune
-		w := cast(rune)wparam
+	    @(static) high_surrogate: rune
+	    w := rune(wparam)
 
-		is_high_surrogate := (w >= 0xD800 && w <= 0xDBFF)
-		is_low_surrogate := (w >= 0xDC00 && w <= 0xDFFF)
+	    switch w {
+	    case 0xD800..=0xDBFF:
+	        high_surrogate = w
+	        break
+	    case 0xDC00..=0xDFFF:
+	        if high_surrogate == 0 {
+	            break
+	        }
 
-		codepoint := unicode.REPLACEMENT_CHAR
-		if is_high_surrogate {
-			high_surrogate = w
-			break
-		} else if is_low_surrogate {
-			if high_surrogate != 0 {
-				codepoint = utf16.decode_surrogate_pair(high_surrogate, w)
-				high_surrogate = 0
-			} else {
-				break
-			}
-		} else {
-			codepoint = w
-			high_surrogate = 0
-		}
+	        codepoint := utf16.decode_surrogate_pair(high_surrogate, w)
+	        high_surrogate = 0
 
-		if codepoint == unicode.REPLACEMENT_CHAR {
-			break
-		}
+	        if unicode.is_graphic(codepoint) {
+	            append(&window.text_input, codepoint)
+	        }
+	    case:
+	        high_surrogate = 0
 
-		if unicode.is_graphic(codepoint) {
-			append(&window.text_input, codepoint)
-		}
+	        if unicode.is_graphic(w) {
+	            append(&window.text_input, w)
+	        }
+	    }
 
 	case:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)

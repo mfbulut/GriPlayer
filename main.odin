@@ -11,7 +11,7 @@ import "fx"
 import "fx/audio"
 import "fx/smtc"
 
-Player_Panel :: enum u32 {
+Player_Panel :: enum {
 	Lyrics,
 	Queue,
 	Equalizer,
@@ -20,13 +20,11 @@ Player_Panel :: enum u32 {
 player_panel: Player_Panel
 
 utc_offset: i64
-volume_overlay_timer := f32(0)
-saved_window_rect: fx.Vec4
-mini_player_active := false
 selected_playlist := 0
 scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
+mini_player_active := false
 
 current_tab: enum {
 	Both,
@@ -283,14 +281,14 @@ frame :: proc() {
 
 							layout_row({artist_w, dot_size, album_w}, 24, gap = 4)
 
-							if .SUBMIT in link(get_id("link_artist"), player.music.artist, 16) {
+							if .SUBMIT in link(get_id("link_artist"), player.music.artist) {
 								search_open(player.music.artist, .Artist)
 							}
 
 							dot_bounds := layout_next()
 							fx.draw_circle(dot_bounds.pos + dot_bounds.size * 0.5 ,2, COLOR_MUTED)
 
-							if .SUBMIT in link(get_id("link_album"), player.music.album, 16) {
+							if .SUBMIT in link(get_id("link_album"), player.music.album) {
 								search_open(player.music.album, .Album)
 							}
 
@@ -736,7 +734,6 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		if .HOVER in res do fx.set_cursor(.Hand)
 
-		show_like := false
 		right_text := ""
 		right_width: f32 = 0
 
@@ -938,29 +935,33 @@ handle_keyboard_input :: proc() {
 }
 
 toggle_mini_player :: proc() {
+	@(static) saved_window_rect : fx.Vec4
+
 	mini_player_active = !mini_player_active
 	if mini_player_active {
 		saved_window_rect = fx.get_window_rect()
 		fx.set_window_borderless(true)
-		fx.set_window_client_size({saved_window_rect.x, saved_window_rect.y, 500, 100})
+		fx.set_window_rect({0, 0, 500, 100})
 		fx.set_always_on_top(true)
 	} else {
 		fx.set_always_on_top(false)
 		fx.set_window_borderless(false)
-		fx.set_window_client_size(saved_window_rect)
+		fx.set_window_rect(saved_window_rect)
 	}
 }
 
 draw_mini_player :: proc() {
 	size := fx.window_size()
 
+	@(static) volume_timer: f32
+
 	if fx.mouse_scroll().y != 0 {
 		audio.volume = clamp(audio.volume + fx.mouse_scroll().y * 0.05, 0, 1)
-		volume_overlay_timer = 1.0
+		volume_timer = 1.0
 	}
 
-	if volume_overlay_timer > 0 {
-		volume_overlay_timer -= fx.frame_time()
+	if volume_timer > 0 {
+		volume_timer -= fx.frame_time()
 	}
 
 	if begin("mini_root", {{0, 0}, size}, pad = 8, gap = 16, bg = COLOR_SURFACE) {
@@ -1012,7 +1013,7 @@ draw_mini_player :: proc() {
 	prog_val := clamp(audio.position() / max(duration, 1), 0.0, 1.0)
 	fx.draw_rect({{0, size.y - 2}, {size.x * prog_val, 2}}, COLOR_ACCENT)
 
-	if volume_overlay_timer > 0 {
+	if volume_timer > 0 {
 		toast_rect := fx.Rect{
 			pos  = {(size.x - 90) * 0.5, size.y - 30},
 			size = {90, 24},

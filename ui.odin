@@ -36,17 +36,15 @@ ctx : struct {
 
 @(deferred_in=end)
 begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll := false, bg := fx.BLANK, marker: f32 = -1) -> bool {
-	is_root := len(ctx.layout_stack) == 0
-
-	id := scroll ? get_id(name) : get_id("temp")
+	id := get_id(name)
 
 	layout := Layout {
 		id = id,
-		bg_color = bg,
 		gap = gap,
+		bg_color = bg,
 	}
 
-	layout.rect = is_root ? rect : layout_next()
+	layout.rect = rect.size.x > 0 ? rect : layout_next()
 	fx.draw_rect(layout.rect, bg, 8)
 
 	body := layout.rect
@@ -88,7 +86,7 @@ end :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll
 			if state.scroll.y > 0.1 {
 				fx.draw_rect(
 					{layout.rect.pos, {layout.rect.size.x, fade_height}},
-					{opaque, opaque, transparent, transparent}, 8
+					{opaque, opaque, transparent, transparent}, 8,
 				)
 			}
 
@@ -96,7 +94,7 @@ end :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll
 			if max_scroll - state.scroll.y > 0.1 {
 				fx.draw_rect(
 					{{layout.rect.pos.x, layout.rect.pos.y + layout.rect.size.y - fade_height}, {layout.rect.size.x, fade_height}},
-					{transparent, transparent, opaque, opaque}, 8
+					{transparent, transparent, opaque, opaque}, 8,
 				)
 			}
 		}
@@ -196,7 +194,7 @@ Animation :: struct {
 
 animations: map[Id]Animation
 
-animate :: proc(animation_id: Id, target: f32, duration := f32(0.08), curve := ease.Ease.Cubic_Out) -> f32 {
+animate :: proc(animation_id: Id, target: f32, duration := f32(0.1), curve := ease.Ease.Cubic_Out) -> f32 {
 	if animation_id not_in animations {
 		animations[animation_id] = Animation{
 			last_update = time.tick_now(),
@@ -228,7 +226,7 @@ animate :: proc(animation_id: Id, target: f32, duration := f32(0.08), curve := e
 		item.current = target
 		item.target = target
 		item.progress = 1
-	}	
+	}
 
 	return item.current
 }

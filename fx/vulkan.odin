@@ -1,9 +1,9 @@
 package fx
 
+import "base:runtime"
 import "core:dynlib"
 import "core:fmt"
 import "core:mem"
-import "base:runtime"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
@@ -380,7 +380,7 @@ vk_init :: proc() {
 				pSetLayouts = &vks.descriptor_set_layout,
 				pushConstantRangeCount = 1,
 				pPushConstantRanges = &push_constant_range,
-			}
+			},
 		}
 
 		vk.CreateShadersEXT(vks.device, 2, &shader_infos[0], nil, &vks.shaders[0])

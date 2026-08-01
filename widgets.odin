@@ -146,12 +146,12 @@ update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
 	return
 }
 
-label :: proc(text: string, font_size: f32 = 14) {
+label :: proc(text: string, font_size := f32(14)) {
 	rect := layout_next()
 	fx.draw_text_rect(text, rect, font_size, COLOR_TEXT, true)
 }
 
-link :: proc(id: Id, text: string, font_size: f32 = 14) -> (res: Result_Set) {
+link :: proc(id: Id, text: string, font_size := f32(16)) -> (res: Result_Set) {
 	text_width := fx.measure_text(text, font_size).x
 
 	bounds := layout_next()
@@ -179,7 +179,7 @@ link :: proc(id: Id, text: string, font_size: f32 = 14) -> (res: Result_Set) {
 	return
 }
 
-button :: proc(label: string, font_size: f32 = 14, active := false) -> (res: Result_Set) {
+button :: proc(label: string, font_size := f32(14), active := false) -> (res: Result_Set) {
 	id := get_id(label)
 	r := layout_next()
 	res = update_control(id, r)
@@ -194,30 +194,17 @@ button :: proc(label: string, font_size: f32 = 14, active := false) -> (res: Res
 	return
 }
 
+draw_icon :: proc(icon: Icon, bounds: fx.Rect, size := f32(0), tint := COLOR_TEXT) {
+	final_size := size > 0 ? size : max(min(bounds.size.x, bounds.size.y), 0)
+	dest := fx.Rect{bounds.pos + (bounds.size - final_size) * 0.5, final_size}
+	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 32 + 1, 30}
+	fx.draw_msdf_ex(icon_atlas, source, dest, 4, tint)
+}
+
 icon_button :: proc(id_str: string, icon: Icon, tint: fx.Color = COLOR_MUTED, radius: f32 = 8, bg: bool = true, offset: f32 = 0, scale: f32 = 0.7, active: bool = false) -> (res: Result_Set) {
 	id := get_id(id_str)
 	r := layout_next()
 	r.pos.x += offset
-	res = update_control(id, r)
-
-	if bg {
-		bg_style := active ? ACTIVE_BUTTON_COLOR : BUTTON_COLOR
-		color := ui_color(bg_style, res)
-		fx.draw_rect(r, color, radius)
-	}
-
-	tint_amount := (active || .HOVER in res || .ACTIVE in res) ? f32(1) : f32(0)
-	final_tint := fx.color_lerp(tint, COLOR_TEXT, tint_amount)
-
-	draw_icon(icon, r, min(r.size.x, r.size.y) * scale, final_tint)
-
-	if .HOVER in res do fx.set_cursor(.Hand)
-
-	return
-}
-
-draw_icon_button_at :: proc(id_str: string, icon: Icon, r: fx.Rect, tint := COLOR_MUTED, radius: f32 = 8, bg := true, scale: f32 = 0.7, active := false) -> (res: Result_Set) {
-	id := get_id(id_str)
 	res = update_control(id, r)
 
 	if bg {
@@ -282,49 +269,6 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 	thumb_size: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
 	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
 	fx.draw_circle(thumb_pos, thumb_size, fill_color)
-
-	bounds = base
-	return
-}
-
-draw_slider_at :: proc(id_str: string, value: ^f32, low, high: f32, base: fx.Rect, fill := SLIDER_FILL_COLOR) -> (res: Result_Set, bounds: fx.Rect) {
-	id := get_id(id_str)
-	last := value^
-	v := last
-
-	res = update_control(id, base)
-
-	if .ACTIVE in res && fx.key_is_released(.Mouse_Left) {
-		res += {.SUBMIT}
-	}
-
-	if ctx.focus_id == id && fx.key_is_down(.Mouse_Left) {
-		v = low + f32(fx.mouse_pos().x - base.pos.x) * (high - low) / max(base.size.x, 1)
-		res += {.CHANGE}
-	}
-
-	v = clamp(v, low, high); value^ = v
-
-	ratio := (high > low) ? clamp((v - low) / (high - low), 0.0, 1.0) : f32(0)
-	center_y := base.pos.y + base.size.y * 0.5
-	track := fx.Rect{
-		pos = {base.pos.x, center_y - 1.75},
-		size = {base.size.x, 3.5},
-	}
-
-	track_color := ui_color(SCROLLBAR_COLOR, res)
-	fx.draw_rect(track, track_color, 2.0)
-
-	fill_track := track
-	fill_track.size.x = track.size.x * ratio
-	fill_color := ui_color(fill, res)
-	fx.draw_rect(fill_track, fill_color, 2.0)
-
-	thumb_size: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
-	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
-	fx.draw_circle(thumb_pos, thumb_size, fill_color)
-
-	if .HOVER in res do fx.set_cursor(.Hand)
 
 	bounds = base
 	return
@@ -441,11 +385,4 @@ menu_button :: proc(text: string, icon: Icon) -> (res: Result_Set) {
 	fx.draw_text_faded(text, text_bounds, 13, COLOR_TEXT)
 
 	return
-}
-
-draw_icon :: proc(icon: Icon, bounds: fx.Rect, size: f32 = 0, tint := COLOR_TEXT) {
-	final_size := size > 0 ? size : max(min(bounds.size.x, bounds.size.y), 0)
-	dest := fx.Rect{bounds.pos + (bounds.size - final_size) * 0.5, final_size}
-	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 32 + 1, 30}
-	fx.draw_msdf_ex(icon_atlas, source, dest, 4, tint)
 }

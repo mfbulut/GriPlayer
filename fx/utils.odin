@@ -9,7 +9,7 @@ Vec4  :: [4]f32
 Color :: [4]byte
 
 Rect :: struct {
-	pos, size: Vec2
+	pos, size: Vec2,
 }
 
 WHITE := Color{255, 255, 255, 255}
@@ -26,10 +26,6 @@ vec4_to_color :: #force_inline proc(v: [4]f32) -> Color {
 
 color_lerp :: proc(a, b: Color, t: f32) -> Color {
 	return vec4_to_color(linalg.lerp(color_to_vec4(a), color_to_vec4(b), t))
-}
-
-color_brightness :: proc(c: Color, factor: f32) -> Color {
-	return vec4_to_color(color_to_vec4(c) * factor)
 }
 
 color_opacity :: proc(c: Color, alpha: f32) -> Color {
@@ -74,12 +70,4 @@ rect_expand :: proc(rect: Rect, n: f32) -> Rect {
 
 rect_overlaps :: proc(a, b: Rect) -> bool {
 	return a.pos.x < b.pos.x + b.size.x && a.pos.x + a.size.x > b.pos.x && a.pos.y < b.pos.y + b.size.y && a.pos.y + a.size.y > b.pos.y
-}
-
-rect_overlap :: proc(a, b: Rect) -> Rect {
-	x1 := max(a.pos.x, b.pos.x)
-	y1 := max(a.pos.y, b.pos.y)
-	x2 := min(a.pos.x + a.size.x, b.pos.x + b.size.x)
-	y2 := min(a.pos.y + a.size.y, b.pos.y + b.size.y)
-	return {{x1, y1}, {max(0, x2 - x1), max(0, y2 - y1)}}
 }
