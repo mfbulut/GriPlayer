@@ -688,7 +688,7 @@ texture_load :: proc(data: []u8, mipmaps := false) -> Texture {
 	if pixels == nil do return {}
 
 	tex := texture_create(int(w), int(h), mipmaps)
-	texture_upload(tex, pixels[:w*h], 0, 0, int(w), int(h), mipmaps)
+	texture_upload(tex, pixels[:w*h], 0, 0, int(w), int(h))
 
 	return tex
 }
@@ -775,12 +775,11 @@ texture_create :: proc(w, h: int, mipmaps := false) -> Texture {
 	return Texture{index = index, size = {w, h}}
 }
 
-texture_upload :: proc(tex: Texture, pixels: []Color, x, y, w, h: int, mipmaps := false) {
+texture_upload :: proc(tex: Texture, pixels: []Color, x, y, w, h: int) {
 	if tex.index <= 0 || tex.index >= MAX_TEXTURES do return
 	tex_data := &textures[tex.index]
 	if !tex_data.used do return
 	has_mipmaps := tex_data.mip_levels > 1
-	assert(has_mipmaps == (mipmaps && max(tex.size.x, tex.size.y) > 1), "texture mipmap mode must match its creation mode")
 	assert(!has_mipmaps || (x == 0 && y == 0 && w == tex.size.x && h == tex.size.y))
 
 	size := vk.DeviceSize(w * h * 4)

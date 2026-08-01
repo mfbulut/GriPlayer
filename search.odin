@@ -3,6 +3,7 @@ package main
 import "core:hash"
 import "core:slice"
 import "core:strings"
+import "core:time"
 import "core:unicode"
 import "core:text/edit"
 import "core:unicode/utf8"
@@ -384,12 +385,12 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 
 	caret_pos := textbox.selection[0]
 	caret_str := string(textbox.builder.buf[:caret_pos])
-	caret_x := fx.measure_text(caret_str, font_size).x
+	caret_left := fx.measure_text(caret_str, font_size).x
 
-	if caret_x - scroll_x < 0 {
-		scroll_x = max(caret_x - 10, 0)
-	} else if caret_x - scroll_x > text_bounds.size.x {
-		scroll_x = caret_x - text_bounds.size.x + 10
+	if caret_left - scroll_x < 0 {
+		scroll_x = max(caret_left - 10, 0)
+	} else if caret_left - scroll_x > text_bounds.size.x {
+		scroll_x = caret_left - text_bounds.size.x + 10
 	}
 
 	fx.set_scissor(text_bounds)
@@ -413,15 +414,24 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 		fx.draw_rect(fx.rect_expand(sel_rect, 1), COLOR_ACCENT, 2)
 	}
 
+	if caret_pos != old_caret_pos {
+		blink_time = 0
+	}
+
+	caret_x := text_bounds.pos.x + caret_left - scroll_x
+	caret_y := text_bounds.pos.y + (text_bounds.size.y - font_size) * 0.5
+	smear_x := animate(get_id("smear"), caret_x, 0.16)
+
+	if search.focused && !fx.key_is_down(.Mouse_Left) {
+		smear_w := abs(smear_x - caret_x)
+		fx.draw_rect({{caret_x < smear_x ? caret_x : smear_x, caret_y}, {smear_w, font_size}}, COLOR_ACCENT, 4)
+	}
+
 	if len(text) > 0 {
 		draw_bounds := text_bounds
 		draw_bounds.pos.x -= scroll_x
 		draw_bounds.size.x += scroll_x
 		fx.draw_text_rect(text, draw_bounds, font_size, COLOR_TEXT, false)
-	}
-
-	if caret_pos != old_caret_pos {
-		blink_time = 0
 	}
 
 	if search.focused {
@@ -431,13 +441,10 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 		}
 
 		if blink_time < 0.5 {
-			caret_target_x := text_bounds.pos.x + caret_x - scroll_x
-
 			caret_rect := fx.Rect{
-				pos = {caret_target_x, text_bounds.pos.y + (text_bounds.size.y - font_size) * 0.5},
+				pos  = {caret_x, caret_y},
 				size = {2, font_size},
 			}
-
 			fx.draw_rect(caret_rect, COLOR_TEXT)
 		}
 	}

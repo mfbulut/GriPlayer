@@ -437,6 +437,7 @@ frame :: proc() {
 	free_all(context.temp_allocator)
 }
 
+
 draw_equalizer :: proc() {
 	if begin("Equalizer", bg = COLOR_SURFACE, pad = 36, gap = 12) {
 		layout_row({64, -1, 64, 56}, 28)
