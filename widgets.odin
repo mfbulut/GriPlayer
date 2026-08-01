@@ -71,7 +71,7 @@ COLOR_SURFACE       :: fx.Color{24, 26, 32, 255}
 COLOR_BORDER        :: fx.Color{60, 68, 80, 255}
 COLOR_TEXT          :: fx.Color{240, 245, 255, 255}
 COLOR_MUTED         :: fx.Color{150, 160, 175, 255}
-COLOR_ACCENT        :: fx.Color{30, 100, 160, 255}
+COLOR_ACCENT        :: fx.Color{35, 100, 160, 255}
 
 ACTIVE_COVER_BG      :: fx.Color{72, 80, 94, 255}
 SLIDER_PREVIEW_COLOR :: fx.Color{100, 110, 120, 255}

@@ -876,8 +876,12 @@ draw_slider_tooltip :: proc(id: Id, bounds: fx.Rect, value: f32, text: string, c
 }
 
 handle_keyboard_input :: proc() {
-	if fx.key_is_pressed(.Esc) && context_menu.song != nil {
-		context_menu = {}
+	if fx.key_is_pressed(.Esc) {
+		if mini_player_active {
+			toggle_mini_player()
+		} else if context_menu.song != nil {
+			context_menu = {}
+		}
 		return
 	}
 
@@ -886,7 +890,7 @@ handle_keyboard_input :: proc() {
 		return
 	}
 
-	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
+	if !mini_player_active && fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
 		if !search.active {
 			search_open()
 		} else {
@@ -959,63 +963,43 @@ draw_mini_player :: proc() {
 		volume_overlay_timer -= fx.frame_time()
 	}
 
-	fx.draw_rect({{0, 0}, size}, COLOR_SURFACE, 0)
+	if begin("mini_root", {{0, 0}, size}, pad = 8, gap = 16, bg = COLOR_SURFACE) {
+		layout_row({size.y - 16, -1, 28}, -1)
 
-	if begin("mini_root", {{0, 0}, size}, pad = 8, gap = 4) {
-		content_h := max(size.y - 17, 30)
-		layout_row({-1}, content_h)
-
-		if begin("mini_main", pad = 0, gap = 10) {
-			cover_size := content_h
-			layout_row({cover_size, -1, 32}, content_h)
-
-			cover_rect := layout_next()
+		cover_rect := layout_next()
+		if player.cover.index != 0 {
+			fx.draw_texture(player.cover, cover_rect, radius = 6)
+		} else {
 			fx.draw_rect(cover_rect, ACTIVE_COVER_BG, 6)
-			if player.cover.index != 0 {
-				fx.draw_texture(player.cover, cover_rect, radius = 6)
-			} else {
-				draw_icon(.Album, cover_rect, cover_size * 0.5, COLOR_MUTED)
+			draw_icon(.Album, cover_rect, cover_rect.size.x * 0.5, COLOR_MUTED)
+		}
+
+		if begin("mini_info", pad = 0, gap = 2) {
+			layout_row({-1}, 24)
+			title_text := player.music != nil ? player.music.title : "No Track Playing"
+			fx.draw_text_faded(title_text, layout_next(), 22, COLOR_TEXT)
+
+			layout_row({-1}, 24)
+			artist_text := player.music != nil ? player.music.artist : ""
+			fx.draw_text_faded(artist_text, layout_next(), 14, COLOR_MUTED)
+
+			lyric_index, found := current_lyric()
+			if found {
+				layout_row({-1}, 24)
+				lyric_str := player.music.lyrics[lyric_index].text
+				fx.draw_text_faded(lyric_str, layout_next(), 14, COLOR_ACCENT)
+			}
+		}
+
+		if begin("mini_controls", gap = 8) {
+			layout_row({28}, 28)
+			if .SUBMIT in icon_button("exit_mini", .Minimize) {
+				toggle_mini_player()
 			}
 
-			if begin("mini_info", pad = 0, gap = 2) {
-				layout_row({-1}, 24)
-				title_text := player.music != nil ? player.music.title : "No Track Playing"
-				fx.draw_text_faded(title_text, layout_next(), 22, COLOR_TEXT)
-
-				layout_row({-1}, 24)
-				artist_text := player.music != nil ? player.music.artist : ""
-				fx.draw_text_faded(artist_text, layout_next(), 14, COLOR_MUTED)
-
-				lyric_index, found := current_lyric()
-				if found {
-					layout_row({-1}, 24)
-					lyric_str := player.music.lyrics[lyric_index].text
-					fx.draw_text_faded(lyric_str, layout_next(), 14, COLOR_ACCENT)
-				}
-			}
-
-			if begin("mini_controls") {
-				exit_size: f32 = 20
-				next_size: f32 = 28
-				rem_h := content_h - exit_size
-				pad_top := max((rem_h - next_size) * 0.5, 0)
-
-				layout_row({-1, exit_size}, exit_size)
-				layout_next()
-				if .SUBMIT in icon_button("exit_mini", .Minimize, radius = 4, scale = 0.7, bg = true) {
-					toggle_mini_player()
-				}
-
-				if pad_top > 0 {
-					layout_row({-1}, pad_top)
-					layout_next()
-				}
-
-				layout_row({-1, next_size}, next_size)
-				layout_next()
-				if .SUBMIT in icon_button("mini_next", .Next, radius = 6, scale = 0.8, bg = true) {
-					player_next()
-				}
+			layout_row({28}, 28)
+			if .SUBMIT in icon_button("mini_next", .Next) {
+				player_next()
 			}
 		}
 	}
@@ -1030,10 +1014,10 @@ draw_mini_player :: proc() {
 
 	if volume_overlay_timer > 0 {
 		toast_rect := fx.Rect{
-			pos  = {(size.x - 90) * 0.5, 6},
+			pos  = {(size.x - 90) * 0.5, size.y - 30},
 			size = {90, 24},
 		}
-		fx.draw_rect(toast_rect, COLOR_SURFACE, 12)
+		fx.draw_rect(toast_rect, COLOR_ACCENT, 8)
 
 		vol_percent := int(audio.volume * 100 + 0.5)
 		vol_str := fmt.tprintf("Vol: %d%%", vol_percent)
