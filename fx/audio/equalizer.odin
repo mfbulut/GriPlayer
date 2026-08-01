@@ -3,11 +3,12 @@ package audio
 import "core:math"
 
 EqBand :: struct {
-    freq:    f32,
-    gain_db: f32,
-    q:       f32,
-    b0, b1, b2, a1, a2: f32,
-    z1, z2: [2]f32,
+    freq:       f32,
+    gain_db:    f32,
+    q:          f32,
+    b0, b1, b2: f32,
+    a1, a2:     f32,
+    z1, z2:     [2]f32,
 }
 
 eq_bands: [10]EqBand
@@ -74,20 +75,17 @@ eq_process :: proc(samples: [][2]f32) {
     preamp_gain := math.pow(10, pregain_db / 20.0)
 
     for &sample in samples {
-        sample[0] *= preamp_gain
-        sample[1] *= preamp_gain
+        sample *= preamp_gain
     }
 
     for &sample in samples {
-        for ch in 0 ..< 2 {
-            x := sample[ch]
+        for &x, i in sample {
             for &band in eq_bands {
-                y := band.b0 * x + band.z1[ch]
-                band.z1[ch] = band.b1 * x - band.a1 * y + band.z2[ch]
-                band.z2[ch] = band.b2 * x - band.a2 * y
+                y := band.b0 * x + band.z1[i]
+                band.z1[i] = band.b1 * x - band.a1 * y + band.z2[i]
+                band.z2[i] = band.b2 * x - band.a2 * y
                 x = y
             }
-            sample[ch] = x
         }
     }
 }

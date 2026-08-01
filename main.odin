@@ -351,6 +351,11 @@ frame :: proc() {
 
 					vol_color := audio.muted ? LINK_COLOR : SLIDER_FILL_COLOR
 					vol_res, vol_bounds := slider(get_id("volume"), &audio.volume, 0, 1, vol_color)
+
+					if .SECONDARY in vol_res {
+						audio.volume = 0.5
+					}
+
 					if .HOVER in vol_res && fx.mouse_scroll().y != 0 {
 						audio.volume = clamp(audio.volume + fx.mouse_scroll().y * 0.05, 0, 1)
 					}

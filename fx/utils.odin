@@ -45,10 +45,10 @@ color_to_oklch :: proc(color: Color) -> (l, c, h: f32) {
 		0.0259040371,  0.7827717662, -0.8086757660,
 	}
 
-	srgb   := color_to_vec4(color).rgb
+	srgb := color_to_vec4(color).rgb
 	linear := linalg.vector3_srgb_to_linear(srgb)
 	lms := LINEAR_SRGB_TO_LINEAR_LMS * linear
-	lms  = {math.cbrt(lms.x), math.cbrt(lms.y), math.cbrt(lms.z)}
+	lms = {math.cbrt(lms.x), math.cbrt(lms.y), math.cbrt(lms.z)}
 	oklab := LINEAR_LMS_TO_OKLAB * lms
 	l = oklab.x
 	c = math.hypot(oklab.y, oklab.z)
