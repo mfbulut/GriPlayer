@@ -20,13 +20,13 @@ Player_Panel :: enum u32 {
 player_panel: Player_Panel
 
 utc_offset: i64
+volume_overlay_timer := f32(0)
+saved_window_rect: fx.Vec4
 mini_player_active := false
 selected_playlist := 0
 scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
-volume_overlay_timer: f32 = 0.0
-saved_window_rect: fx.Vec4
 
 current_tab: enum {
 	Both,

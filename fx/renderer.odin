@@ -92,7 +92,7 @@ set_scissor :: proc(rect: Rect) {
 }
 
 reset_scissor :: proc() {
-	set_scissor({{0,0}, window_size()})
+	set_scissor({{0, 0}, window_size()})
 }
 
 flush :: proc() {
