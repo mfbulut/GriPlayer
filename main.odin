@@ -249,17 +249,12 @@ frame :: proc() {
 						if begin("NowPlayingInfo", pad = 8, gap = 8) {
 							layout_row({-1}, 32)
 							title_bounds := layout_next()
-							fx.draw_text_faded(
-								player.music.title,
-								title_bounds,
-								27,
-								COLOR_TEXT,
-							)
+							fx.draw_text_faded(player.music.title, title_bounds, 27, COLOR_TEXT)
 
 							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 16).x : 0
 							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 16).x : 0
 							dot_size := artist_w > 0 && album_w > 0 ? f32(10) : 0
-							avail_w := max(title_bounds.size.x + 32 - dot_size, 0)
+							avail_w := max(title_bounds.size.x - dot_size, 0)
 
 							if avail_w < artist_w + album_w {
 								if dot_size > 0 {
