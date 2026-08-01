@@ -257,7 +257,7 @@ load_lrc :: proc(music: ^Music) -> os.Error {
 		if colon < 0 do continue
 		minutes := strconv.parse_f32(tag[:colon]) or_continue
 		seconds := strconv.parse_f32(tag[colon + 1:]) or_continue
-		lyric := strings.clone(text[close + 1:])
+		lyric := strings.clone(strings.trim_space(text[close + 1:]))
 		append(&music.lyrics, Lyric{lyric, minutes * 60 + seconds})
 
 		runes := make([dynamic]rune, 0, len(lyric), context.temp_allocator)

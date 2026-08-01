@@ -1,19 +1,17 @@
 package main
 
 import "core:fmt"
-import "core:math/linalg"
 import "core:time"
 import "core:time/timezone"
-import "core:strings"
+import "core:math/linalg"
 import "core:text/edit"
+import "core:strings"
 
 import "fx"
 import "fx/audio"
 import "fx/smtc"
 
-utc_offset: i64
-
-Player_Panel :: enum {
+Player_Panel :: enum u32 {
 	Lyrics,
 	Queue,
 	Equalizer,
@@ -21,10 +19,14 @@ Player_Panel :: enum {
 
 player_panel: Player_Panel
 
+utc_offset: i64
+mini_player_active := false
 selected_playlist := 0
 scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
+volume_overlay_timer: f32 = 0.0
+saved_window_rect: fx.Vec4
 
 current_tab: enum {
 	Both,
@@ -80,7 +82,14 @@ frame :: proc() {
 
 	fx.clear_window(COLOR_BACKGROUND)
 
-	if fx.window_size().x < 800 {
+	if mini_player_active {
+		draw_mini_player()
+		return
+	}
+
+	size := fx.window_size()
+
+	if size.x < 800 {
 		if current_tab == .Both {
 			if player.music != nil {
 				current_tab = .Player
@@ -92,7 +101,6 @@ frame :: proc() {
 		current_tab = .Both
 	}
 
-	size := fx.window_size()
 	if begin("root", {{0, 0}, size}, pad = 8, gap = 8) {
 		if current_tab == .Both {
 			library_width := clamp(size.x * 0.45, f32(460), size.x)
@@ -360,7 +368,9 @@ frame :: proc() {
 					}
 
 					layout_row({36, -1, 36, 36, 36, 36, 36, -1, 36}, 36)
-					layout_next()
+					if .SUBMIT in icon_button("mini_toggle", .Expand, radius = 999) {
+						toggle_mini_player()
+					}
 					layout_next()
 
 					if .SUBMIT in
@@ -407,7 +417,6 @@ frame :: proc() {
 
 				layout_row({-1}, -1)
 
-				active, found := current_lyric()
 
 				switch player_panel {
 				case .Queue:
@@ -415,95 +424,7 @@ frame :: proc() {
 				case .Equalizer:
 					draw_equalizer()
 				case .Lyrics:
-					lyrics_marker := f32(-1)
-					if player.music != nil && len(player.music.lyrics) > 0 {
-						if found do lyrics_marker = (f32(active) + 0.5) / f32(len(player.music.lyrics))
-					}
-
-					if begin("Lyrics", scroll = true, bg = COLOR_SURFACE, pad = 16, marker = lyrics_marker) {
-						if player.music == nil || len(player.music.lyrics) == 0 {
-							layout_row({-1}, -1)
-							bounds := layout_next()
-							icon_size := min(f32(40), bounds.size.x * 0.25)
-							draw_icon(.Note, bounds, icon_size, COLOR_MUTED)
-						} else {
-							lyrics_layout := get_layout()
-							lyrics_cnt := get_scroll_state(lyrics_layout.id)
-
-							if mouse_over(lyrics_layout.rect) && fx.mouse_scroll().y != 0 {
-								lyrics_synced = false
-							}
-
-							scrollbar_id := child_id(lyrics_layout.id, "scrollbar_v")
-							thumb_id := child_id(scrollbar_id, "thumb")
-							if ctx.focus_id == thumb_id {
-								lyrics_synced = false
-							}
-
-							if lyrics_synced && !found {
-								if lyrics_sync_now {
-									lyrics_cnt.scroll_target.y = 0
-									lyrics_sync_now = false
-								} else {
-									lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
-								}
-								lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
-							}
-
-							for lyric, i in player.music.lyrics {
-								layout_row({-1}, 60)
-								row := layout_next()
-
-								is_active := found && i == active
-								if lyrics_synced && is_active {
-									row_center := row.pos.y + row.size.y * 0.5
-									container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
-									target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
-
-									if lyrics_sync_now {
-										lyrics_cnt.scroll_target.y = target_scroll
-										lyrics_sync_now = false
-									} else {
-										lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 4 * fx.frame_time()
-									}
-
-									lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
-								}
-
-								if !fx.rect_visible(row) do continue
-
-								row_id := get_id(fmt.tprintf("lyric_%d", i))
-								hit := update_control(row_id, row)
-
-								active_amount := animate(
-									child_id(row_id, "active"),
-									is_active ? f32(1) : f32(0),
-									0.1, .Linear
-								)
-
-								hover_amount := .HOVER in hit ? f32(1) : f32(0)
-
-								base_color := COLOR_MUTED
-								hover_color := fx.color_lerp(base_color, COLOR_TEXT, hover_amount)
-								color := fx.color_lerp(hover_color, COLOR_TEXT, active_amount)
-
-								if lyric.text == "" {
-									icon_size := 24 + 4 * active_amount
-									icon_rect := fx.Rect{{row.pos.x + 3, row.pos.y}, {icon_size, row.size.y}}
-									draw_icon(.Note, icon_rect, icon_size, color)
-								} else {
-									fx.draw_text_faded(lyric.text, row, 18 + 4 * active_amount,color)
-								}
-
-								if .SUBMIT in hit {
-									player_seek(lyric.time)
-									lyrics_synced = true
-								}
-
-								if .HOVER in hit do fx.set_cursor(.Hand)
-							}
-						}
-					}
+					draw_lyrics()
 				}
 			}
 		}
@@ -663,6 +584,100 @@ draw_equalizer :: proc() {
 
 			label_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y + canvas.size.y - 16}, {col_w, 16}}
 			fx.draw_text_rect(labels[i], label_rect, 12, COLOR_MUTED, true)
+		}
+	}
+}
+
+draw_lyrics :: proc() {
+	active, found := current_lyric()
+	lyrics_marker := f32(-1)
+
+	if player.music != nil && len(player.music.lyrics) > 0 {
+		if found do lyrics_marker = (f32(active) + 0.5) / f32(len(player.music.lyrics))
+	}
+
+	if begin("Lyrics", scroll = true, bg = COLOR_SURFACE, pad = 24, marker = lyrics_marker) {
+		if player.music == nil || len(player.music.lyrics) == 0 {
+			layout_row({-1}, -1)
+			bounds := layout_next()
+			icon_size := min(f32(40), bounds.size.x * 0.25)
+			draw_icon(.Note, bounds, icon_size, COLOR_MUTED)
+		} else {
+			lyrics_layout := get_layout()
+			lyrics_cnt := get_scroll_state(lyrics_layout.id)
+
+			if mouse_over(lyrics_layout.rect) && fx.mouse_scroll().y != 0 {
+				lyrics_synced = false
+			}
+
+			scrollbar_id := child_id(lyrics_layout.id, "scrollbar_v")
+			thumb_id := child_id(scrollbar_id, "thumb")
+			if ctx.focus_id == thumb_id {
+				lyrics_synced = false
+			}
+
+			if lyrics_synced && !found {
+				if lyrics_sync_now {
+					lyrics_cnt.scroll_target.y = 0
+					lyrics_sync_now = false
+				} else {
+					lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 6 * fx.frame_time()
+				}
+				lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
+			}
+
+			for lyric, i in player.music.lyrics {
+				layout_row({-1}, 60)
+				row := layout_next()
+
+				is_active := found && i == active
+				if lyrics_synced && is_active {
+					row_center := row.pos.y + row.size.y * 0.5
+					container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
+					target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
+
+					if lyrics_sync_now {
+						lyrics_cnt.scroll_target.y = target_scroll
+						lyrics_sync_now = false
+					} else {
+						lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 6 * fx.frame_time()
+					}
+
+					lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
+				}
+
+				if !fx.rect_visible(row) do continue
+
+				row_id := get_id(fmt.tprintf("lyric_%d", i))
+				hit := update_control(row_id, row)
+
+				active_amount := animate(
+					child_id(row_id, "active"),
+					is_active ? f32(1) : f32(0),
+					0.1, .Linear
+				)
+
+				hover_amount := .HOVER in hit ? f32(1) : f32(0)
+
+				base_color := COLOR_MUTED
+				hover_color := fx.color_lerp(base_color, COLOR_TEXT, hover_amount)
+				color := fx.color_lerp(hover_color, COLOR_TEXT, active_amount)
+
+				if lyric.text == "" {
+					icon_size := 26 + 4 * active_amount
+					icon_rect := fx.Rect{{row.pos.x, row.pos.y}, {icon_size, row.size.y}}
+					draw_icon(.Note, icon_rect, icon_size, color)
+				} else {
+					fx.draw_text_faded(lyric.text, row, 18 + 4 * active_amount,color)
+				}
+
+				if .SUBMIT in hit {
+					player_seek(lyric.time)
+					lyrics_synced = true
+				}
+
+				if .HOVER in hit do fx.set_cursor(.Hand)
+			}
 		}
 	}
 }
@@ -866,6 +881,11 @@ handle_keyboard_input :: proc() {
 		return
 	}
 
+	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.M) {
+		toggle_mini_player()
+		return
+	}
+
 	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
 		if !search.active {
 			search_open()
@@ -910,5 +930,113 @@ handle_keyboard_input :: proc() {
 	} else {
 		if fx.key_is_pressed_repeat(.Left) do player_seek(max(audio.position() - 5, 0))
 		if fx.key_is_pressed_repeat(.Right) do player_seek(min(audio.position() + 5, audio.duration()))
+	}
+}
+
+toggle_mini_player :: proc() {
+	mini_player_active = !mini_player_active
+	if mini_player_active {
+		saved_window_rect = fx.get_window_rect()
+		fx.set_window_borderless(true)
+		fx.set_window_client_size({saved_window_rect.x, saved_window_rect.y, 500, 100})
+		fx.set_always_on_top(true)
+	} else {
+		fx.set_always_on_top(false)
+		fx.set_window_borderless(false)
+		fx.set_window_client_size(saved_window_rect)
+	}
+}
+
+draw_mini_player :: proc() {
+	size := fx.window_size()
+
+	if fx.mouse_scroll().y != 0 {
+		audio.volume = clamp(audio.volume + fx.mouse_scroll().y * 0.05, 0, 1)
+		volume_overlay_timer = 1.0
+	}
+
+	if volume_overlay_timer > 0 {
+		volume_overlay_timer -= fx.frame_time()
+	}
+
+	fx.draw_rect({{0, 0}, size}, COLOR_SURFACE, 0)
+
+	if begin("mini_root", {{0, 0}, size}, pad = 8, gap = 4) {
+		content_h := max(size.y - 17, 30)
+		layout_row({-1}, content_h)
+
+		if begin("mini_main", pad = 0, gap = 10) {
+			cover_size := content_h
+			layout_row({cover_size, -1, 32}, content_h)
+
+			cover_rect := layout_next()
+			fx.draw_rect(cover_rect, ACTIVE_COVER_BG, 6)
+			if player.cover.index != 0 {
+				fx.draw_texture(player.cover, cover_rect, radius = 6)
+			} else {
+				draw_icon(.Album, cover_rect, cover_size * 0.5, COLOR_MUTED)
+			}
+
+			if begin("mini_info", pad = 0, gap = 2) {
+				layout_row({-1}, 24)
+				title_text := player.music != nil ? player.music.title : "No Track Playing"
+				fx.draw_text_faded(title_text, layout_next(), 22, COLOR_TEXT)
+
+				layout_row({-1}, 24)
+				artist_text := player.music != nil ? player.music.artist : ""
+				fx.draw_text_faded(artist_text, layout_next(), 14, COLOR_MUTED)
+
+				lyric_index, found := current_lyric()
+				if found {
+					layout_row({-1}, 24)
+					lyric_str := player.music.lyrics[lyric_index].text
+					fx.draw_text_faded(lyric_str, layout_next(), 14, COLOR_ACCENT)
+				}
+			}
+
+			if begin("mini_controls") {
+				exit_size: f32 = 20
+				next_size: f32 = 28
+				rem_h := content_h - exit_size
+				pad_top := max((rem_h - next_size) * 0.5, 0)
+
+				layout_row({-1, exit_size}, exit_size)
+				layout_next()
+				if .SUBMIT in icon_button("exit_mini", .Minimize, radius = 4, scale = 0.7, bg = true) {
+					toggle_mini_player()
+				}
+
+				if pad_top > 0 {
+					layout_row({-1}, pad_top)
+					layout_next()
+				}
+
+				layout_row({-1, next_size}, next_size)
+				layout_next()
+				if .SUBMIT in icon_button("mini_next", .Next, radius = 6, scale = 0.8, bg = true) {
+					player_next()
+				}
+			}
+		}
+	}
+
+	if fx.key_is_down(.Mouse_Left) && fx.key_is_pressed(.Mouse_Left) && ctx.focus_id == 0 {
+		fx.start_window_drag()
+	}
+
+	duration := player.music != nil ? player.music.duration : f32(1)
+	prog_val := clamp(audio.position() / max(duration, 1), 0.0, 1.0)
+	fx.draw_rect({{0, size.y - 2}, {size.x * prog_val, 2}}, COLOR_ACCENT)
+
+	if volume_overlay_timer > 0 {
+		toast_rect := fx.Rect{
+			pos  = {(size.x - 90) * 0.5, 6},
+			size = {90, 24},
+		}
+		fx.draw_rect(toast_rect, COLOR_SURFACE, 12)
+
+		vol_percent := int(audio.volume * 100 + 0.5)
+		vol_str := fmt.tprintf("Vol: %d%%", vol_percent)
+		fx.draw_text_rect(vol_str, toast_rect, 12, COLOR_TEXT, true)
 	}
 }

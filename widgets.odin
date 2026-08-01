@@ -31,6 +31,8 @@ Icon :: enum {
 	Date_Ascending,
 	Date_Descending,
 	Equalizer,
+	Minimize,
+	Expand,
 }
 
 sort_icons := [2][Playlist_Sort]Icon{
@@ -214,6 +216,26 @@ icon_button :: proc(id_str: string, icon: Icon, tint: fx.Color = COLOR_MUTED, ra
 	return
 }
 
+draw_icon_button_at :: proc(id_str: string, icon: Icon, r: fx.Rect, tint := COLOR_MUTED, radius: f32 = 8, bg := true, scale: f32 = 0.7, active := false) -> (res: Result_Set) {
+	id := get_id(id_str)
+	res = update_control(id, r)
+
+	if bg {
+		bg_style := active ? ACTIVE_BUTTON_COLOR : BUTTON_COLOR
+		color := ui_color(bg_style, res)
+		fx.draw_rect(r, color, radius)
+	}
+
+	tint_amount := (active || .HOVER in res || .ACTIVE in res) ? f32(1) : f32(0)
+	final_tint := fx.color_lerp(tint, COLOR_TEXT, tint_amount)
+
+	draw_icon(icon, r, min(r.size.x, r.size.y) * scale, final_tint)
+
+	if .HOVER in res do fx.set_cursor(.Hand)
+
+	return
+}
+
 slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL_COLOR, preview: bool = false) -> (res: Result_Set, bounds: fx.Rect) {
 	last := value^
 	v := last
@@ -260,6 +282,49 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 	thumb_size: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
 	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
 	fx.draw_circle(thumb_pos, thumb_size, fill_color)
+
+	bounds = base
+	return
+}
+
+draw_slider_at :: proc(id_str: string, value: ^f32, low, high: f32, base: fx.Rect, fill := SLIDER_FILL_COLOR) -> (res: Result_Set, bounds: fx.Rect) {
+	id := get_id(id_str)
+	last := value^
+	v := last
+
+	res = update_control(id, base)
+
+	if .ACTIVE in res && fx.key_is_released(.Mouse_Left) {
+		res += {.SUBMIT}
+	}
+
+	if ctx.focus_id == id && fx.key_is_down(.Mouse_Left) {
+		v = low + f32(fx.mouse_pos().x - base.pos.x) * (high - low) / max(base.size.x, 1)
+		res += {.CHANGE}
+	}
+
+	v = clamp(v, low, high); value^ = v
+
+	ratio := (high > low) ? clamp((v - low) / (high - low), 0.0, 1.0) : f32(0)
+	center_y := base.pos.y + base.size.y * 0.5
+	track := fx.Rect{
+		pos = {base.pos.x, center_y - 1.75},
+		size = {base.size.x, 3.5},
+	}
+
+	track_color := ui_color(SCROLLBAR_COLOR, res)
+	fx.draw_rect(track, track_color, 2.0)
+
+	fill_track := track
+	fill_track.size.x = track.size.x * ratio
+	fill_color := ui_color(fill, res)
+	fx.draw_rect(fill_track, fill_color, 2.0)
+
+	thumb_size: f32 = (.HOVER in res || .ACTIVE in res) ? 4.5 : 3.5
+	thumb_pos := fx.Vec2{base.pos.x + base.size.x * ratio, center_y}
+	fx.draw_circle(thumb_pos, thumb_size, fill_color)
+
+	if .HOVER in res do fx.set_cursor(.Hand)
 
 	bounds = base
 	return

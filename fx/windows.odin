@@ -26,7 +26,6 @@ window: struct {
 	key_state:      Key_States,
 	cursor:         Cursor,
 	mouse_pos:      Vec2,
-	mouse_delta:    Vec2,
 	mouse_inside:   bool,
 	mouse_scroll:   Vec2,
 	text_input:     [dynamic; 32]rune,
@@ -103,10 +102,6 @@ mouse_pos :: proc() -> Vec2 {
 	return window.mouse_pos
 }
 
-mouse_delta :: proc() -> Vec2 {
-	return window.mouse_delta
-}
-
 mouse_scroll :: proc() -> Vec2 {
 	return window.mouse_scroll
 }
@@ -145,6 +140,59 @@ window_size :: proc() -> Vec2 {
 
 window_is_minimized :: proc() -> bool {
 	return cast(bool)win.IsIconic(window.hwnd)
+}
+
+set_always_on_top :: proc(top: bool) {
+	insert_after := top ? win.HWND_TOPMOST : win.HWND_NOTOPMOST
+	win.SetWindowPos(window.hwnd, insert_after, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE)
+}
+
+get_window_rect :: proc() -> Vec4 {
+	rect: win.RECT
+	win.GetWindowRect(window.hwnd, &rect)
+	return Vec4{f32(rect.left), f32(rect.top), f32(rect.right - rect.left), f32(rect.bottom - rect.top)}
+}
+
+set_window_client_size :: proc(rect: Vec4) {
+	x := i32(rect.x)
+	y := i32(rect.y)
+	dw_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	ex_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_EXSTYLE)
+
+	scale := dpi_scale()
+	window_rect: win.RECT = {
+		left   = x,
+		top    = y,
+		right  = x + cast(i32)(max(rect.z, 0) * scale),
+		bottom = y + cast(i32)(max(rect.w, 0) * scale),
+	}
+	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
+
+	new_w := window_rect.right - window_rect.left
+	new_h := window_rect.bottom - window_rect.top
+	win.SetWindowPos(window.hwnd, nil, x, y, new_w, new_h, win.SWP_NOZORDER)
+}
+
+start_window_drag :: proc() {
+	if win.GetAsyncKeyState(win.VK_LBUTTON) >= 0 {
+		return
+	}
+	win.ReleaseCapture()
+	window.key_state[Key.Mouse_Left] = {}
+	win.SendMessageW(window.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
+}
+
+set_window_borderless :: proc(borderless: bool) {
+	style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	if borderless {
+		style &= ~cast(win.DWORD)(win.WS_CAPTION | win.WS_THICKFRAME | win.WS_MINIMIZEBOX | win.WS_MAXIMIZEBOX | win.WS_SYSMENU)
+		style |= win.WS_POPUP
+	} else {
+		style &= ~cast(win.DWORD)(win.WS_POPUP)
+		style |= win.WS_OVERLAPPEDWINDOW
+	}
+	win.SetWindowLongW(window.hwnd, win.GWL_STYLE, cast(win.LONG)style)
+	win.SetWindowPos(window.hwnd, nil, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOZORDER | win.SWP_FRAMECHANGED)
 }
 
 text_input :: proc() -> []rune {
@@ -217,12 +265,6 @@ update :: proc(poll_msg := true) {
 	window.frame_time = cast(f32)time.duration_seconds(time.diff(window.prev_time, cur_time))
 	window.prev_time = cur_time
 	window.cursor = .Arrow
-
-	if window.mouse_pos.x >= 0 && prev_mouse_pos.x >= 0 {
-		window.mouse_delta = window.mouse_pos - prev_mouse_pos
-	} else {
-		window.mouse_delta = {0, 0}
-	}
 
 	if window.frame_callback != nil {
 		window.frame_callback()
