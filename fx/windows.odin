@@ -200,7 +200,13 @@ set_always_on_top :: proc(top: bool) {
 get_window_rect :: proc() -> Vec4 {
 	rect: win.RECT
 	win.GetWindowRect(window.hwnd, &rect)
-	return Vec4{f32(rect.left), f32(rect.top), f32(rect.right - rect.left), f32(rect.bottom - rect.top)}
+	scale := dpi_scale()
+	return Vec4 {
+		f32(rect.left),
+		f32(rect.top),
+		f32(rect.right - rect.left) / scale,
+		f32(rect.bottom - rect.top) / scale
+	}
 }
 
 set_window_rect :: proc(rect: Vec4) {
