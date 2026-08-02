@@ -1,20 +1,21 @@
 package audio
 
+import "core:c"
 import "core:os"
 import "core:slice"
 import "core:strings"
 
 import "core:sys/windows"
 import "vendor:windows/wasapi"
+import "vendor:stb/vorbis"
 import "opusfile"
-import "vorbisfile"
 import "drmp3"
 import "drflac"
 import "drwav"
 
 Decoder :: union {
     ^opusfile.File,
-    ^vorbisfile.File,
+    ^vorbis.vorbis,
     ^drmp3.File,
     ^drflac.File,
     ^drwav.File,
@@ -77,13 +78,30 @@ init_wasapi :: proc(new_sample_rate: u32) {
     eq_recalculate_all()
 }
 
+foreign import libc "system:libucrt.lib"
+
+foreign libc {
+    _wfopen :: proc(filename, mode: cstring16) -> ^c.FILE ---
+}
+
+open_vorbis_file :: proc(path: string) -> ^vorbis.vorbis {
+    when ODIN_OS == .Windows {
+        path_w := windows.utf8_to_wstring(path, context.temp_allocator)
+        f := _wfopen(path_w, "rb")
+        if f == nil do return nil
+        return vorbis.open_file(f, true, nil, nil)
+    } else {
+        path_c := strings.clone_to_cstring(path, context.temp_allocator)
+        return vorbis.open_filename(path_c, nil, nil)
+    }
+}
+
 open :: proc(path: string, gapless := false) -> bool {
     switch d in state.decoder {
     case ^opusfile.File:
         opusfile.free(d)
-    case ^vorbisfile.File:
-        vorbisfile.clear(d)
-        free(d)
+    case ^vorbis.vorbis:
+        vorbis.close(d)
     case ^drmp3.File:
         drmp3.uninit(d)
         free(d)
@@ -107,25 +125,20 @@ open :: proc(path: string, gapless := false) -> bool {
             sample_rate = 48000
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
-        } else {
-            return false
         }
-
     case ".ogg":
-        if vf := vorbisfile.open_file(path); vf != nil {
+        if vf := open_vorbis_file(path); vf != nil {
             state.decoder = vf
-            info := vorbisfile.info(vf, -1)
-            sample_rate = u32(info.rate)
+            info := vorbis.get_info(vf)
+            sample_rate = info.sample_rate
             state.channels = u32(info.channels)
-            state.total_pcm = vorbisfile.pcm_total(vf, -1)
+            state.total_pcm = i64(vorbis.stream_length_in_samples(vf))
         } else if of := opusfile.open_file(path); of != nil {
             opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
             state.decoder = of
             sample_rate = 48000
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
-        } else {
-            return false
         }
     case ".mp3":
         if mp3 := drmp3.open_file(path); mp3 != nil {
@@ -133,8 +146,6 @@ open :: proc(path: string, gapless := false) -> bool {
             sample_rate = drmp3.get_sampleRate(mp3)
             state.channels = drmp3.get_channels(mp3)
             state.total_pcm = i64(drmp3.get_pcm_frame_count(mp3))
-        } else {
-            return false
         }
     case ".flac":
         if flac := drflac.open_file(path); flac != nil {
@@ -142,18 +153,18 @@ open :: proc(path: string, gapless := false) -> bool {
             sample_rate = drflac.get_sampleRate(flac)
             state.channels = drflac.get_channels(flac)
             state.total_pcm = i64(drflac.get_totalPCMFrameCount(flac))
-        } else {
-            return false
         }
     case ".wav":
         if wav := drwav.open_file(path); wav != nil {
             state.decoder = wav
-            sample_rate = u32(drwav.get_sampleRate(wav))
-            state.channels = u32(drwav.get_channels(wav))
+            sample_rate = drwav.get_sampleRate(wav)
+            state.channels = drwav.get_channels(wav)
             state.total_pcm = i64(drwav.get_totalPCMFrameCount(wav))
-        } else {
-            return false
         }
+    }
+
+    if state.decoder == nil {
+        return false
     }
 
     if sample_rate != prev_sample_rate {
@@ -181,6 +192,24 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     switch d in state.decoder {
     case ^opusfile.File:
         frames_read = opusfile.read_float_stereo(d, cast([^]f32)buffer, cast(i32)(available_frames * 2))
+    case ^vorbis.vorbis:
+        temp_buffer := make([]f32, available_frames * state.channels)
+        defer delete(temp_buffer)
+        frames_read = vorbis.get_samples_float_interleaved(d, cast(c.int)state.channels, raw_data(temp_buffer), cast(c.int)(available_frames * state.channels))
+        if frames_read > 0 {
+            out := cast([^][2]f32)buffer
+            if state.channels >= 2 {
+                for i in 0..<frames_read {
+                    out[i][0] = temp_buffer[i * 2 + 0]
+                    out[i][1] = temp_buffer[i * 2 + 1]
+                }
+            } else if state.channels == 1 {
+                for i in 0..<frames_read {
+                    out[i][0] = temp_buffer[i]
+                    out[i][1] = temp_buffer[i]
+                }
+            }
+        }
     case ^drmp3.File:
         temp_buffer := make([]f32, available_frames * state.channels)
         defer delete(temp_buffer)
@@ -235,29 +264,6 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
                 }
             }
         }
-    case ^vorbisfile.File:
-        channels: [^][^]f32
-        frames_read = vorbisfile.read_float(d, &channels, cast(i32)available_frames, nil)
-
-        if frames_read > 0 {
-            out := cast([^][2]f32)buffer
-
-            if state.channels >= 2 {
-                left := channels[0]
-                right := channels[1]
-                for i in 0..<frames_read {
-                    out[i][0] = left[i]
-                    out[i][1] = right[i]
-                }
-            } else if state.channels == 1 {
-                mono := channels[0]
-                for i in 0..<frames_read {
-                    out[i][0] = mono[i]
-                    out[i][1] = mono[i]
-                }
-            }
-        }
-    case:
     }
 
     if frames_read <= 0 {
@@ -291,14 +297,14 @@ seek :: proc(position: f32) {
     switch d in state.decoder {
     case ^opusfile.File:
         opusfile.pcm_seek(d, target_pcm)
+    case ^vorbis.vorbis:
+        vorbis.seek(d, u32(target_pcm))
     case ^drmp3.File:
         drmp3.seek_to_pcm_frame(d, u64(target_pcm))
     case ^drflac.File:
         drflac.seek_to_pcm_frame(d, u64(target_pcm))
     case ^drwav.File:
         drwav.seek_to_pcm_frame(d, u64(target_pcm))
-    case ^vorbisfile.File:
-        vorbisfile.pcm_seek(d, target_pcm)
     case:
     }
     reset()
@@ -309,8 +315,8 @@ position :: proc() -> f32 {
     switch d in state.decoder {
     case ^opusfile.File:
         current_pcm = opusfile.pcm_tell(d)
-    case ^vorbisfile.File:
-        current_pcm = vorbisfile.pcm_tell(d)
+    case ^vorbis.vorbis:
+        current_pcm = i64(vorbis.get_sample_offset(d))
     case ^drmp3.File:
         current_pcm = i64(drmp3.get_currentPCMFrame(d))
     case ^drflac.File:

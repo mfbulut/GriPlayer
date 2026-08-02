@@ -11,7 +11,7 @@ File :: struct {
 open_file :: proc(path: string) -> ^File {
     wpath := windows.utf8_to_wstring(path, context.temp_allocator)
     file := new(File)
-    if init_file_w(file, cast([^]u16)wpath, nil) {
+    if init_file_w(file, wpath, nil) {
         return file
     }
     free(file)
@@ -20,7 +20,7 @@ open_file :: proc(path: string) -> ^File {
 
 @(link_prefix="drmp3_", default_calling_convention="c")
 foreign dr_libs {
-    init_file_w :: proc(pMP3: ^File, pFilePath: [^]u16, pAllocationCallbacks: rawptr) -> b32 ---
+    init_file_w :: proc(pMP3: ^File, pFilePath: cstring16, pAllocationCallbacks: rawptr) -> b32 ---
     read_pcm_frames_f32 :: proc(pMP3: ^File, framesToRead: u64, pBufferOut: [^]f32) -> u64 ---
     seek_to_pcm_frame :: proc(pMP3: ^File, frameIndex: u64) -> b32 ---
     uninit :: proc(pMP3: ^File) ---

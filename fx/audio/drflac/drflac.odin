@@ -10,12 +10,12 @@ File :: struct {
 
 open_file :: proc(path: string) -> ^File {
     wpath := windows.utf8_to_wstring(path, context.temp_allocator)
-    return open_file_w(cast([^]u16)wpath, nil)
+    return open_file_w(wpath, nil)
 }
 
 @(link_prefix="drflac_", default_calling_convention="c")
 foreign dr_libs {
-    open_file_w :: proc(pFileName: [^]u16, pAllocationCallbacks: rawptr) -> ^File ---
+    open_file_w :: proc(pFileName: cstring16, pAllocationCallbacks: rawptr) -> ^File ---
     read_pcm_frames_f32 :: proc(pFlac: ^File, framesToRead: u64, pBufferOut: [^]f32) -> u64 ---
     seek_to_pcm_frame :: proc(pFlac: ^File, frameIndex: u64) -> b32 ---
     close :: proc(pFlac: ^File) ---

@@ -8,7 +8,7 @@ import "core:encoding/base64"
 import "core:encoding/endian"
 
 import "opusfile"
-import "vorbisfile"
+import "vendor:stb/vorbis"
 import "drmp3"
 import "drflac"
 import "drwav"
@@ -63,36 +63,38 @@ cover :: proc(path: string) -> (cover: []byte) {
 }
 
 parse_vorbis_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-    vf := vorbisfile.open_file(path)
+    vf := open_vorbis_file(path)
     if vf == nil do return
     ok = true
-    defer { vorbisfile.clear(vf); free(vf) }
+    defer vorbis.close(vf)
 
-    if pcm_tot := vorbisfile.pcm_total(vf, -1); pcm_tot > 0 {
-        meta.duration = f32(pcm_tot) / 48000.0
+    info := vorbis.get_info(vf)
+    if pcm_tot := vorbis.stream_length_in_samples(vf); pcm_tot > 0 && info.sample_rate > 0 {
+        meta.duration = f32(pcm_tot) / f32(info.sample_rate)
     }
 
-    tags := vorbisfile.comment(vf, -1)
-    if tags == nil do return
+    vc := vorbis.get_comment(vf)
+    if vc.comment_list != nil {
+        for i in 0..<vc.comment_list_length {
+            if vc.comment_list[i] == nil do continue
+            comment := string(vc.comment_list[i])
+            idx := strings.index_byte(comment, '=')
+            if idx <= 0 do continue
 
-    for i in 0..<tags.comments_count {
-        comment := string(tags.comments[i][:tags.comment_lengths[i]])
-        idx := strings.index_byte(comment, '=')
-        if idx <= 0 do continue
+            key := strings.to_upper(comment[:idx], context.temp_allocator)
+            val := comment[idx+1:]
 
-        key := strings.to_upper(comment[:idx], context.temp_allocator)
-        val := comment[idx+1:]
-
-        if key == "TITLE" && meta.title == "" {
-            meta.title = strings.clone(val)
-        } else if key == "ALBUMARTIST" {
-            meta.artist = strings.clone(val)
-        } else if key == "ARTIST" && meta.artist == "" {
-            meta.artist = strings.clone(val)
-        } else if key == "ALBUM" && meta.album == "" {
-            meta.album = strings.clone(val)
-        } else if key == "TRACKNUMBER" && meta.track == 0 {
-            if track_val, parsed := strconv.parse_int(val); parsed do meta.track = track_val
+            if key == "TITLE" && meta.title == "" {
+                meta.title = strings.clone(val)
+            } else if key == "ALBUMARTIST" {
+                meta.artist = strings.clone(val)
+            } else if key == "ARTIST" && meta.artist == "" {
+                meta.artist = strings.clone(val)
+            } else if key == "ALBUM" && meta.album == "" {
+                meta.album = strings.clone(val)
+            } else if key == "TRACKNUMBER" && meta.track == 0 {
+                if track_val, parsed := strconv.parse_int(val); parsed do meta.track = track_val
+            }
         }
     }
 
@@ -131,15 +133,16 @@ parse_opus_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 }
 
 parse_vorbis_cover :: proc(path: string) -> []byte {
-    vf := vorbisfile.open_file(path)
+    vf := open_vorbis_file(path)
     if vf == nil do return nil
-    defer { vorbisfile.clear(vf); free(vf) }
+    defer vorbis.close(vf)
 
-    tags := vorbisfile.comment(vf, -1)
-    if tags == nil do return nil
+    vc := vorbis.get_comment(vf)
+    if vc.comment_list == nil do return nil
 
-    for i in 0..<tags.comments_count {
-        comment := string(tags.comments[i][:tags.comment_lengths[i]])
+    for i in 0..<vc.comment_list_length {
+        if vc.comment_list[i] == nil do continue
+        comment := string(vc.comment_list[i])
         idx := strings.index_byte(comment, '=')
         if idx <= 0 do continue
 
