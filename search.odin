@@ -3,7 +3,6 @@ package main
 import "core:hash"
 import "core:slice"
 import "core:strings"
-import "core:time"
 import "core:unicode"
 import "core:text/edit"
 import "core:unicode/utf8"

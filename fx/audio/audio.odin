@@ -195,7 +195,7 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     case ^vorbis.vorbis:
         temp_buffer := make([]f32, available_frames * state.channels)
         defer delete(temp_buffer)
-        frames_read = vorbis.get_samples_float_interleaved(d, cast(c.int)state.channels, raw_data(temp_buffer), cast(c.int)(available_frames * state.channels))
+        frames_read = vorbis.get_samples_float_interleaved(d, cast(i32)state.channels, raw_data(temp_buffer), cast(i32)(available_frames * state.channels))
         if frames_read > 0 {
             out := cast([^][2]f32)buffer
             if state.channels >= 2 {
