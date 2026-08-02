@@ -288,8 +288,13 @@ load_thumbnail :: proc(music: ^Music) {
 	if pixels == nil do return
 	defer image.image_free(pixels)
 
+	crop_size := min(w, h)
+	offset_x := (w - crop_size) / 2
+	offset_y := (h - crop_size) / 2
+	cropped_pixels := cast([^]u8)&pixels[(offset_y * w + offset_x) * 4]
+
 	music.thumbnail_pixels = make([]fx.Color, 64 * 64)
-	image.resize_uint8(pixels, w, h, 0, cast([^]u8)raw_data(music.thumbnail_pixels), 64, 64, 0, 4)
+	image.resize_uint8(cropped_pixels, crop_size, crop_size, w * 4, cast([^]u8)raw_data(music.thumbnail_pixels), 64, 64, 0, 4)
 }
 
 playlist_sort :: proc(playlist: ^Playlist) {
