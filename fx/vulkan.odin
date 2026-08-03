@@ -12,9 +12,9 @@ MAX_INSTANCES :: 1024 * 16
 
 swapchain: struct {
 	swapchain: vk.SwapchainKHR,
-	images: [2]vk.Image,
-	image_views: [2]vk.ImageView,
-	present_semaphores: [2]vk.Semaphore,
+	images: []vk.Image,
+	image_views: []vk.ImageView,
+	present_semaphores: []vk.Semaphore,
 }
 
 vks: struct {
@@ -470,14 +470,19 @@ vk_recreate_swapchain :: proc() {
 		for semaphore in swapchain.present_semaphores {
 			vk.DestroySemaphore(vks.device, semaphore, nil)
 		}
+		delete(swapchain.images)
+		delete(swapchain.image_views)
+		delete(swapchain.present_semaphores)
 	}
 
+	capabilities: vk.SurfaceCapabilitiesKHR
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(vks.gpu, vks.surface, &capabilities)
 	extent := vk.Extent2D{u32(window.size.x), u32(window.size.y)}
 
 	create_info := vk.SwapchainCreateInfoKHR {
 		sType = .SWAPCHAIN_CREATE_INFO_KHR,
 		surface = vks.surface,
-		minImageCount = 2,
+		minImageCount = capabilities.minImageCount,
 		imageFormat = .B8G8R8A8_UNORM,
 		imageColorSpace = .SRGB_NONLINEAR,
 		imageExtent = extent,
@@ -500,8 +505,14 @@ vk_recreate_swapchain :: proc() {
 
 	swapchain.swapchain = new_swapchain
 
-	image_count := u32(2)
-	vk.GetSwapchainImagesKHR(vks.device, swapchain.swapchain, &image_count, &swapchain.images[0])
+	image_count: u32
+	vk.GetSwapchainImagesKHR(vks.device, swapchain.swapchain, &image_count, nil)
+
+	swapchain.images = make([]vk.Image, image_count)
+	swapchain.image_views = make([]vk.ImageView, image_count)
+	swapchain.present_semaphores = make([]vk.Semaphore, image_count)
+
+	vk.GetSwapchainImagesKHR(vks.device, swapchain.swapchain, &image_count, raw_data(swapchain.images))
 
 	semaphore_info := vk.SemaphoreCreateInfo { sType = .SEMAPHORE_CREATE_INFO }
 	for i in 0..<image_count {

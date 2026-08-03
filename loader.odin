@@ -164,6 +164,7 @@ loader_poll :: proc() {
 
 	if(loading_finished && len(loader_queue) == 0) {
 		polling_finished = true;
+		sync.unlock(&loader_mutex)
 		return
 	}
 

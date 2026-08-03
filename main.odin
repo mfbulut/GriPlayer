@@ -347,7 +347,7 @@ frame :: proc() {
 							saved_volume = audio.get_volume()
 							audio.set_volume(0)
 						} else {
-							audio.set_volume(saved_volume > 0 ? saved_volume : 0.5)
+							audio.set_volume(saved_volume)
 						}
 						audio.reset()
 					}

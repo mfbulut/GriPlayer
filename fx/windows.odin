@@ -157,11 +157,10 @@ get_clipboard :: proc(allocator := context.temp_allocator) -> (text: string, ok:
 
 	ptr := win.GlobalLock(global)
 	(ptr != nil) or_return
+	defer win.GlobalUnlock(global)
 
 	str, err := win.wstring_to_utf8(win.wstring(ptr), -1, allocator)
 	(err == nil) or_return
-
-	win.GlobalUnlock(global)
 
 	return str, true
 }

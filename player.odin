@@ -46,6 +46,7 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 
 	if paused do audio.pause()
 	else do audio.resume()
+	audio.eq_reset_state()
 	player.session += 1
 	player.music = song
 	player.playing = !paused
@@ -145,6 +146,7 @@ player_seek :: proc(position: f32) {
 	if !player.playing {
 		audio.pause()
 	}
+	audio.eq_reset_state()
 }
 
 player_queue_add :: proc(song: ^Music, next := false) {

@@ -21,6 +21,13 @@ eq_get_gain :: proc(band: int) -> f32 {
     return eq_bands[band].gain_db
 }
 
+eq_reset_state :: proc() {
+    for &band in eq_bands {
+        band.z1 = 0
+        band.z2 = 0
+    }
+}
+
 eq_reset :: proc() {
     pregain_db = 0
     for i in 0 ..< 10 {
