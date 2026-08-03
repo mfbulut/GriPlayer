@@ -158,6 +158,8 @@ open :: proc(path: string, gapless := false) -> bool {
     return true
 }
 
+temp_buffer: [500000 * 2]f32
+
 update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     if state.decoder == nil do return false
 
@@ -169,23 +171,21 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     buffer: [^]byte
     state.render_client->GetBuffer(frames_available, &buffer)
 
-    samples := (cast([^][2]f32)buffer)[:frames_available]
-    temp_buffer := make([]f32, frames_available * state.channels)
-    defer delete(temp_buffer)
-
     frames_read: i32
     switch d in state.decoder {
     case ^opusfile.File:
-        frames_read = opusfile.read_float_stereo(d, raw_data(temp_buffer), i32(len(temp_buffer)))
+        frames_read = opusfile.read_float_stereo(d, &temp_buffer[0], i32(frames_available * state.channels))
     case ^vorbis.vorbis:
-        frames_read = vorbis.get_samples_float_interleaved(d, i32(state.channels), raw_data(temp_buffer), i32(len(temp_buffer)))
+        frames_read = vorbis.get_samples_float_interleaved(d, i32(state.channels), &temp_buffer[0], i32(frames_available * state.channels))
     case ^drmp3.File:
-        frames_read = i32(drmp3.read_pcm_frames_f32(d, u64(frames_available), raw_data(temp_buffer)))
+        frames_read = i32(drmp3.read_pcm_frames_f32(d, u64(frames_available), &temp_buffer[0]))
     case ^drflac.File:
-        frames_read = i32(drflac.read_pcm_frames_f32(d, u64(frames_available), raw_data(temp_buffer)))
+        frames_read = i32(drflac.read_pcm_frames_f32(d, u64(frames_available), &temp_buffer[0]))
     case ^drwav.File:
-        frames_read = i32(drwav.read_pcm_frames_f32(d, u64(frames_available), raw_data(temp_buffer)))
+        frames_read = i32(drwav.read_pcm_frames_f32(d, u64(frames_available), &temp_buffer[0]))
     }
+
+    samples := (cast([^][2]f32)buffer)[:frames_read]
 
     if state.channels >= 2 {
         for i in 0..<frames_read {
