@@ -11,7 +11,7 @@ import "fx/audio"
 FFT_SIZE       :: 2048
 FFT_BITS       :: 11
 SPECTRUM_BANDS :: 96
-SPECTRUM_MIN_FREQUENCY :: f32(40)
+SPECTRUM_MIN_FREQUENCY :: f32(400)
 SPECTRUM_MAX_FREQUENCY :: f32(16000)
 
 SPECTRUM_RISE_SPEED :: f32(8)
@@ -62,16 +62,17 @@ fft_run :: proc() #no_bounds_check {
 }
 
 visualizer_push :: proc(frames: [][2]f32) {
-	if sync.mutex_guard(&audio_ring_mu) {
-		for frame in frames {
-			audio_ring[audio_ring_pos] = (frame.x + frame.y) * 0.5
-			audio_ring_pos = (audio_ring_pos + 1) % FFT_SIZE
-		}
-		visualizer_update()
+	sync.guard(&audio_ring_mu)
+
+	for frame in frames {
+		audio_ring[audio_ring_pos] = (frame.x + frame.y) * 0.5
+		audio_ring_pos = (audio_ring_pos + 1) % FFT_SIZE
 	}
 }
 
 visualizer_update :: proc() {
+	sync.guard(&audio_ring_mu)
+
 	dt := fx.frame_time()
 	if !player.playing {
 		for index in 0 ..< SPECTRUM_BANDS {
@@ -138,7 +139,7 @@ visualizer_update :: proc() {
 }
 
 draw_visualizer :: proc(bounds: fx.Rect) {
-	sync.mutex_guard(&audio_ring_mu)
+	sync.guard(&audio_ring_mu)
 
 	if bounds.size.x <= 0 || bounds.size.y <= 0 do return
 	content := fx.Rect{{bounds.pos.x, bounds.pos.y}, {bounds.size.x, bounds.size.y}}

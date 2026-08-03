@@ -88,7 +88,7 @@ init_wasapi :: proc(new_sample_rate: u32) {
 }
 
 open :: proc(path: string) -> bool {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
 
     switch d in state.decoder {
     case ^opusfile.File:
@@ -173,7 +173,7 @@ audio_thread_proc :: proc() {
     for {
         windows.WaitForSingleObject(state.buffer_event, windows.INFINITE)
 
-        sync.mutex_guard(&state.mu)
+        sync.guard(&state.mu)
         if state.decoder == nil do continue
 
         padding: u32
@@ -248,7 +248,7 @@ audio_thread_proc :: proc() {
 }
 
 seek :: proc(position: f32) {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
 
     if state.decoder == nil do return
     target_pcm := i64(position * f32(state.sample_rate))
@@ -272,7 +272,7 @@ seek :: proc(position: f32) {
 }
 
 position :: proc() -> f32 {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
 
     current_pcm: i64
     switch d in state.decoder {
@@ -293,47 +293,47 @@ position :: proc() -> f32 {
 }
 
 duration :: proc() -> f32 {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     if state.decoder == nil do return 0
     return f32(state.total_pcm) / f32(state.sample_rate)
 }
 
 pause :: proc() {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     state.audio_client->Stop()
 }
 
 resume :: proc() {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     state.audio_client->Start()
 }
 
 reset :: proc() {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     state.audio_client->Reset()
 }
 
 get_volume :: proc() -> f32 {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     return state.volume
 }
 
 set_volume :: proc(vol: f32) {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     state.volume = clamp(vol, 0, 1)
 }
 
 get_sample_rate :: proc() -> u32 {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     return state.sample_rate
 }
 
 is_finished :: proc() -> bool {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     return state.song_finished
 }
 
 set_callback :: proc(cb: proc(samples: [][2]f32)) {
-    sync.mutex_guard(&state.mu)
+    sync.guard(&state.mu)
     state.callback = cb
 }

@@ -206,4 +206,6 @@ player_update :: proc() {
 		player_next(true)
 		return
 	}
+	
+	visualizer_update()
 }
