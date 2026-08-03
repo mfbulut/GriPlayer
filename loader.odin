@@ -128,11 +128,14 @@ loader_start :: proc() {
 			if music.fullpath == "" {
 				music.fullpath = strings.clone(info.fullpath)
 				if metadata, ok := audio.metadata(music.fullpath); ok {
-					music.title = metadata.title
-					music.artist = metadata.artist
-					music.album = metadata.album
+					music.title = strings.clone(metadata.title)
+					music.artist = strings.clone(metadata.artist)
+					music.album = strings.clone(metadata.album)
 					music.track = metadata.track
 					music.duration = metadata.duration
+					if len(metadata.cover) > 0 {
+						load_thumbnail(music, metadata.cover)
+					}
 				}
 
 				if music.title == "" {
@@ -140,7 +143,6 @@ loader_start :: proc() {
 				}
 
 				load_lrc(music)
-				load_thumbnail(music)
 			}
 
 			free_all(context.temp_allocator)
@@ -278,10 +280,8 @@ load_lrc :: proc(music: ^Music) -> os.Error {
 	return nil
 }
 
-load_thumbnail :: proc(music: ^Music) {
-	cover_bytes := audio.cover(music.fullpath)
+load_thumbnail :: proc(music: ^Music, cover_bytes: []byte) {
 	if len(cover_bytes) == 0 do return
-	defer delete(cover_bytes)
 
 	w, h, channels: i32
 	pixels := image.load_from_memory(raw_data(cover_bytes), i32(len(cover_bytes)), &w, &h, &channels, 4)
@@ -401,7 +401,7 @@ save_settings :: proc() -> os.Error {
 	settings_path := os.join_path({app_dir, "settings.bin"}, context.temp_allocator) or_return
 
 	settings := Settings{
-		volume = audio.volume,
+		volume = audio.get_volume(),
 		pregain_db = audio.pregain_db,
 	}
 
@@ -422,7 +422,7 @@ load_settings :: proc() -> os.Error {
 	data := os.read_entire_file(settings_path, context.temp_allocator) or_return
 
 	settings := (cast(^Settings)raw_data(data))^
-	audio.volume = settings.volume
+	audio.set_volume(settings.volume)
 	audio.pregain_db = settings.pregain_db
 	for i in 0..<10 {
 		audio.eq_bands[i].gain_db = settings.band_gains[i]

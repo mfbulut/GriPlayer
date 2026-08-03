@@ -57,15 +57,14 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 	visualizer_create_palette(song.thumbnail_pixels)
 
 	cover_to_free = player.cover
-	cover_bytes := audio.cover(song.fullpath)
-	defer delete(cover_bytes)
-	if len(cover_bytes) > 0 {
-		player.cover = fx.texture_load(cover_bytes, mipmaps = true)
+	meta, _ := audio.metadata(song.fullpath)
+	if len(meta.cover) > 0 {
+		player.cover = fx.texture_load(meta.cover, mipmaps = true)
 	} else {
 		player.cover = {}
 	}
 
-	smtc.update_metadata(song.title, song.artist, cover_bytes)
+	smtc.update_metadata(song.title, song.artist, meta.cover)
 	smtc.update_status(paused ? .Paused : .Playing)
 }
 

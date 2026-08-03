@@ -25,6 +25,8 @@ scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
 mini_player_active := false
+muted := false
+saved_volume: f32 = 0.5
 
 current_tab: enum {
 	Both,
@@ -339,28 +341,42 @@ frame :: proc() {
 
 					label(duration_text, 11)
 
-					if .SUBMIT in icon_button("mute", audio.muted ? .Mute : .Volume, radius = 999, offset = 2, scale = 0.85, bg = false) {
-						audio.muted = !audio.muted
+					if .SUBMIT in icon_button("mute", muted ? .Mute : .Volume, radius = 999, offset = 2, scale = 0.85, bg = false) {
+						muted = !muted
+						if muted {
+							saved_volume = audio.get_volume()
+							audio.set_volume(0)
+						} else {
+							audio.set_volume(saved_volume > 0 ? saved_volume : 0.5)
+						}
 						audio.reset()
 					}
 
-					vol_color := audio.muted ? LINK_COLOR : SLIDER_FILL_COLOR
-					vol_res, vol_bounds := slider(get_id("volume"), &audio.volume, 0, 1, vol_color)
+					vol_color := muted ? LINK_COLOR : SLIDER_FILL_COLOR
+					vol := muted ? saved_volume : audio.get_volume()
+					vol_res, vol_bounds := slider(get_id("volume"), &vol, 0, 1, vol_color)
 
 					if .SECONDARY in vol_res {
-						audio.volume = 0.5
+						vol = 0.5
+						muted = false
+						audio.set_volume(vol)
 					}
 
 					if .HOVER in vol_res && fx.mouse_scroll().y != 0 {
-						audio.volume = clamp(audio.volume + fx.mouse_scroll().y * 0.05, 0, 1)
+						vol = clamp(vol + fx.mouse_scroll().y * 0.05, 0, 1)
+						muted = false
+						audio.set_volume(vol)
+					} else if .CHANGE in vol_res || .ACTIVE in vol_res {
+						muted = false
+						audio.set_volume(vol)
 					}
 
 					if .ACTIVE in vol_res || .HOVER in vol_res {
 						draw_slider_tooltip(
 							get_id("vol_tooltip"),
 							vol_bounds,
-							audio.volume,
-							fmt.tprintf("%d%%", int(audio.volume * 100 + 0.5)),
+							vol,
+							fmt.tprintf("%d%%", int(vol * 100 + 0.5)),
 							centered = true,
 						)
 					}
@@ -899,8 +915,16 @@ handle_keyboard_input :: proc() {
 
 	if search.focused do return
 
-	if fx.key_is_pressed_repeat(.Up) do audio.volume = clamp(audio.volume + 0.05, 0, 1)
-	if fx.key_is_pressed_repeat(.Down) do audio.volume = clamp(audio.volume - 0.05, 0, 1)
+	if fx.key_is_pressed_repeat(.Up) {
+		vol := clamp((muted ? saved_volume : audio.get_volume()) + 0.05, 0, 1)
+		muted = false
+		audio.set_volume(vol)
+	}
+	if fx.key_is_pressed_repeat(.Down) {
+		vol := clamp((muted ? saved_volume : audio.get_volume()) - 0.05, 0, 1)
+		muted = false
+		audio.set_volume(vol)
+	}
 
 	if player.music == nil do return
 
@@ -957,7 +981,9 @@ draw_mini_player :: proc() {
 	@(static) volume_timer: f32
 
 	if fx.mouse_scroll().y != 0 {
-		audio.volume = clamp(audio.volume + fx.mouse_scroll().y * 0.05, 0, 1)
+		vol := clamp((muted ? saved_volume : audio.get_volume()) + fx.mouse_scroll().y * 0.05, 0, 1)
+		muted = false
+		audio.set_volume(vol)
 		volume_timer = 1.0
 	}
 
@@ -1021,7 +1047,7 @@ draw_mini_player :: proc() {
 		}
 		fx.draw_rect(toast_rect, COLOR_ACCENT, 8)
 
-		vol_percent := int(audio.volume * 100 + 0.5)
+		vol_percent := int((muted ? 0 : audio.get_volume()) * 100 + 0.5)
 		vol_str := fmt.tprintf("Vol: %d%%", vol_percent)
 		fx.draw_text_rect(vol_str, toast_rect, 12, COLOR_TEXT, true)
 	}

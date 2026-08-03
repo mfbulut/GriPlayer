@@ -5,7 +5,12 @@ import "core:strings"
 foreign import lib { "../libs/opusfile.lib", "../libs/opus.lib", "../libs/ogg.lib" }
 
 File  :: struct {}
-Tags :: struct {}
+Tags :: struct {
+    user_comments: [^][^]u8,
+    comment_lengths: [^]i32,
+    comment_count: i32,
+    vendor: cstring,
+}
 
 TRACK_GAIN :: 3008
 
@@ -20,9 +25,6 @@ foreign lib {
     pcm_seek          :: proc(file: ^File , pcm_offset: i64) -> i32 ---
     pcm_tell          :: proc(file: ^File ) -> i64 ---
     tags              :: proc(file: ^File , link_index: i32) -> ^Tags ---
-
-    @(link_name = "opus_tags_query")
-    tags_query :: proc(tags: ^Tags, key: cstring, index: i32) -> cstring ---
 }
 
 open_file :: proc(path: string) -> ^File {
