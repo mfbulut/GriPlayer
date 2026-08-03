@@ -212,7 +212,7 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
 
     state.render_client->ReleaseBuffer(u32(frames_read), 0)
 
-    return false
+    return frames_read == 0
 }
 
 seek :: proc(position: f32) {
