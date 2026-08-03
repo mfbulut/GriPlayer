@@ -3,7 +3,6 @@ package fx
 import "base:runtime"
 import "core:time"
 import "core:mem"
-import "core:unicode"
 import "core:unicode/utf16"
 import win "core:sys/windows"
 
@@ -446,13 +445,13 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	        codepoint := utf16.decode_surrogate_pair(high_surrogate, w)
 	        high_surrogate = 0
 
-	        if unicode.is_graphic(codepoint) {
+	        if codepoint >= 32 && codepoint != 127 {
 	            append(&window.text_input, codepoint)
 	        }
 	    case:
 	        high_surrogate = 0
 
-	        if unicode.is_graphic(w) {
+	        if w >= 32 && w != 127 {
 	            append(&window.text_input, w)
 	        }
 	    }

@@ -11,7 +11,6 @@ import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:time"
-import "core:unicode"
 
 import "fx"
 import "fx/audio"
@@ -111,7 +110,7 @@ loader_start :: proc() {
 				continue
 			}
 
-			extension := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
+			extension := to_lower_ascii(os.ext(info.fullpath), context.temp_allocator)
 			if extension != ".opus" && extension != ".ogg" && extension != ".mp3" &&
 			   extension != ".flac" && extension != ".wav" {
 				continue
@@ -264,8 +263,8 @@ load_lrc :: proc(music: ^Music) -> os.Error {
 		append(&music.lyrics, Lyric{lyric, minutes * 60 + seconds})
 
 		runes := make([dynamic]rune, 0, len(lyric), context.temp_allocator)
-		for character in strings.to_lower(lyric, context.temp_allocator) {
-			if unicode.is_letter(character) || unicode.is_digit(character) {
+		for character in to_lower_ascii(lyric, context.temp_allocator) {
+			if character != ' ' {
 				append(&runes, character)
 			}
 		}

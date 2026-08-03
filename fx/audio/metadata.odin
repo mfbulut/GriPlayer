@@ -24,20 +24,18 @@ Metadata :: struct {
 }
 
 metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-	ext := strings.to_lower(os.ext(path), context.temp_allocator)
-
-	switch ext {
-	case ".ogg":
+	switch os.ext(path) {
+	case ".ogg", ".OGG":
 		meta, ok = parse_vorbis_metadata(path)
 		if ok do return
 		meta, ok = parse_opus_metadata(path)
-	case ".opus":
+	case ".opus", ".OPUS":
 		meta, ok = parse_opus_metadata(path)
-	case ".mp3":
+	case ".mp3", ".MP3":
 		meta, ok = parse_mp3_metadata(path)
-	case ".flac":
+	case ".flac", ".FLAC":
 		meta, ok = parse_flac_metadata(path)
-	case ".wav":
+	case ".wav", ".WAV":
 		meta, ok = parse_wav_metadata(path)
 	}
 

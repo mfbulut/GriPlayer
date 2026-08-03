@@ -38,7 +38,7 @@ player_start_playlist :: proc(songs: []^Music, song_index: int) {
 }
 
 player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
-	if song == nil || !audio.open(song.fullpath, gapless) {
+	if song == nil || !audio.open(song.fullpath) {
 		player.playing = false
 		player.music = nil
 		return
@@ -46,6 +46,10 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 
 	if paused do audio.pause()
 	else do audio.resume()
+	if gapless == false {
+        audio.reset()
+    }
+
 	audio.eq_reset_state()
 	player.session += 1
 	player.music = song

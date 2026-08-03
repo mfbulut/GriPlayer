@@ -77,7 +77,7 @@ init_wasapi :: proc(new_sample_rate: u32) {
     eq_recalculate_all()
 }
 
-open :: proc(path: string, gapless := false) -> bool {
+open :: proc(path: string) -> bool {
     switch d in state.decoder {
     case ^opusfile.File:
         opusfile.free(d)
@@ -96,10 +96,9 @@ open :: proc(path: string, gapless := false) -> bool {
 
     state.decoder = nil
     prev_sample_rate := state.sample_rate
-    ext := strings.to_lower(os.ext(path), context.temp_allocator)
 
-    switch ext {
-    case ".opus":
+    switch os.ext(path) {
+    case ".opus", ".OPUS":
         if of := opusfile.open_file(path); of != nil {
             opusfile.set_gain_offset(of, opusfile.TRACK_GAIN, 0)
             state.decoder = of
@@ -107,7 +106,7 @@ open :: proc(path: string, gapless := false) -> bool {
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
         }
-    case ".ogg":
+    case ".ogg", ".OGG":
         if vf := open_vorbis_file(path); vf != nil {
             state.decoder = vf
             info := vorbis.get_info(vf)
@@ -121,21 +120,21 @@ open :: proc(path: string, gapless := false) -> bool {
             state.channels = 2
             state.total_pcm = opusfile.pcm_total(of, -1)
         }
-    case ".mp3":
+    case ".mp3", ".MP3":
         if mp3 := drmp3.open_file(path); mp3 != nil {
             state.decoder = mp3
             state.sample_rate = drmp3.get_sampleRate(mp3)
             state.channels = drmp3.get_channels(mp3)
             state.total_pcm = i64(drmp3.get_pcm_frame_count(mp3))
         }
-    case ".flac":
+    case ".flac", ".FLAC":
         if flac := drflac.open_file(path); flac != nil {
             state.decoder = flac
             state.sample_rate = drflac.get_sampleRate(flac)
             state.channels = drflac.get_channels(flac)
             state.total_pcm = i64(drflac.get_totalPCMFrameCount(flac))
         }
-    case ".wav":
+    case ".wav", ".WAV":
         if wav := drwav.open_file(path); wav != nil {
             state.decoder = wav
             state.sample_rate = drwav.get_sampleRate(wav)
@@ -150,8 +149,6 @@ open :: proc(path: string, gapless := false) -> bool {
 
     if state.sample_rate != prev_sample_rate {
         init_wasapi(state.sample_rate)
-    } else if gapless == false {
-        reset()
     }
 
     return true
