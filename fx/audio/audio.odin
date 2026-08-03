@@ -2,7 +2,6 @@ package audio
 
 import "core:c"
 import "core:os"
-import "core:slice"
 import "core:strings"
 
 import "core:sys/windows"
@@ -158,7 +157,7 @@ open :: proc(path: string, gapless := false) -> bool {
     return true
 }
 
-temp_buffer: [500000 * 2]f32
+temp_buffer: [500000 * 8]f32
 
 update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
     if state.decoder == nil do return false
@@ -187,7 +186,7 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
 
     samples := (cast([^][2]f32)buffer)[:frames_read]
 
-    if state.channels >= 2 {
+    if state.channels == 2 {
         for i in 0..<frames_read {
             samples[i][0] = temp_buffer[i * 2 + 0]
             samples[i][1] = temp_buffer[i * 2 + 1]
@@ -196,6 +195,12 @@ update :: proc(callback: proc(samples: [][2]f32) = nil) -> bool {
         for i in 0..<frames_read {
             samples[i][0] = temp_buffer[i]
             samples[i][1] = temp_buffer[i]
+        }
+    } else {
+        ch := i32(state.channels)
+        for i in 0..<frames_read {
+            samples[i][0] = temp_buffer[i * ch + 0]
+            samples[i][1] = temp_buffer[i * ch + 1]
         }
     }
 
