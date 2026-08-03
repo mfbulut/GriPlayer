@@ -202,10 +202,8 @@ player_update :: proc() {
 	if fx.key_is_pressed(.Next_Track) do player_next()
 	if fx.key_is_pressed(.Prev_Track) do player_prev()
 
-	if audio.update(visualizer_push) {
+	if audio.is_finished() {
 		player_next(true)
 		return
 	}
-
-	visualizer_update()
 }

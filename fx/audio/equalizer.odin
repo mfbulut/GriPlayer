@@ -1,6 +1,7 @@
 package audio
 
 import "core:math"
+import "core:sync"
 
 EqBand :: struct {
     gain_db:    f32,
@@ -13,8 +14,10 @@ eq_bands: [10]EqBand
 pregain_db := f32(0.0)
 
 eq_set_gain :: proc(band: int, gain_db: f32) {
-    eq_bands[band].gain_db = gain_db
-    eq_recalculate_band(band)
+    if sync.mutex_guard(&state.mu) {
+        eq_bands[band].gain_db = gain_db
+        eq_recalculate_band(band)
+    }
 }
 
 eq_get_gain :: proc(band: int) -> f32 {
@@ -22,17 +25,21 @@ eq_get_gain :: proc(band: int) -> f32 {
 }
 
 eq_reset_state :: proc() {
-    for &band in eq_bands {
-        band.z1 = 0
-        band.z2 = 0
+    if sync.mutex_guard(&state.mu) {
+        for &band in eq_bands {
+            band.z1 = 0
+            band.z2 = 0
+        }
     }
 }
 
 eq_reset :: proc() {
-    pregain_db = 0
-    for i in 0 ..< 10 {
-        eq_bands[i].gain_db = 0
-        eq_recalculate_band(i)
+    if sync.mutex_guard(&state.mu) {
+        pregain_db = 0
+        for i in 0 ..< 10 {
+            eq_bands[i].gain_db = 0
+            eq_recalculate_band(i)
+        }
     }
 }
 

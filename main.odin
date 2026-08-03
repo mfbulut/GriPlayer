@@ -44,6 +44,7 @@ main :: proc() {
 
 	fx.init("GriPlayer")
 	audio.initialize()
+	audio.set_callback(visualizer_push)
 	smtc.init(fx.window.hwnd)
 
 	builder: strings.Builder

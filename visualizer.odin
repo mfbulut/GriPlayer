@@ -3,6 +3,7 @@ package main
 import "base:intrinsics"
 import "core:math"
 import "core:slice"
+import "core:sync"
 
 import "fx"
 import "fx/audio"
@@ -25,6 +26,7 @@ fft_hann: [FFT_SIZE]f32
 fft_twiddle: [FFT_SIZE / 2]complex64
 audio_ring: [FFT_SIZE]f32
 audio_ring_pos: int
+audio_ring_mu: sync.Mutex
 spectrum: [SPECTRUM_BANDS]f32
 spectrum_peak: [SPECTRUM_BANDS]f32
 
@@ -60,9 +62,12 @@ fft_run :: proc() #no_bounds_check {
 }
 
 visualizer_push :: proc(frames: [][2]f32) {
-	for frame in frames {
-		audio_ring[audio_ring_pos] = (frame.x + frame.y) * 0.5
-		audio_ring_pos = (audio_ring_pos + 1) % FFT_SIZE
+	if sync.mutex_guard(&audio_ring_mu) {
+		for frame in frames {
+			audio_ring[audio_ring_pos] = (frame.x + frame.y) * 0.5
+			audio_ring_pos = (audio_ring_pos + 1) % FFT_SIZE
+		}
+		visualizer_update()
 	}
 }
 
@@ -133,6 +138,8 @@ visualizer_update :: proc() {
 }
 
 draw_visualizer :: proc(bounds: fx.Rect) {
+	sync.mutex_guard(&audio_ring_mu)
+
 	if bounds.size.x <= 0 || bounds.size.y <= 0 do return
 	content := fx.Rect{{bounds.pos.x, bounds.pos.y}, {bounds.size.x, bounds.size.y}}
 	if content.size.y <= 0 do return
