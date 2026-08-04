@@ -61,10 +61,11 @@ parse_tags :: proc(tags: []string, meta: ^Metadata) {
 			}
 		case "ALBUM":
 			meta.album = strings.clone(val, context.temp_allocator)
-		case "TRACKNUMBER":
+		case "TRACKNUMBER", "TRACK":
 			meta.track = strconv.parse_int(val) or_continue
 		case "METADATA_BLOCK_PICTURE":
-			if decoded_buf, err := base64.decode(val, allocator = context.temp_allocator); err == nil {
+			clean_val := strings.trim_space(val)
+			if decoded_buf, err := base64.decode(clean_val, allocator = context.temp_allocator); err == nil {
 				meta.cover = parse_flac_picture(decoded_buf)
 			}
 		}
@@ -330,7 +331,7 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 			if length >= 34 {
 				if n, _ := os.read(f, block_data); n == length {
 					sample_rate := u32(block_data[10])<<12 | u32(block_data[11])<<4 | u32(block_data[12]>>4)
-					total_samples := u64(block_data[12]&0x0F)<<32 | u64(block_data[13])<<24 | u64(block_data[14])<<16 | u64(block_data[15])<<8 | u64(block_data[16])
+					total_samples := u64(block_data[13]&0x0F)<<32 | u64(block_data[14])<<24 | u64(block_data[15])<<16 | u64(block_data[16])<<8 | u64(block_data[17])
 					if sample_rate > 0 {
 						meta.duration = f32(total_samples) / f32(sample_rate)
 					}
