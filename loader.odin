@@ -101,7 +101,6 @@ loader_start :: proc() {
 		}
 
 		cache, err := cache_load()
-		cache = {}
 		walker := os.walker_create(music_dir)
 		defer os.walker_destroy(&walker)
 

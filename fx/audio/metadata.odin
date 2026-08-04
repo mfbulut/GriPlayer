@@ -11,7 +11,6 @@ import "core:encoding/endian"
 import "opusfile"
 import "vendor:stb/vorbis"
 import "drmp3"
-import "drflac"
 import "drwav"
 
 Metadata :: struct {
@@ -193,8 +192,8 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	}
 
 	header: [10]byte
-	n, _ := os.read(f, header[:])
-	if n != 10 || string(header[:3]) != "ID3" do return
+	header_size, _ := os.read(f, header[:])
+	if header_size != 10 || string(header[:3]) != "ID3" do return
 
 	version := header[3]
 	flags := header[5]

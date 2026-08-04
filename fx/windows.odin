@@ -25,7 +25,6 @@ window: struct {
 	key_state:      Key_States,
 	cursor:         Cursor,
 	mouse_pos:      Vec2,
-	mouse_inside:   bool,
 	mouse_scroll:   Vec2,
 	text_input:     [dynamic; 32]rune,
 	prev_time:      time.Time,
@@ -39,7 +38,7 @@ init :: proc(title: string, size := [2]u32{1280, 720}) {
 	window.hInstance = cast(win.HINSTANCE)win.GetModuleHandleW(nil)
 	wndclass := win.WNDCLASSW{
 		lpfnWndProc   = window_proc,
-		style         = win.CS_VREDRAW | win.CS_HREDRAW | win.CS_OWNDC,
+		// style         = win.CS_OWNDC,
 		hInstance     = window.hInstance,
 		hIcon         = win.LoadIconW(window.hInstance, cast(win.LPCWSTR)win.MAKEINTRESOURCEW(1)),
 		hCursor       = win.LoadCursorA(nil, win.IDC_ARROW),
@@ -301,9 +300,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	context = runtime.default_context()
 
 	result := win.LRESULT(0)
-	if window.hwnd == nil || window.hwnd != hwnd {
-		return win.DefWindowProcW(hwnd, msg, wparam, lparam)
-	}
 
 	switch msg {
 	case win.WM_DESTROY:
@@ -341,16 +337,12 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		window.size.x = cast(u32)win.LOWORD(lparam)
 		window.size.y = cast(u32)win.HIWORD(lparam)
 		window.is_resized = true
+
 	case win.WM_SETFOCUS:
 	case win.WM_KILLFOCUS:
 		for vkcode in Key {
 			window.key_state[vkcode] = {}
 		}
-
-	case win.WM_PAINT:
-		ps: win.PAINTSTRUCT
-		win.BeginPaint(hwnd, &ps)
-		win.EndPaint(hwnd, &ps)
 
 	case win.WM_LBUTTONUP:
 		update_button(.Mouse_Left, false)
@@ -375,21 +367,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		x := win.GET_X_LPARAM(lparam)
 		y := win.GET_Y_LPARAM(lparam)
 		window.mouse_pos = {f32(x), f32(y)} / dpi_scale()
-		inside := x >= 0 && y >= 0 && x < i32(window.size.x) && y < i32(window.size.y)
-		if inside && !window.mouse_inside {
-			window.mouse_inside = true
-			track := win.TRACKMOUSEEVENT{
-				cbSize    = size_of(win.TRACKMOUSEEVENT),
-				dwFlags   = win.TME_LEAVE,
-				hwndTrack = hwnd,
-			}
-			win.TrackMouseEvent(&track)
-		}
-	case win.WM_MOUSELEAVE:
-		window.mouse_inside = false
-		if win.GetCapture() != hwnd {
-			window.mouse_pos = {-1, -1}
-		}
 
 	case win.WM_MOUSEWHEEL:
 		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
@@ -425,9 +402,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 				}
 			}
 		}
-
-	case win.WM_SYSCHAR:
-		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
 
 	case win.WM_CHAR:
 	    @(static) high_surrogate: rune
