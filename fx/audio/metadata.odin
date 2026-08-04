@@ -24,18 +24,20 @@ Metadata :: struct {
 }
 
 metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-	switch os.ext(path) {
-	case ".ogg", ".OGG":
+    ext := strings.to_lower(os.ext(path), context.temp_allocator)
+
+	switch ext {
+	case ".ogg":
 		meta, ok = parse_vorbis_metadata(path)
 		if ok do return
 		meta, ok = parse_opus_metadata(path)
-	case ".opus", ".OPUS":
+	case ".opus":
 		meta, ok = parse_opus_metadata(path)
-	case ".mp3", ".MP3":
+	case ".mp3":
 		meta, ok = parse_mp3_metadata(path)
-	case ".flac", ".FLAC":
+	case ".flac":
 		meta, ok = parse_flac_metadata(path)
-	case ".wav", ".WAV":
+	case ".wav":
 		meta, ok = parse_wav_metadata(path)
 	}
 
@@ -72,46 +74,48 @@ parse_tags :: proc(tags: []string, meta: ^Metadata) {
 
 parse_vorbis_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	vf := open_vorbis_file(path)
-	if vf == nil do return
-	ok = true
-	defer vorbis.close(vf)
+	if vf != nil {
+		ok = true
 
-	info := vorbis.get_info(vf)
-	if pcm_tot := vorbis.stream_length_in_samples(vf); pcm_tot > 0 && info.sample_rate > 0 {
-		meta.duration = f32(pcm_tot) / f32(info.sample_rate)
+		info := vorbis.get_info(vf)
+		if pcm_tot := vorbis.stream_length_in_samples(vf); pcm_tot > 0 && info.sample_rate > 0 {
+			meta.duration = f32(pcm_tot) / f32(info.sample_rate)
+		}
+
+		vc := vorbis.get_comment(vf)
+		tags := make([]string, vc.comment_list_length, context.temp_allocator)
+
+		for i in 0..<vc.comment_list_length {
+			tags[i] = string(vc.comment_list[i])
+		}
+
+		parse_tags(tags, &meta)
+		vorbis.close(vf)
 	}
-
-	vc := vorbis.get_comment(vf)
-	tags := make([]string, vc.comment_list_length, context.temp_allocator)
-
-	for i in 0..<vc.comment_list_length {
-		tags[i] = string(vc.comment_list[i])
-	}
-
-	parse_tags(tags, &meta)
 
 	return
 }
 
 parse_opus_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	of := opusfile.open_file(path)
-	if of == nil do return
-	ok = true
-	defer opusfile.free(of)
+	if of != nil {
+		ok = true
 
-	if pcm_tot := opusfile.pcm_total(of, -1); pcm_tot > 0 {
-		meta.duration = f32(pcm_tot) / 48000.0
+		if pcm_tot := opusfile.pcm_total(of, -1); pcm_tot > 0 {
+			meta.duration = f32(pcm_tot) / 48000.0
+		}
+
+	    tags := opusfile.tags(of, 0)
+	    comments := make([]string, tags.comment_count, context.temp_allocator)
+
+	    for &c, i in comments {
+	        len := tags.comment_lengths[i]
+	        c = string(tags.user_comments[i][:len])
+	    }
+
+		parse_tags(comments, &meta)
+		opusfile.free(of)
 	}
-
-    tags := opusfile.tags(of, 0)
-    comments := make([]string, tags.comment_count, context.temp_allocator)
-
-    for &c, i in comments {
-        len := tags.comment_lengths[i]
-        c = string(tags.user_comments[i][:len])
-    }
-
-	parse_tags(comments, &meta)
 
 	return
 }
@@ -141,7 +145,7 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 		}
 
 		switch encoding {
-		case 0x00: // ISO-8859-1
+		case 0x00:
 			for b in raw {
 				if b == 0 do break
 				push(&buf, rune(b))
@@ -303,19 +307,15 @@ parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 }
 
 parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-	flac := drflac.open_file(path)
-	if flac == nil do return
-	meta.duration = f32(drflac.get_totalPCMFrameCount(flac)) / f32(drflac.get_sampleRate(flac))
-	drflac.close(flac)
-
 	f, err := os.open(path)
 	if err != nil do return
 	defer os.close(f)
-	ok = true
 
 	header: [4]byte
 	if n, _ := os.read(f, header[:]); n < 4 do return
 	if string(header[:4]) != "fLaC" do return
+
+	ok = true
 
 	for {
 		fh: [4]byte
@@ -323,18 +323,30 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 
 		is_last := (fh[0] & 0x80) != 0
 		block_type := fh[0] & 0x7F
-		// 24-bit big-endian; core:encoding/endian has no u24 helper.
 		length := int(fh[1])<<16 | int(fh[2])<<8 | int(fh[3])
 
-		if block_type == 4 {
-			block_data := make([]byte, length, context.temp_allocator)
+		block_data := make([]byte, length, context.temp_allocator)
+
+		if block_type == 0 {
+			if length >= 34 {
+				if n, _ := os.read(f, block_data); n == length {
+					sample_rate := u32(block_data[10])<<12 | u32(block_data[11])<<4 | u32(block_data[12]>>4)
+					total_samples := u64(block_data[12]&0x0F)<<32 | u64(block_data[13])<<24 | u64(block_data[14])<<16 | u64(block_data[15])<<8 | u64(block_data[16])
+					if sample_rate > 0 {
+						meta.duration = f32(total_samples) / f32(sample_rate)
+					}
+				}
+			} else {
+				os.seek(f, i64(length), .Current)
+			}
+		} else if block_type == 4 {
 			if n, _ := os.read(f, block_data); n < length do break
 
 			if len(block_data) >= 4 {
 				vendor_len := int(endian.unchecked_get_u32le(block_data[0:4]))
 				offset := 4 + vendor_len
 				if offset + 4 <= len(block_data) {
-					list_len := int(endian.unchecked_get_u32le(block_data[offset:offset+4]))
+					list_len := endian.unchecked_get_u32le(block_data[offset:offset+4])
 					offset += 4
 
 					tags := make([dynamic]string, 0, list_len, context.temp_allocator)
@@ -353,7 +365,6 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 				}
 			}
 		} else if block_type == 6 {
-			block_data := make([]byte, length, context.temp_allocator)
 			if n, _ := os.read(f, block_data); n < length do break
 			if pic := parse_flac_picture(block_data); pic != nil {
 				meta.cover = pic
@@ -376,6 +387,7 @@ parse_wav_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 		drwav.uninit(wav)
 		free(wav)
 	}
+
 	return
 }
 

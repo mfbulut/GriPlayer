@@ -52,9 +52,9 @@ search_score :: proc(song: ^Music, query: string, words: []string) -> int {
 	Field :: struct {text: string, words: []string, weight: int}
 
 	fields := [3]Field{
-		{to_lower_ascii(song.title, context.temp_allocator), nil, 10},
-		{to_lower_ascii(song.artist, context.temp_allocator), nil, 8},
-		{to_lower_ascii(song.album, context.temp_allocator), nil, 6},
+		{strings.to_lower(song.title, context.temp_allocator), nil, 10},
+		{strings.to_lower(song.artist, context.temp_allocator), nil, 8},
+		{strings.to_lower(song.album, context.temp_allocator), nil, 6},
 	}
 
 	for &field in fields {
@@ -120,7 +120,7 @@ update_search :: proc() {
 	state.scroll_target.y = 0
 	state.scroll.y = 0
 
-	query := to_lower_ascii(strings.trim_space(query_text), context.temp_allocator)
+	query := strings.to_lower(strings.trim_space(query_text), context.temp_allocator)
 	if query == "" {
 		for playlist in playlists[LIBRARY_PLAYLIST_START:] {
 			for song in playlist.songs {
@@ -448,17 +448,4 @@ draw_textbox :: proc(bounds: fx.Rect, font_size: f32) {
 	}
 
 	fx.reset_scissor()
-}
-
-to_lower_ascii :: proc(s: string, allocator := context.allocator) -> string {
-	bytes := make([]byte, len(s), allocator)
-	for i in 0..<len(s) {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			bytes[i] = c + 32
-		} else {
-			bytes[i] = c
-		}
-	}
-	return string(bytes)
 }
