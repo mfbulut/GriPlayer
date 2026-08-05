@@ -14,32 +14,31 @@ eq_bands: [10]EqBand
 pregain_db := f32(0.0)
 
 eq_set_gain :: proc(band: int, gain_db: f32) {
-    if sync.mutex_guard(&state.mu) {
-        eq_bands[band].gain_db = gain_db
-        eq_recalculate_band(band)
-    }
+    sync.mutex_guard(&state.mu)
+    eq_bands[band].gain_db = gain_db
+    eq_recalculate_band(band)
+
 }
 
 eq_get_gain :: proc(band: int) -> f32 {
+    sync.mutex_guard(&state.mu)
     return eq_bands[band].gain_db
 }
 
 eq_reset_state :: proc() {
-    if sync.mutex_guard(&state.mu) {
-        for &band in eq_bands {
-            band.z1 = 0
-            band.z2 = 0
-        }
+    sync.mutex_guard(&state.mu)
+    for &band in eq_bands {
+        band.z1 = 0
+        band.z2 = 0
     }
 }
 
 eq_reset :: proc() {
-    if sync.mutex_guard(&state.mu) {
-        pregain_db = 0
-        for i in 0 ..< 10 {
-            eq_bands[i].gain_db = 0
-            eq_recalculate_band(i)
-        }
+    sync.mutex_guard(&state.mu)
+    pregain_db = 0
+    for i in 0 ..< 10 {
+        eq_bands[i].gain_db = 0
+        eq_recalculate_band(i)
     }
 }
 
@@ -91,4 +90,3 @@ eq_process :: proc(samples: [][2]f32) {
         }
     }
 }
-

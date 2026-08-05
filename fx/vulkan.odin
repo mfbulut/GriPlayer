@@ -329,8 +329,8 @@ vk_init :: proc() {
 	}
 
 	{	// Create Pipeline
-		vert_spv := #load("shaders/shader.vert.spv", []u32)
-		frag_spv := #load("shaders/shader.frag.spv", []u32)
+		vert_spv := #load("../assets/shaders/shader.vert.spv", []u32)
+		frag_spv := #load("../assets/shaders/shader.frag.spv", []u32)
 
 		push_constant_range := vk.PushConstantRange {
 			stageFlags = {.VERTEX},
