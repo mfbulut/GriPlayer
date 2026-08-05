@@ -100,7 +100,16 @@ loader_start :: proc() {
 			return
 		}
 
-		cache, err := cache_load()
+		cache, cache_err := cache_load()
+		cached_by_id: map[Id]^Music
+		if cache_err == nil {
+			cached_by_id = make(map[Id]^Music, len(cache))
+			for _, &song in cache {
+				id := music_id(&song)
+				cached_by_id[id] = &song
+			}
+		}
+
 		walker := os.walker_create(music_dir)
 		defer os.walker_destroy(&walker)
 
@@ -118,7 +127,7 @@ loader_start :: proc() {
 
 			music := new(Music)
 
-			if err == nil {
+			if cache_err == nil {
 				if cached, found := cache[info.fullpath]; found {
 					music^ = cached
 				}
@@ -132,6 +141,7 @@ loader_start :: proc() {
 					music.album = strings.clone(metadata.album)
 					music.track = metadata.track
 					music.duration = metadata.duration
+
 					if len(metadata.cover) > 0 {
 						load_thumbnail(music, metadata.cover)
 					}
@@ -139,6 +149,16 @@ loader_start :: proc() {
 
 				if music.title == "" {
 					music.title = strings.clone(os.stem(music.fullpath))
+				}
+
+				if cache_err == nil {
+					id := music_id(music)
+					if cached, found := cached_by_id[id]; found {
+						music.playtime = cached.playtime
+						music.liked = cached.liked
+						music.liked_timestamp = cached.liked_timestamp
+						music.listen_timestamp = cached.listen_timestamp
+					}
 				}
 			}
 
@@ -153,6 +173,14 @@ loader_start :: proc() {
 		loading_finished = true
 		sync.unlock(&loader_mutex)
 	}, self_cleanup = true)
+}
+
+music_id :: proc(music: ^Music) -> Id {
+	t := strings.to_lower(music.title, context.temp_allocator)
+	ar := strings.to_lower(music.artist, context.temp_allocator)
+	al := strings.to_lower(music.album, context.temp_allocator)
+	key := fmt.tprintf("%s|%s|%s|%.1f", t, ar, al, music.duration)
+	return Id(hash.fnv64a(transmute([]byte)key))
 }
 
 loader_poll :: proc() {
