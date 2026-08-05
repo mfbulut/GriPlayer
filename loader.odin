@@ -140,10 +140,9 @@ loader_start :: proc() {
 				if music.title == "" {
 					music.title = strings.clone(os.stem(music.fullpath))
 				}
-
-				load_lrc(music)
 			}
 
+			load_lrc(music)
 			free_all(context.temp_allocator)
 			sync.lock(&loader_mutex)
 			append(&loader_queue, music)
@@ -241,6 +240,7 @@ loader_poll :: proc() {
 }
 
 load_lrc :: proc(music: ^Music) -> os.Error {
+	if len(music.lyrics) > 0 do return nil
 	filename := os.join_filename(os.stem(music.fullpath), "lrc", context.temp_allocator) or_return
 	path := os.join_path({os.dir(music.fullpath), filename}, context.temp_allocator) or_return
 
@@ -281,7 +281,7 @@ load_lrc :: proc(music: ^Music) -> os.Error {
 }
 
 load_thumbnail :: proc(music: ^Music, cover_bytes: []byte) {
-	if len(cover_bytes) == 0 do return
+	if len(cover_bytes) == 0 || len(music.thumbnail_pixels) > 0 do return
 
 	w, h, channels: i32
 	pixels := image.load_from_memory(raw_data(cover_bytes), i32(len(cover_bytes)), &w, &h, &channels, 4)
