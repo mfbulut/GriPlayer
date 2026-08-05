@@ -381,6 +381,7 @@ decode_residual :: proc(f: ^File, chan_idx: u64, block_size: u64, order: u64) ->
 
     for p in 0 ..< num_partitions {
         k := read_bits(f, param_bits) or_return
+        if samples_per_partition == 0 || samples_per_partition < order do return false
         n_samples := (p == 0) ? (samples_per_partition - order) : samples_per_partition
 
         if k == escape_val {
@@ -436,6 +437,7 @@ read_float :: proc(f: ^File, output: []f32) -> int {
     channels := f.info.channels
     if channels == 0 do return 0
 
+    if f.info.bit_depth == 0 || f.info.bit_depth > 32 do return 0
     scale := f32(u64(1) << (f.info.bit_depth - 1))
     written := 0
     total := len(output)
@@ -708,10 +710,10 @@ sign_extend :: proc(x: u64, b: u64) -> i32 {
 }
 
 read_unary :: proc(f: ^File) -> (q: u64, ok: bool) {
-    for {
+    for q < 32 {
         bit := read_bits(f, 1) or_return
-        if bit == 1 do break
+        if bit == 1 do return q, true
         q += 1
     }
-    return q, true
+    return
 }
