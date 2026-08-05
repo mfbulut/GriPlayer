@@ -176,10 +176,7 @@ loader_start :: proc() {
 }
 
 music_id :: proc(music: ^Music) -> Id {
-	t := strings.to_lower(music.title, context.temp_allocator)
-	ar := strings.to_lower(music.artist, context.temp_allocator)
-	al := strings.to_lower(music.album, context.temp_allocator)
-	key := fmt.tprintf("%s|%s|%s|%.1f", t, ar, al, music.duration)
+	key := fmt.tprintf("%s|%s|%s|%.1f", music.title, music.artist, music.album, music.duration)
 	return Id(hash.fnv64a(transmute([]byte)key))
 }
 
