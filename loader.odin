@@ -103,11 +103,12 @@ loader_start :: proc() {
 		}
 
 		cache, cache_err := cache_load()
+		cached_by_id: map[Id]^Music
 		if cache_err == nil {
-			music_by_id = make(map[Id]^Music, len(cache))
+			cached_by_id = make(map[Id]^Music, len(cache))
 			for _, &song in cache {
 				id := music_id(&song)
-				music_by_id[id] = &song
+				cached_by_id[id] = &song
 			}
 		}
 
@@ -153,6 +154,14 @@ loader_start :: proc() {
 				}
 			}
 
+			id := music_id(music)
+			if cached, found := cached_by_id[id]; found {
+				music.playtime = cached.playtime
+				music.liked = cached.liked
+				music.liked_timestamp = cached.liked_timestamp
+				music.listen_timestamp = cached.listen_timestamp
+			}
+
 			load_lrc(music)
 			free_all(context.temp_allocator)
 			sync.lock(&loader_mutex)
@@ -182,15 +191,6 @@ loader_poll :: proc() {
 	if(loading_finished && len(loader_queue) == 0) {
 		polling_finished = true;
 		sync.unlock(&loader_mutex)
-
-		liked := &playlists[LIKED_PLAYLIST_INDEX]
-		clear(&liked.songs)
-		for _, song in music_by_id {
-			if song.liked {
-				append(&liked.songs, song)
-			}
-		}
-		playlist_sort(liked)
 		return
 	}
 
@@ -211,14 +211,18 @@ loader_poll :: proc() {
 		id := music_id(music)
 		cached, found := music_by_id[id]
 		if found {
-			if os.exists(cached.fullpath) {
-				music = cached
-			} else {
-				music.playtime = cached.playtime
-				music.liked = cached.liked
-				music.liked_timestamp = cached.liked_timestamp
-				music.listen_timestamp = cached.listen_timestamp
+			playlist_name := os.base(os.dir(music.fullpath))
+			for &playlist in playlists[LIBRARY_PLAYLIST_START:] {
+				if playlist.name == playlist_name {
+					append(&playlist.songs, cached)
+					playlist_sort(&playlist)
+					continue next_music
+				}
 			}
+
+			append(&playlists, Playlist{name = playlist_name, sort = .Title, icon = .Note})
+			append(&playlists[len(playlists) - 1].songs, cached)
+			continue next_music
 		} else {
 			music_by_id[id] = music
 		}
@@ -244,6 +248,10 @@ loader_poll :: proc() {
 				cursor_x = 0
 				cursor_y += 64
 			}
+		}
+
+		if music.liked {
+			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
 
 		if time.to_unix_nanoseconds(music.listen_timestamp) > 0 {
