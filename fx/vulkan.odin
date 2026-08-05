@@ -54,8 +54,13 @@ textures: #soa[MAX_TEXTURES]struct {
 }
 
 vk_init :: proc() {
-	{	// Load vulkan-1.dll
-		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load vulkan-1.dll")
+	{	// Load Vulkan library
+		when ODIN_OS == .Windows {
+			lib_name := "vulkan-1.dll"
+		} else {
+			lib_name := "libvulkan.so.1"
+		}
+		lib := dynlib.load_library(lib_name) or_else panic("Failed to load Vulkan library")
 		vkGetInstanceProcAddr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr")
 		vk.load_proc_addresses(vkGetInstanceProcAddr)
 	}
@@ -70,9 +75,11 @@ vk_init :: proc() {
 			layer_names: ^cstring
 		}
 
-		extensions: [dynamic; 3]cstring
-		append(&extensions, vk.KHR_SURFACE_EXTENSION_NAME)
-		append(&extensions, vk.KHR_WIN32_SURFACE_EXTENSION_NAME)
+		extensions: [dynamic]cstring
+		req_exts := vk_get_required_instance_extensions()
+		for ext in req_exts {
+			append(&extensions, ext)
+		}
 		when ODIN_DEBUG {
 			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		}
@@ -87,7 +94,7 @@ vk_init :: proc() {
 			sType = .INSTANCE_CREATE_INFO,
 			pApplicationInfo = &app_info,
 			enabledExtensionCount =  u32(len(extensions)),
-			ppEnabledExtensionNames = &extensions[0],
+			ppEnabledExtensionNames = raw_data(extensions),
 			enabledLayerCount = layer_count,
 			ppEnabledLayerNames = layer_names,
 		}
@@ -124,12 +131,7 @@ vk_init :: proc() {
 	}
 
 	{	// Create Surface
-		surface_create_info := vk.Win32SurfaceCreateInfoKHR {
-			sType = .WIN32_SURFACE_CREATE_INFO_KHR,
-			hinstance = window.hInstance,
-			hwnd = window.hwnd,
-		}
-		vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
+		vks.surface = vk_create_surface(vks.instance)
 	}
 
 	{	// Pick Physical Device

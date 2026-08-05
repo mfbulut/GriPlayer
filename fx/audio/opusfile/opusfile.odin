@@ -2,7 +2,7 @@ package opusfile
 
 import "core:strings"
 
-foreign import lib "../libs/opusfile.lib"
+foreign import lib "opusfile.lib"
 
 File  :: struct {}
 Tags :: struct {

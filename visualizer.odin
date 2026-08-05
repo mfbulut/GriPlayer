@@ -88,7 +88,7 @@ visualizer_update :: proc() {
 
 	fft_run()
 
-	sample_rate := max(f32(audio.state.sample_rate), 1)
+	sample_rate := f32(48000)
 	nyquist := sample_rate * 0.5
 	max_frequency := min(SPECTRUM_MAX_FREQUENCY, nyquist * 0.95)
 	min_bin := clamp(
@@ -139,8 +139,6 @@ visualizer_update :: proc() {
 }
 
 draw_visualizer :: proc(bounds: fx.Rect) {
-	sync.guard(&audio_ring_mu)
-
 	if bounds.size.x <= 0 || bounds.size.y <= 0 do return
 	content := fx.Rect{{bounds.pos.x, bounds.pos.y}, {bounds.size.x, bounds.size.y}}
 	if content.size.y <= 0 do return

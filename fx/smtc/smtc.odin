@@ -92,7 +92,7 @@ create_hstring :: proc(str: string) -> HSTRING {
 	return result
 }
 
-init :: proc(hwnd: windows.HWND) {
+init :: proc(hwnd: rawptr) {
 	if g_smtc != nil || hwnd == nil do return
 
 	ro_result := RoInitialize(1)
@@ -120,7 +120,7 @@ init :: proc(hwnd: windows.HWND) {
 	if windows.FAILED(result) || interop == nil do return
 	defer interop->Release()
 
-	result = interop->GetForWindow(hwnd, &ISystemMediaTransportControls_UUID, &g_smtc)
+	result = interop->GetForWindow(cast(windows.HWND)hwnd, &ISystemMediaTransportControls_UUID, &g_smtc)
 	if windows.FAILED(result) || g_smtc == nil do return
 
 	controls_ready :=
@@ -144,6 +144,7 @@ init :: proc(hwnd: windows.HWND) {
 }
 
 poll_action :: proc() -> Action {
+	if g_smtc == nil do return .None 
 	return sync.atomic_exchange(&pending_action, .None)
 }
 

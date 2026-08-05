@@ -45,7 +45,10 @@ main :: proc() {
 	fx.init("GriPlayer")
 	audio.initialize()
 	audio.set_callback(visualizer_push)
-	smtc.init(fx.window.hwnd)
+
+	when ODIN_OS == .Windows {
+		smtc.init(fx.window.hwnd)
+	}
 
 	builder: strings.Builder
 	edit.init(&textbox, context.allocator, context.allocator)

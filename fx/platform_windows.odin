@@ -5,6 +5,7 @@ import "core:time"
 import "core:mem"
 import "core:unicode/utf16"
 import win "core:sys/windows"
+import vk "vendor:vulkan"
 
 Cursor :: enum {
 	Arrow,
@@ -514,4 +515,22 @@ Key :: enum u8 {
 
 	LeftBracket  = 0xDB, RightBracket = 0xDD,
 	BackSlash    = 0xDC, Quote        = 0xDE,
+}
+
+vk_get_required_instance_extensions :: proc(allocator := context.temp_allocator) -> []cstring {
+	exts := make([]cstring, 2, allocator)
+	exts[0] = vk.KHR_SURFACE_EXTENSION_NAME
+	exts[1] = vk.KHR_WIN32_SURFACE_EXTENSION_NAME
+	return exts
+}
+
+vk_create_surface :: proc(instance: vk.Instance) -> vk.SurfaceKHR {
+	surface: vk.SurfaceKHR
+	surface_create_info := vk.Win32SurfaceCreateInfoKHR {
+		sType = .WIN32_SURFACE_CREATE_INFO_KHR,
+		hinstance = window.hInstance,
+		hwnd = window.hwnd,
+	}
+	vk.CreateWin32SurfaceKHR(instance, &surface_create_info, nil, &surface)
+	return surface
 }
