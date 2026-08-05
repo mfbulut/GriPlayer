@@ -122,12 +122,10 @@ update_search :: proc() {
 
 	query := strings.to_lower(strings.trim_space(query_text), context.temp_allocator)
 	if query == "" {
-		for playlist in playlists[LIBRARY_PLAYLIST_START:] {
-			for song in playlist.songs {
-				if search.filter_type == .Artist && song.artist != search.filter do continue
-				if search.filter_type == .Album && song.album != search.filter do continue
-				append(&search.results, song)
-			}
+		for _, song in music_by_id {
+			if search.filter_type == .Artist && song.artist != search.filter do continue
+			if search.filter_type == .Album && song.album != search.filter do continue
+			append(&search.results, song)
 		}
 		slice.sort_by(search.results[:], proc(a, b: ^Music) -> bool {
 			if search.filter_type == .Album && a.track != b.track do return a.track < b.track
@@ -139,13 +137,11 @@ update_search :: proc() {
 	matches: [dynamic]Search_Match
 	defer delete(matches)
 	words := strings.split(query, " ", context.temp_allocator)
-	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
-		for song in playlist.songs {
-			if search.filter_type == .Artist && song.artist != search.filter do continue
-			if search.filter_type == .Album && song.album != search.filter do continue
-			if score := search_score(song, query, words); score > 0 {
-				append(&matches, Search_Match{song, score})
-			}
+	for _, song in music_by_id {
+		if search.filter_type == .Artist && song.artist != search.filter do continue
+		if search.filter_type == .Album && song.album != search.filter do continue
+		if score := search_score(song, query, words); score > 0 {
+			append(&matches, Search_Match{song, score})
 		}
 	}
 

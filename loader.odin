@@ -77,6 +77,8 @@ loader_mutex: sync.Mutex
 loading_finished: bool
 polling_finished: bool
 
+music_by_id: map[Id]^Music
+
 loader_start :: proc() {
 	load_settings()
 
@@ -101,12 +103,11 @@ loader_start :: proc() {
 		}
 
 		cache, cache_err := cache_load()
-		cached_by_id: map[Id]^Music
 		if cache_err == nil {
-			cached_by_id = make(map[Id]^Music, len(cache))
+			music_by_id = make(map[Id]^Music, len(cache))
 			for _, &song in cache {
 				id := music_id(&song)
-				cached_by_id[id] = &song
+				music_by_id[id] = &song
 			}
 		}
 
@@ -150,16 +151,6 @@ loader_start :: proc() {
 				if music.title == "" {
 					music.title = strings.clone(os.stem(music.fullpath))
 				}
-
-				if cache_err == nil {
-					id := music_id(music)
-					if cached, found := cached_by_id[id]; found {
-						music.playtime = cached.playtime
-						music.liked = cached.liked
-						music.liked_timestamp = cached.liked_timestamp
-						music.listen_timestamp = cached.listen_timestamp
-					}
-				}
 			}
 
 			load_lrc(music)
@@ -191,6 +182,15 @@ loader_poll :: proc() {
 	if(loading_finished && len(loader_queue) == 0) {
 		polling_finished = true;
 		sync.unlock(&loader_mutex)
+
+		liked := &playlists[LIKED_PLAYLIST_INDEX]
+		clear(&liked.songs)
+		for _, song in music_by_id {
+			if song.liked {
+				append(&liked.songs, song)
+			}
+		}
+		playlist_sort(liked)
 		return
 	}
 
@@ -207,7 +207,22 @@ loader_poll :: proc() {
 	@(static) atlases: [dynamic]fx.Texture
 	ATLAS_SIZE :: 4096
 
-	next_music: for music in queue {
+	next_music: for &music in queue {
+		id := music_id(music)
+		cached, found := music_by_id[id]
+		if found {
+			if os.exists(cached.fullpath) {
+				music = cached
+			} else {
+				music.playtime = cached.playtime
+				music.liked = cached.liked
+				music.liked_timestamp = cached.liked_timestamp
+				music.listen_timestamp = cached.listen_timestamp
+			}
+		} else {
+			music_by_id[id] = music
+		}
+
 		if len(music.thumbnail_pixels) > 0 {
 			if len(atlases) == 0 || cursor_y + 64 > ATLAS_SIZE {
 				atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
@@ -229,10 +244,6 @@ loader_poll :: proc() {
 				cursor_x = 0
 				cursor_y += 64
 			}
-		}
-
-		if music.liked {
-			append(&playlists[LIKED_PLAYLIST_INDEX].songs, music)
 		}
 
 		if time.to_unix_nanoseconds(music.listen_timestamp) > 0 {
