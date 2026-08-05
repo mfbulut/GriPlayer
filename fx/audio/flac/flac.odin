@@ -17,18 +17,14 @@ File :: struct {
 
     buf_pos: u64,
     buf_len: u64,
-    pcm_buf: [][]i32,
+    pcm_buf: [8][]i32,
 }
 
 Info :: struct {
-    min_block_size: u64,
-    max_block_size: u64,
-    min_frame_size: u64,
-    max_frame_size: u64,
-    sample_rate:    u64,
-    channels:       u64,
-    bit_depth:      u64,
-    sample_count:   u64,
+    sample_rate:  u64,
+    channels:     u64,
+    bit_depth:    u64,
+    sample_count: u64,
 }
 
 Tags :: struct {
@@ -95,6 +91,10 @@ open_file :: proc(path: string) -> ^File {
 
     f.audio_start = f.pos
 
+    for i in 0 ..< 8 {
+        f.pcm_buf[i] = make([]i32, 65535)
+    }
+
     return f
 }
 
@@ -103,7 +103,6 @@ destroy :: proc(file: ^File) {
     for buf in file.pcm_buf {
         delete(buf)
     }
-    delete(file.pcm_buf)
     delete(file.data)
     delete(file.tags.comments)
     free(file)
@@ -117,9 +116,9 @@ parse :: proc(f: ^File) -> bool {
         end_pos := f.pos + len
 
         switch type {
-        case 0: parse_stream_info(f) or_return
-        case 4: parse_vorbis_comment(f) or_return
-        case 6: parse_picture(f) or_return
+        case 0: parse_stream_info(f)
+        case 4: parse_vorbis_comment(f)
+        case 6: parse_picture(f)
         }
 
         f.pos = end_pos
@@ -130,23 +129,15 @@ parse :: proc(f: ^File) -> bool {
 }
 
 parse_stream_info :: proc(f: ^File) -> bool {
-    f.info.min_block_size = read_bits(f, 16) or_return
-    f.info.max_block_size = read_bits(f, 16) or_return
-    f.info.min_frame_size = read_bits(f, 24) or_return
-    f.info.max_frame_size = read_bits(f, 24) or_return
+    read_bits(f, 16) or_return
+    read_bits(f, 16) or_return
+    read_bits(f, 24) or_return
+    read_bits(f, 24) or_return
     f.info.sample_rate = read_bits(f, 20) or_return
     f.info.channels = (read_bits(f, 3) or_return) + 1
     f.info.bit_depth = (read_bits(f, 5) or_return) + 1
     f.info.sample_count = read_bits(f, 36) or_return
     read_bytes(f, 16) or_return
-
-    channels := f.info.channels > 0 ? f.info.channels : 8
-    buf_size := f.info.max_block_size > 0 ? f.info.max_block_size : 65535
-
-    f.pcm_buf = make([][]i32, channels)
-    for i in 0 ..< channels {
-        f.pcm_buf[i] = make([]i32, buf_size)
-    }
 
     return true
 }
@@ -157,7 +148,7 @@ parse_picture :: proc(f: ^File) -> bool {
     read_bytes(f, mime_len) or_return
     desc_len := read_bits(f, 32) or_return
     read_bytes(f, desc_len) or_return
-    read_bytes(f, 16)
+    read_bytes(f, 16) or_return
 
     data_len := read_bits(f, 32) or_return
     cover_data := read_bytes(f, data_len) or_return
@@ -488,7 +479,7 @@ pcm_seek :: proc(f: ^File, target_pcm: u64) {
         return
     }
 
-    window := f.info.max_frame_size > 0 ? f.info.max_frame_size + 16 : 262144
+    window: u64 = 262144
     low_pos := f.audio_start
     high_pos := u64(len(f.data))
 
