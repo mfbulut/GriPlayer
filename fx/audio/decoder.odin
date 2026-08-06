@@ -98,14 +98,19 @@ decode_raw :: proc(samples: [][2]f32) -> int {
 
 		switch d in decoder.decoder {
 		case ^opusfile.File:
-			read = cast(int)opusfile.read_float_stereo(d, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining))
+			res := opusfile.read_float_stereo(d, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
+			if res > 0 {
+				read = cast(int)res
+			} else if res == opusfile.OP_HOLE {
+				continue
+			}
 		case ^vorbis.vorbis:
 			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
 		case ^flac.File:
 			read = flac.read_float_stereo(d, samples[frames_read:frames_needed])
 		}
 
-		if read <= 0 do break;
+		if read == 0 do break;
 		frames_read += read
 	}
 
@@ -156,7 +161,11 @@ seek :: proc(position: f32) {
 
 	if decoder.decoder == nil do return
 	target_pcm := i64(position * f32(decoder.sample_rate))
-	target_pcm = clamp(target_pcm, 0, decoder.total_pcm - 1)
+	if decoder.total_pcm > 0 {
+		target_pcm = clamp(target_pcm, 0, decoder.total_pcm - 1)
+	} else {
+		target_pcm = max(target_pcm, 0)
+	}
 
 	switch d in decoder.decoder {
 	case ^opusfile.File:
@@ -168,6 +177,7 @@ seek :: proc(position: f32) {
 	case:
 	}
 
+	decoder.song_finished = false
 	resampler_reset(target_pcm)
 	wasapi_reset()
 }

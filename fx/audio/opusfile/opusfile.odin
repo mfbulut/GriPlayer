@@ -14,6 +14,22 @@ Tags :: struct {
 
 TRACK_GAIN :: 3008
 
+OP_FALSE         :: -1
+OP_EOF           :: -2
+OP_HOLE          :: -133
+OP_EREAD         :: -128
+OP_EFAULT        :: -129
+OP_EIMPL         :: -130
+OP_EINVAL        :: -131
+OP_ENOTFORMAT    :: -132
+OP_EBADHEADER    :: -134
+OP_EVERSION      :: -135
+OP_ENOTAUDIO     :: -136
+OP_EBADPACKET    :: -137
+OP_EBADLINK      :: -138
+OP_ENOSEEK       :: -139
+OP_EBADTIMESTAMP :: -140
+
 @(link_prefix = "op_", default_calling_convention = "c")
 foreign lib {
     @(link_name = "op_open_file")
