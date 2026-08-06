@@ -445,8 +445,8 @@ save_settings :: proc() -> os.Error {
 	settings_path := os.join_path({app_dir, "settings.bin"}, context.temp_allocator) or_return
 
 	settings := Settings{
-		volume = audio.get_volume(),
-		pregain_db = audio.pregain_db,
+		volume     = audio.get_volume(),
+		pregain_db = audio.decoder.pregain_db,
 	}
 
 	for i in 0..<10 {
@@ -467,7 +467,7 @@ load_settings :: proc() -> os.Error {
 
 	settings := (cast(^Settings)raw_data(data))^
 	audio.set_volume(settings.volume)
-	audio.pregain_db = settings.pregain_db
+	audio.decoder.pregain_db = settings.pregain_db
 	for i in 0..<10 {
 		audio.eq_set_gain(i, settings.band_gains[i])
 	}

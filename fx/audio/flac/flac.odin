@@ -83,7 +83,7 @@ open_file :: proc(path: string) -> ^File {
         return nil
     }
 
-    if !parse(f) {
+    if !parse(f) || f.info.sample_rate == 0 {
         free(f)
         delete(data)
         return nil
@@ -453,9 +453,8 @@ restore_lpc_signal :: proc(buf: []i32, block_size: u64, order: u64, coeffs: []i3
     }
 }
 
-read_float :: proc(f: ^File, output: []f32) -> int {
-    channels := f.info.channels
-    if channels == 0 do return 0
+read_float_stereo :: proc(f: ^File, output: [][2]f32) -> int {
+    if f.info.channels == 0 do return 0
 
     if f.info.bit_depth == 0 || f.info.bit_depth > 32 do return 0
     scale := f32(u64(1) << (f.info.bit_depth - 1))
@@ -470,12 +469,16 @@ read_float :: proc(f: ^File, output: []f32) -> int {
         }
 
         for f.buf_pos < f.buf_len && written < total {
-            for c in 0 ..< channels {
-                if written >= total do break
-                sample_i32 := f.pcm_buf[c][f.buf_pos]
-                output[written] = f32(sample_i32) / scale
-                written += 1
+            if f.info.channels == 1 {
+                sample_i32 := f.pcm_buf[0][f.buf_pos]
+                val := f32(sample_i32) / scale
+                output[written] = {val, val}
+            } else {
+                s0 := f32(f.pcm_buf[0][f.buf_pos]) / scale
+                s1 := f32(f.pcm_buf[1][f.buf_pos]) / scale
+                output[written] = {s0, s1}
             }
+            written += 1
             f.buf_pos += 1
             f.cur_sample += 1
         }

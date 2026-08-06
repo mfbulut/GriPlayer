@@ -457,15 +457,15 @@ draw_equalizer :: proc() {
 		layout_row({64, -1, 64, 56}, 28)
 		label("Pre-gain", 12)
 
-		pregain_res, _ := slider(get_id("pregain"), &audio.pregain_db, -12, 12)
+		pregain_res, _ := slider(get_id("pregain"), &audio.decoder.pregain_db, -12, 12)
 		if .SECONDARY in pregain_res {
-			audio.pregain_db = 0
+			audio.decoder.pregain_db = 0
 		}
 		if .HOVER in pregain_res && fx.mouse_scroll().y != 0 {
-			audio.pregain_db = clamp(audio.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
+			audio.decoder.pregain_db = clamp(audio.decoder.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
 		}
 
-		pregain_text := to_string(audio.pregain_db, " dB")
+		pregain_text := to_string(audio.decoder.pregain_db, " dB")
 		label(pregain_text, 12)
 
 		if .SUBMIT in button("Reset", 12) {

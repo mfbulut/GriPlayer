@@ -1,9 +1,11 @@
 package audio
 
+import "core:c"
 import "core:sync"
 import "core:thread"
 import "core:sys/windows"
 import "vendor:windows/wasapi"
+import "vendor:stb/vorbis"
 
 wasapi_state: struct {
 	device:        ^wasapi.IMMDevice,
@@ -26,33 +28,14 @@ initialize :: proc() {
 		enumerator->Release()
 	}
 	wasapi_state.buffer_event = windows.CreateEventW(nil, false, false, nil)
-
-	init_wasapi(48000)
-	thread.run(audio_thread_proc)
-}
-
-init_wasapi :: proc(new_sample_rate: u32) {
-	if wasapi_state.audio_client != nil {
-		wasapi_state.audio_client->Stop()
-		wasapi_state.audio_client->Release()
-		wasapi_state.audio_client = nil
-	}
-	if wasapi_state.render_client != nil {
-		wasapi_state.render_client->Release()
-		wasapi_state.render_client = nil
-	}
-
-	if wasapi_state.device == nil do return
-
-	hr := wasapi_state.device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&wasapi_state.audio_client)
-	if hr != 0 || wasapi_state.audio_client == nil do return
+	wasapi_state.device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&wasapi_state.audio_client)
 
 	format := windows.WAVEFORMATEXTENSIBLE {
 		Format = {
 			wFormatTag = windows.WAVE_FORMAT_EXTENSIBLE,
 			nChannels = 2,
-			nSamplesPerSec = new_sample_rate,
-			nAvgBytesPerSec = 32 * 2 * new_sample_rate / 8,
+			nSamplesPerSec = 48000,
+			nAvgBytesPerSec = 32 * 2 * 48000 / 8,
 			nBlockAlign = 32 * 2 / 8,
 			wBitsPerSample = 32,
 			cbSize = size_of(windows.WAVEFORMATEXTENSIBLE) - size_of(windows.WAVEFORMATEX),
@@ -66,17 +49,17 @@ init_wasapi :: proc(new_sample_rate: u32) {
 					cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY |
 					cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_EVENTCALLBACK
 
-	if wasapi_state.audio_client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil) != 0 {
-		return
+	if wasapi_state.audio_client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil) == 0 {
+		wasapi_state.audio_client->SetEventHandle(wasapi_state.buffer_event)
+		wasapi_state.audio_client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&wasapi_state.render_client)
+		wasapi_state.audio_client->GetBufferSize(&wasapi_state.buffer_size)
 	}
-
-	wasapi_state.audio_client->SetEventHandle(wasapi_state.buffer_event)
-	wasapi_state.audio_client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&wasapi_state.render_client)
-	wasapi_state.audio_client->GetBufferSize(&wasapi_state.buffer_size)
 
 	for i in 0 ..< 10 {
 		eq_recalculate_band(i)
 	}
+
+	thread.run(audio_thread_proc)
 }
 
 audio_thread_proc :: proc() {
@@ -130,4 +113,19 @@ wasapi_reset :: proc() {
 reset :: proc() {
 	sync.guard(&global_mutex)
 	wasapi_reset()
+}
+
+// vorbis UTF-8 Path support
+
+foreign import libc "system:libucrt.lib"
+
+foreign libc {
+	_wfopen :: proc(filename, mode: cstring16) -> ^c.FILE ---
+}
+
+open_vorbis_file :: proc(path: string) -> ^vorbis.vorbis {
+	path_w := windows.utf8_to_wstring(path, context.temp_allocator)
+	f := _wfopen(path_w, "rb")
+	if f == nil do return nil
+	return vorbis.open_file(f, true, nil, nil)
 }
