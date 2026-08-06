@@ -116,7 +116,9 @@ parse :: proc(f: ^File) -> bool {
         end_pos := f.pos + len
 
         switch type {
-        case 0: parse_stream_info(f)
+        case 0:
+            if len != 34 do return false
+            parse_stream_info(f) or_return
         case 4: parse_vorbis_comment(f)
         case 6: parse_picture(f)
         }
@@ -332,6 +334,7 @@ decode_single_frame :: proc(f: ^File) -> bool {
             lpc_prec := (read_bits(f, 4) or_return) + 1
             if lpc_prec == 16 do return false
             lpc_shift := sign_extend(read_bits(f, 5) or_return, 5)
+            if lpc_shift < 0 do return false
 
             coeffs: [32]i32
             for j in 0 ..< order {
@@ -450,11 +453,7 @@ restore_lpc_signal :: proc(buf: []i32, block_size: u64, order: u64, coeffs: []i3
         for j in 0 ..< order {
             accu += i64(coeffs[j]) * i64(buf[i - j - 1])
         }
-        if shift >= 0 {
-            buf[i] += i32(accu >> u64(shift))
-        } else {
-            buf[i] += i32(accu << u64(-shift))
-        }
+        buf[i] += i32(accu >> u64(shift))
     }
 }
 
