@@ -1,6 +1,5 @@
 package audio
 
-import "core:c"
 import "core:sync"
 import "core:thread"
 import "core:sys/windows"
@@ -14,7 +13,15 @@ wasapi_state: struct {
 	buffer_size:   u32,
 }
 
-initialize :: proc() {
+init :: proc() {
+	decoder.volume = 0.5
+	for i in 0 ..< 10 {
+		eq_recalculate_band(i)
+	}
+	thread.run(audio_thread_proc)
+}
+
+audio_thread_proc :: proc() {
 	windows.CoInitializeEx(nil, .MULTITHREADED)
 	enumerator: ^wasapi.IMMDeviceEnumerator
 	windows.CoCreateInstance(wasapi.CLSID_MMDeviceEnumerator, nil, windows.CLSCTX_INPROC_SERVER, wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
@@ -22,8 +29,12 @@ initialize :: proc() {
 		enumerator->GetDefaultAudioEndpoint(.Render, .Console, &wasapi_state.device)
 		enumerator->Release()
 	}
+	if wasapi_state.device == nil do return
+
 	wasapi_state.buffer_event = windows.CreateEventW(nil, false, false, nil)
 	wasapi_state.device->Activate(wasapi.IID_IAudioClient, windows.CLSCTX_INPROC_SERVER, nil, cast(^rawptr)&wasapi_state.audio_client)
+
+	if wasapi_state.audio_client == nil do return
 
 	format := windows.WAVEFORMATEXTENSIBLE {
 		Format = {
@@ -44,22 +55,13 @@ initialize :: proc() {
 					cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_SRC_DEFAULT_QUALITY |
 					cast(windows.DWORD)wasapi.AUDCLNT_FLAG.STREAM_EVENTCALLBACK
 
-	if wasapi_state.audio_client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil) == 0 {
+	res := wasapi_state.audio_client->Initialize(.SHARED, stream_flags, 500000, 0, cast(^wasapi.WAVEFORMATEX)&format, nil)
+
+	if res == 0 {
 		wasapi_state.audio_client->SetEventHandle(wasapi_state.buffer_event)
 		wasapi_state.audio_client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&wasapi_state.render_client)
 		wasapi_state.audio_client->GetBufferSize(&wasapi_state.buffer_size)
 	}
-
-	decoder.volume = 0.5
-	for i in 0 ..< 10 {
-		eq_recalculate_band(i)
-	}
-
-	thread.run(audio_thread_proc)
-}
-
-audio_thread_proc :: proc() {
-	windows.CoInitializeEx(nil, .MULTITHREADED)
 
 	for {
 		windows.WaitForSingleObject(wasapi_state.buffer_event, windows.INFINITE)

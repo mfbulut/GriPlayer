@@ -42,7 +42,7 @@ main :: proc() {
 	loader_start()
 
 	fx.init("GriPlayer")
-	audio.initialize()
+	audio.init()
 	audio.set_callback(visualizer_push)
 
 	when ODIN_OS == .Windows {

@@ -102,7 +102,7 @@ decode_raw :: proc(samples: [][2]f32) -> int {
 		case ^vorbis.vorbis:
 			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
 		case ^flac.File:
-			read = cast(int)flac.read_float_stereo(d, samples[frames_read:frames_needed])
+			read = flac.read_float_stereo(d, samples[frames_read:frames_needed])
 		}
 
 		if read <= 0 do break;
