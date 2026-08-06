@@ -11,6 +11,7 @@ resampler_state: struct {
 	pos_in:      f64,
 	sample_rate: u32,
 	table:       [33][16]f32,
+	eof:         bool,
 }
 
 bessel_i0 :: proc(x: f64) -> f64 {
@@ -77,6 +78,7 @@ resampler_reset :: proc() {
 	resampler_state.buf_count = 7
 	resampler_state.pos_in = 7.0
 	resampler_state.sample_rate = decoder.sample_rate
+	resampler_state.eof = false
 	rebuild_polyphase_table()
 }
 
@@ -111,17 +113,20 @@ resampler_read :: proc(out_samples: [][2]f32) -> int {
 
 		needed_input_end := int_pos + 9
 		if resampler_state.buf_count < needed_input_end {
-			space_available := len(resampler_state.buffer) - resampler_state.buf_count
-			if space_available > 0 {
-				read_count := decode_raw(resampler_state.buffer[resampler_state.buf_count:])
-				if read_count > 0 {
-					resampler_state.buf_count += read_count
-				} else {
-					pad_end := math.min(needed_input_end + 16, len(resampler_state.buffer))
-					for i := resampler_state.buf_count; i < pad_end; i += 1 {
-						resampler_state.buffer[i] = {0, 0}
+			if !resampler_state.eof {
+				space_available := len(resampler_state.buffer) - resampler_state.buf_count
+				if space_available > 0 {
+					read_count := decode_raw(resampler_state.buffer[resampler_state.buf_count:])
+					if read_count > 0 {
+						resampler_state.buf_count += read_count
+					} else {
+						resampler_state.eof = true
+						pad_end := math.min(resampler_state.buf_count + TAPS, len(resampler_state.buffer))
+						for i := resampler_state.buf_count; i < pad_end; i += 1 {
+							resampler_state.buffer[i] = {0, 0}
+						}
+						resampler_state.buf_count = pad_end
 					}
-					resampler_state.buf_count = pad_end
 				}
 			}
 		}
