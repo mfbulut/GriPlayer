@@ -1,9 +1,10 @@
 package fx
 
 import "base:runtime"
+import "core:os"
+
 import "core:dynlib"
 import "core:mem"
-import "core:os"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 

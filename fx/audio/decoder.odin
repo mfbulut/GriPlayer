@@ -1,6 +1,5 @@
 package audio
 
-import "core:c"
 import "core:math"
 import "core:os"
 import "core:strings"
@@ -127,7 +126,23 @@ read_float :: proc(samples: [][2]f32) -> u32 {
 	}
 
 	out_samples := samples[:frames_read]
-	eq_process(out_samples)
+
+	preamp_gain := math.pow(10, decoder.pregain_db / 20.0)
+
+	for &sample in out_samples {
+		for &x, i in sample {
+			for &band in decoder.eq_bands {
+				y := band.b0 * x + band.z1[i]
+				band.z1[i] = band.b1 * x - band.a1 * y + band.z2[i]
+				band.z2[i] = band.b2 * x - band.a2 * y
+				x = y
+			}
+		}
+	}
+
+	for &sample in out_samples {
+		sample *= preamp_gain
+	}
 
 	if decoder.callback != nil {
 		decoder.callback(out_samples)
@@ -260,23 +275,4 @@ eq_recalculate_band :: proc(i: int) {
 	band.b2 = b2 / a0
 	band.a1 = a1 / a0
 	band.a2 = a2 / a0
-}
-
-eq_process :: proc(samples: [][2]f32) {
-	preamp_gain := math.pow(10, decoder.pregain_db / 20.0)
-
-	for &sample in samples {
-		sample *= preamp_gain
-	}
-
-	for &sample in samples {
-		for &x, i in sample {
-			for &band in decoder.eq_bands {
-				y := band.b0 * x + band.z1[i]
-				band.z1[i] = band.b1 * x - band.a1 * y + band.z2[i]
-				band.z2[i] = band.b2 * x - band.a2 * y
-				x = y
-			}
-		}
-	}
 }

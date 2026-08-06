@@ -3,7 +3,6 @@ package main
 import "core:bytes"
 import "core:container/bit_array"
 import "core:hash"
-import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strconv"
