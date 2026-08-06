@@ -469,7 +469,7 @@ load_settings :: proc() -> os.Error {
 	audio.set_volume(settings.volume)
 	audio.pregain_db = settings.pregain_db
 	for i in 0..<10 {
-		audio.eq_set_gain(i, settings.band_gains[i]) =
+		audio.eq_set_gain(i, settings.band_gains[i])
 	}
 
 	return nil
