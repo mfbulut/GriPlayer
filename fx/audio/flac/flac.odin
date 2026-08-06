@@ -244,6 +244,24 @@ frame_header :: proc(f: ^File) -> (fh: Frame_Header, ok: bool) {
 }
 
 decode_next_frame :: proc(f: ^File) -> bool {
+    if decode_single_frame(f) do return true
+
+    search_pos := f.pos
+    for {
+        hdr_pos, _, _, ok := find_frame_in_window(f, search_pos, u64(len(f.data)))
+        if !ok do break
+
+        f.pos = hdr_pos
+        align_to_byte(f)
+        if decode_single_frame(f) do return true
+
+        search_pos = hdr_pos + 1
+    }
+
+    return false
+}
+
+decode_single_frame :: proc(f: ^File) -> bool {
     frame_start := f.pos
     fh := frame_header(f) or_return
 
@@ -314,7 +332,6 @@ decode_next_frame :: proc(f: ^File) -> bool {
             lpc_prec := (read_bits(f, 4) or_return) + 1
             if lpc_prec == 16 do return false
             lpc_shift := sign_extend(read_bits(f, 5) or_return, 5)
-            if lpc_shift < 0 do return false
 
             coeffs: [32]i32
             for j in 0 ..< order {
@@ -373,6 +390,7 @@ decode_residual :: proc(f: ^File, chan_idx: u64, block_size: u64, order: u64) ->
     partition_order := read_bits(f, 4) or_return
     num_partitions := u64(1) << partition_order
     samples_per_partition := block_size >> partition_order
+    if samples_per_partition == 0 do return false
 
     param_bits: u64 = (method == 0) ? 4 : 5
     escape_val: u64 = (1 << param_bits) - 1
@@ -381,8 +399,11 @@ decode_residual :: proc(f: ^File, chan_idx: u64, block_size: u64, order: u64) ->
 
     for p in 0 ..< num_partitions {
         k := read_bits(f, param_bits) or_return
-        if samples_per_partition == 0 || samples_per_partition < order do return false
-        n_samples := (p == 0) ? (samples_per_partition - order) : samples_per_partition
+
+        p_start := p * samples_per_partition
+        p_end := (p + 1) * samples_per_partition
+        res_start := max(p_start, order)
+        n_samples := p_end > res_start ? (p_end - res_start) : 0
 
         if k == escape_val {
             verbatim_bps := read_bits(f, 5) or_return
@@ -429,7 +450,11 @@ restore_lpc_signal :: proc(buf: []i32, block_size: u64, order: u64, coeffs: []i3
         for j in 0 ..< order {
             accu += i64(coeffs[j]) * i64(buf[i - j - 1])
         }
-        buf[i] += i32(accu >> u64(shift))
+        if shift >= 0 {
+            buf[i] += i32(accu >> u64(shift))
+        } else {
+            buf[i] += i32(accu << u64(-shift))
+        }
     }
 }
 
@@ -710,7 +735,7 @@ sign_extend :: proc(x: u64, b: u64) -> i32 {
 }
 
 read_unary :: proc(f: ^File) -> (q: u64, ok: bool) {
-    for q < 32 {
+    for q < 65536 {
         bit := read_bits(f, 1) or_return
         if bit == 1 do return q, true
         q += 1
