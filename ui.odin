@@ -277,13 +277,9 @@ to_string :: proc(args: ..any, allocator := context.temp_allocator) -> string {
 		case string:
 			strings.write_string(&b, v)
 		case int:
-			buf: [32]byte
-			s := strconv.write_int(buf[:], i64(v), 10)
-			strings.write_string(&b, s)
+			strings.write_int(&b, v, 10)
 		case f32:
-			buf: [64]byte
-			s := strconv.write_float(buf[:], f64(v), 'f', 1, 32)
-			strings.write_string(&b, s)
+			strings.write_float(&b, f64(v), 'f', 1, 32, true)
 		}
 	}
 
