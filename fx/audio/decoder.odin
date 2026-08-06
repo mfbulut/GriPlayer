@@ -1,7 +1,7 @@
 package audio
 
-import "core:math"
 import "core:os"
+import "core:math"
 import "core:strings"
 import "core:sync"
 
@@ -81,11 +81,11 @@ open :: proc(path: string) -> bool {
 
 	if decoder.decoder == nil || decoder.sample_rate == 0 do return false
 	decoder.song_finished = false
-	resampler_reset(decoder.sample_rate)
+	resampler_reset()
 	return true
 }
 
-decode_raw :: proc(samples: [][2]f32) -> u32 {
+decode_raw :: proc(samples: [][2]f32) -> int {
 	if decoder.decoder == nil do return 0
 
 	frames_needed := len(samples)
@@ -102,32 +102,27 @@ decode_raw :: proc(samples: [][2]f32) -> u32 {
 		case ^vorbis.vorbis:
 			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
 		case ^flac.File:
-			read = flac.read_float_stereo(d, samples[frames_read:frames_needed])
+			read = cast(int)flac.read_float_stereo(d, samples[frames_read:frames_needed])
 		}
 
 		if read <= 0 do break;
 		frames_read += read
 	}
 
-	return u32(frames_read)
+	return frames_read
 }
 
 read_float :: proc(samples: [][2]f32) -> u32 {
 	if decoder.decoder == nil do return 0
 
-	frames_needed := len(samples)
-	if frames_needed == 0 do return 0
-
-	frames_read := 0
-	if decoder.sample_rate == 48000 {
-		frames_read = int(decode_raw(samples))
-	} else {
-		frames_read = resample_read(samples)
-	}
-
+	frames_read := resampler_read(samples)
 	out_samples := samples[:frames_read]
 
 	preamp_gain := math.pow(10, decoder.pregain_db / 20.0)
+
+	for &sample in out_samples {
+		sample *= preamp_gain
+	}
 
 	for &sample in out_samples {
 		for &x, i in sample {
@@ -138,10 +133,6 @@ read_float :: proc(samples: [][2]f32) -> u32 {
 				x = y
 			}
 		}
-	}
-
-	for &sample in out_samples {
-		sample *= preamp_gain
 	}
 
 	if decoder.callback != nil {
@@ -177,7 +168,7 @@ seek :: proc(position: f32) {
 	case:
 	}
 
-	resampler_reset(decoder.sample_rate)
+	resampler_reset()
 	wasapi_reset()
 }
 
@@ -274,4 +265,21 @@ eq_recalculate_band :: proc(i: int) {
 	band.b2 = b2 / a0
 	band.a1 = a1 / a0
 	band.a2 = a2 / a0
+}
+
+// UTF-8 Path support for vorbis
+
+import "core:c"
+import "core:sys/windows"
+foreign import libc "system:libucrt.lib"
+
+foreign libc {
+	_wfopen :: proc(filename, mode: cstring16) -> ^c.FILE ---
+}
+
+open_vorbis_file :: proc(path: string) -> ^vorbis.vorbis {
+	path_w := windows.utf8_to_wstring(path, context.temp_allocator)
+	f := _wfopen(path_w, "rb")
+	if f == nil do return nil
+	return vorbis.open_file(f, true, nil, nil)
 }

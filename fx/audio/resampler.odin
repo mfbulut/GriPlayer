@@ -2,78 +2,157 @@ package audio
 
 import "core:math"
 
-resampler: struct {
-	buffer:      [16384][2]f32,
-	len:         int,
-	pos:         f64,
-	ratio:       f64,
+TABLE_PHASES :: 32
+TAPS         :: 16
+
+resampler_state: struct {
+	buffer:      [65536][2]f32,
+	buf_count:   int,
+	pos_in:      f64,
 	sample_rate: u32,
-	eof:         bool,
+	table:       [33][16]f32,
 }
 
-resampler_reset :: proc(native_rate: u32) {
-	resampler.sample_rate = native_rate
-	resampler.ratio = f64(native_rate) / 48000.0
-	resampler.pos = f64(SINC_RADIUS - 1)
-	resampler.len = 0
-	resampler.eof = false
+bessel_i0 :: proc(x: f64) -> f64 {
+	sum := 1.0
+	term := 1.0
+	x_half := x / 2.0
+	for k := 1; k <= 25; k += 1 {
+		term *= (x_half / f64(k))
+		sum += term * term
+		if term * term < 1e-12 * sum do break
+	}
+	return sum
 }
 
-resample_read :: proc(out_samples: [][2]f32) -> int {
-	needed := len(out_samples)
-	if needed == 0 do return 0
+kaiser_window :: proc(t: f64, half_taps: f64, beta: f64) -> f64 {
+	ratio := t / half_taps
+	if math.abs(ratio) >= 1.0 do return 0.0
+	arg := beta * math.sqrt(1.0 - ratio * ratio)
+	return bessel_i0(arg) / bessel_i0(beta)
+}
 
-	produced := 0
-	for produced < needed {
-		base := int(math.floor(resampler.pos))
-		needed_len := base + SINC_RADIUS + 1
+sinc :: proc(x: f64) -> f64 {
+	if math.abs(x) < 1e-9 do return 1.0
+	pix := math.PI * x
+	return math.sin(pix) / pix
+}
 
-		for resampler.len < needed_len && resampler.len < len(resampler.buffer) && !resampler.eof {
-			space := len(resampler.buffer) - resampler.len
-			chunk_len := min(space, 1024)
-			read := int(decode_raw(resampler.buffer[resampler.len:resampler.len + chunk_len]))
-			if read == 0 {
-				resampler.eof = true
-				break
-			}
-			resampler.len += read
+rebuild_polyphase_table :: proc() {
+	if resampler_state.sample_rate == 0 do return
+
+	f_in := f64(resampler_state.sample_rate)
+	f_out := 48000.0
+	ratio := f_in / f_out
+	c := math.min(1.0, 1.0 / ratio)
+
+	cutoff := 0.45 * c
+	beta := 8.5
+	half_taps := 8.0
+
+	for p in 0 ..= TABLE_PHASES {
+		eta := f64(p) / f64(TABLE_PHASES)
+		sum: f64 = 0.0
+
+		for k in 0 ..< TAPS {
+			t := (f64(k) - 7.5) - eta
+			val := c * sinc(2.0 * cutoff * t) * kaiser_window(t * c, half_taps, beta)
+			resampler_state.table[p][k] = f32(val)
+			sum += val
 		}
 
-		if resampler.eof && resampler.len < needed_len {
-			pad_to := min(needed_len, len(resampler.buffer))
-			for resampler.len < pad_to {
-				resampler.buffer[resampler.len] = {0, 0}
-				resampler.len += 1
+		if sum != 0.0 {
+			inv_sum := f32(1.0 / sum)
+			for k in 0 ..< TAPS {
+				resampler_state.table[p][k] *= inv_sum
+			}
+		}
+	}
+}
+
+resampler_reset :: proc() {
+	for i in 0 ..< len(resampler_state.buffer) {
+		resampler_state.buffer[i] = {0, 0}
+	}
+	resampler_state.buf_count = 7
+	resampler_state.pos_in = 7.0
+	resampler_state.sample_rate = decoder.sample_rate
+	rebuild_polyphase_table()
+}
+
+resampler_read :: proc(out_samples: [][2]f32) -> int {
+	if decoder.sample_rate == 48000 {
+		return decode_raw(out_samples)
+	}
+
+	if decoder.sample_rate == 0 do return 0
+
+	if resampler_state.sample_rate != decoder.sample_rate {
+		resampler_state.sample_rate = decoder.sample_rate
+		rebuild_polyphase_table()
+	}
+
+	ratio := f64(decoder.sample_rate) / 48000.0
+	out_needed := len(out_samples)
+	if out_needed == 0 do return 0
+
+	frames_out := 0
+
+	for frames_out < out_needed {
+		int_pos := int(resampler_state.pos_in)
+
+		if int_pos > 7 {
+			shift := int_pos - 7
+			copy(resampler_state.buffer[:resampler_state.buf_count - shift], resampler_state.buffer[shift:resampler_state.buf_count])
+			resampler_state.buf_count -= shift
+			resampler_state.pos_in -= f64(shift)
+			int_pos = 7
+		}
+
+		needed_input_end := int_pos + 9
+		if resampler_state.buf_count < needed_input_end {
+			space_available := len(resampler_state.buffer) - resampler_state.buf_count
+			if space_available > 0 {
+				read_count := decode_raw(resampler_state.buffer[resampler_state.buf_count:])
+				if read_count > 0 {
+					resampler_state.buf_count += read_count
+				} else {
+					pad_end := math.min(needed_input_end + 16, len(resampler_state.buffer))
+					for i := resampler_state.buf_count; i < pad_end; i += 1 {
+						resampler_state.buffer[i] = {0, 0}
+					}
+					resampler_state.buf_count = pad_end
+				}
 			}
 		}
 
-		base = int(math.floor(resampler.pos))
-		if base + SINC_RADIUS >= resampler.len {
+		if int_pos + 8 >= resampler_state.buf_count {
 			break
 		}
 
-		frac := resampler.pos - f64(base)
-		phase := int(frac * f64(SINC_PHASES))
-		phase = clamp(phase, 0, SINC_PHASES - 1)
+		frac := resampler_state.pos_in - f64(int_pos)
+		p_exact := frac * f64(TABLE_PHASES)
+		p0 := int(p_exact)
+		p1 := p0 + 1
+		alpha := f32(p_exact - f64(p0))
 
-		start_idx := base - SINC_RADIUS + 1
-		acc: [2]f32
-		for j in 0 ..< SINC_TAPS {
-			idx := start_idx + j
-			if idx < 0 || idx >= resampler.len do continue
-			acc += resampler.buffer[idx] * SINC_TABLE[phase][j]
-		}
-		out_samples[produced] = acc
-		produced += 1
-		resampler.pos += resampler.ratio
+		sample: [2]f32 = {0, 0}
+		base_idx := int_pos - 7
 
-		discard := int(math.floor(resampler.pos)) - (SINC_RADIUS - 1)
-		if discard > len(resampler.buffer) / 2 {
-			copy(resampler.buffer[:resampler.len - discard], resampler.buffer[discard:resampler.len])
-			resampler.len -= discard
-			resampler.pos -= f64(discard)
+		for k in 0 ..< TAPS {
+			c0 := resampler_state.table[p0][k]
+			c1 := resampler_state.table[p1][k]
+			coeff := c0 * (1.0 - alpha) + c1 * alpha
+
+			in_s := resampler_state.buffer[base_idx + k]
+			sample[0] += coeff * in_s[0]
+			sample[1] += coeff * in_s[1]
 		}
+
+		out_samples[frames_out] = sample
+		frames_out += 1
+		resampler_state.pos_in += ratio
 	}
 
-	return produced
+	return frames_out
 }

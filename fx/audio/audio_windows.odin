@@ -5,7 +5,6 @@ import "core:sync"
 import "core:thread"
 import "core:sys/windows"
 import "vendor:windows/wasapi"
-import "vendor:stb/vorbis"
 
 wasapi_state: struct {
 	device:        ^wasapi.IMMDevice,
@@ -16,10 +15,6 @@ wasapi_state: struct {
 }
 
 initialize :: proc() {
-	sync.guard(&global_mutex)
-	decoder.volume = 0.5
-	decoder.sample_rate = 48000
-
 	windows.CoInitializeEx(nil, .MULTITHREADED)
 	enumerator: ^wasapi.IMMDeviceEnumerator
 	windows.CoCreateInstance(wasapi.CLSID_MMDeviceEnumerator, nil, windows.CLSCTX_INPROC_SERVER, wasapi.IID_IMMDeviceEnumerator, cast(^rawptr)&enumerator)
@@ -55,6 +50,7 @@ initialize :: proc() {
 		wasapi_state.audio_client->GetBufferSize(&wasapi_state.buffer_size)
 	}
 
+	decoder.volume = 0.5
 	for i in 0 ..< 10 {
 		eq_recalculate_band(i)
 	}
@@ -113,19 +109,4 @@ wasapi_reset :: proc() {
 reset :: proc() {
 	sync.guard(&global_mutex)
 	wasapi_reset()
-}
-
-// vorbis UTF-8 Path support
-
-foreign import libc "system:libucrt.lib"
-
-foreign libc {
-	_wfopen :: proc(filename, mode: cstring16) -> ^c.FILE ---
-}
-
-open_vorbis_file :: proc(path: string) -> ^vorbis.vorbis {
-	path_w := windows.utf8_to_wstring(path, context.temp_allocator)
-	f := _wfopen(path_w, "rb")
-	if f == nil do return nil
-	return vorbis.open_file(f, true, nil, nil)
 }
