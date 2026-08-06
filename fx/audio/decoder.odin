@@ -79,7 +79,7 @@ open :: proc(path: string) -> bool {
 		}
 	}
 
-	if decoder.decoder == nil do return false
+	if decoder.decoder == nil || decoder.sample_rate == 0 do return false
 	decoder.song_finished = false
 	resampler_reset(decoder.sample_rate)
 	return true
@@ -100,12 +100,12 @@ decode_raw :: proc(samples: [][2]f32) -> u32 {
 		case ^opusfile.File:
 			read = cast(int)opusfile.read_float_stereo(d, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining))
 		case ^vorbis.vorbis:
-			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining))
+			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
 		case ^flac.File:
 			read = flac.read_float_stereo(d, samples[frames_read:frames_needed])
 		}
 
-		if read == 0 do break;
+		if read <= 0 do break;
 		frames_read += read
 	}
 
@@ -257,8 +257,7 @@ eq_recalculate_band :: proc(i: int) {
 
 	A := math.pow(10, band.gain_db / 40)
 	frequencies := [10]f32{31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000}
-	sample_rate := f32(48000)
-	omega := 2 * math.PI * frequencies[i] / sample_rate
+	omega := 2 * math.PI * frequencies[i] / 48000
 	sn := math.sin(omega)
 	cs := math.cos(omega)
 	alpha := sn / (2 * 1.41)

@@ -78,14 +78,12 @@ open_file :: proc(path: string) -> ^File {
 
     magic, ok := read_bits(f, 32)
     if !ok || magic != 0x664C6143 {
-        free(f)
-        delete(data)
+        destroy(f)
         return nil
     }
 
     if !parse(f) || f.info.sample_rate == 0 {
-        free(f)
-        delete(data)
+        destroy(f)
         return nil
     }
 

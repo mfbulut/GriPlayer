@@ -71,48 +71,46 @@ parse_tags :: proc(tags: []string, meta: ^Metadata) {
 
 parse_vorbis_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	vf := open_vorbis_file(path)
-	if vf != nil {
-		ok = true
+	if vf == nil do return
+	defer vorbis.close(vf)
+	ok = true
 
-		info := vorbis.get_info(vf)
-		if pcm_tot := vorbis.stream_length_in_samples(vf); pcm_tot > 0 && info.sample_rate > 0 {
-			meta.duration = f32(pcm_tot) / f32(info.sample_rate)
-		}
-
-		vc := vorbis.get_comment(vf)
-		tags := make([]string, vc.comment_list_length, context.temp_allocator)
-
-		for i in 0..<vc.comment_list_length {
-			tags[i] = string(vc.comment_list[i])
-		}
-
-		parse_tags(tags, &meta)
-		vorbis.close(vf)
+	info := vorbis.get_info(vf)
+	if pcm_tot := vorbis.stream_length_in_samples(vf); pcm_tot > 0 && info.sample_rate > 0 {
+		meta.duration = f32(pcm_tot) / f32(info.sample_rate)
 	}
+
+	vc := vorbis.get_comment(vf)
+	tags := make([]string, vc.comment_list_length, context.temp_allocator)
+
+	for i in 0..<vc.comment_list_length {
+		tags[i] = string(vc.comment_list[i])
+	}
+
+	parse_tags(tags, &meta)
 
 	return
 }
 
 parse_opus_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	of := opusfile.open_file(path)
-	if of != nil {
-		ok = true
+	if of == nil do return
+	defer opusfile.free(of)
+	ok = true
 
-		if pcm_tot := opusfile.pcm_total(of, -1); pcm_tot > 0 {
-			meta.duration = f32(pcm_tot) / 48000.0
-		}
-
-	    tags := opusfile.tags(of, 0)
-	    comments := make([]string, tags.comment_count, context.temp_allocator)
-
-	    for &c, i in comments {
-	        len := tags.comment_lengths[i]
-	        c = string(tags.user_comments[i][:len])
-	    }
-
-		parse_tags(comments, &meta)
-		opusfile.free(of)
+	if pcm_tot := opusfile.pcm_total(of, -1); pcm_tot > 0 {
+		meta.duration = f32(pcm_tot) / 48000.0
 	}
+
+    tags := opusfile.tags(of, 0)
+    comments := make([]string, tags.comment_count, context.temp_allocator)
+
+    for &c, i in comments {
+        len := tags.comment_lengths[i]
+        c = string(tags.user_comments[i][:len])
+    }
+
+	parse_tags(comments, &meta)
 
 	return
 }
