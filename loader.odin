@@ -1,8 +1,9 @@
 package main
 
+import "core:bytes"
 import "core:container/bit_array"
-import "core:encoding/cbor"
 import "core:hash"
+import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strconv"
@@ -39,7 +40,7 @@ Music :: struct {
 	lyrics:           [dynamic]Lyric,
 	lyrics_filter:    bit_array.Bit_Array,
 	thumbnail_pixels: []fx.Color,
-	thumbnail:        AtlasRegion `cbor:"-"`,
+	thumbnail:        AtlasRegion,
 }
 
 Playlist :: struct {
@@ -474,13 +475,90 @@ load_settings :: proc() -> os.Error {
 	return nil
 }
 
+// Cache
+
+cache_write :: proc(b: ^bytes.Buffer, val: $T) {
+	v := val
+	bytes.buffer_write_ptr(b, &v, size_of(T))
+}
+
+cache_read :: proc(r: ^bytes.Reader, $T: typeid) -> (v: T, err: os.Error) {
+	_, io_err := bytes.reader_read_ptr(r, &v, size_of(T))
+	if io_err != nil do return v, io_err
+	return v, nil
+}
+
+cache_write_string :: proc(b: ^bytes.Buffer, s: string) {
+	cache_write(b, i64(len(s)))
+	if len(s) > 0 {
+		bytes.buffer_write_string(b, s)
+	}
+}
+
+cache_read_string :: proc(r: ^bytes.Reader, allocator := context.allocator) -> (res: string, err: os.Error) {
+	length := cache_read(r, i64) or_return
+	buf := make([]byte, int(length), context.temp_allocator)
+	_, io_err := bytes.reader_read_ptr(r, raw_data(buf), int(length))
+	if io_err != nil do return "", io_err
+	return strings.clone(string(buf), allocator), nil
+}
+
 cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
 	dir := os.user_data_dir(context.temp_allocator) or_return
-	path := os.join_path({dir, "GriPlayer", "cache.cbor"}, context.temp_allocator) or_return
-	data := os.read_entire_file(path, context.temp_allocator) or_return
+	path := os.join_path({dir, "GriPlayer", "cache.bin"}, context.temp_allocator) or_return
+	data := os.read_entire_file(path, context.allocator) or_return
 
-	if err := cbor.unmarshal(data, &songs, {.Trusted_Input}); err != nil {
-		panic("Failed to load cache:")
+	r: bytes.Reader
+	bytes.reader_init(&r, data)
+
+	track_count := cache_read(&r, i64) or_return
+	if track_count < 0 do return nil, os.General_Error.Invalid_File
+
+	songs = make(map[string]Music, int(track_count))
+
+	for _ in 0..<track_count {
+		music: Music
+
+		music.fullpath = cache_read_string(&r) or_return
+		music.title    = cache_read_string(&r) or_return
+		music.artist   = cache_read_string(&r) or_return
+		music.album    = cache_read_string(&r) or_return
+
+		music.track            = int(cache_read(&r, i64) or_return)
+		music.playtime         = cache_read(&r, f32) or_return
+		music.duration         = cache_read(&r, f32) or_return
+		music.liked            = (cache_read(&r, u8) or_return) != 0
+		music.liked_timestamp  = time.Time{_nsec = cache_read(&r, i64) or_return}
+		music.listen_timestamp = time.Time{_nsec = cache_read(&r, i64) or_return}
+
+		lyric_count := cache_read(&r, i64) or_return
+		if lyric_count > 0 {
+			music.lyrics = make([dynamic]Lyric, int(lyric_count))
+			for j in 0..<lyric_count {
+				l_time := cache_read(&r, f32) or_return
+				l_text := cache_read_string(&r) or_return
+				music.lyrics[j] = Lyric{time = l_time, text = l_text}
+			}
+		}
+
+		word_count := cache_read(&r, i64) or_return
+		if word_count > 0 {
+			bit_array.init(&music.lyrics_filter, int(word_count * 64))
+			resize(&music.lyrics_filter.bits, int(word_count))
+			for j in 0..<word_count {
+				music.lyrics_filter.bits[j] = cache_read(&r, u64) or_return
+			}
+		}
+
+		pixel_count := cache_read(&r, i64) or_return
+		if pixel_count > 0 {
+			bytes_count := int(pixel_count) * size_of(fx.Color)
+			music.thumbnail_pixels = make([]fx.Color, int(pixel_count))
+			_, err_px := bytes.reader_read_ptr(&r, raw_data(music.thumbnail_pixels), bytes_count)
+			if err_px != nil do return nil, err_px
+		}
+
+		songs[music.fullpath] = music
 	}
 
 	return
@@ -492,21 +570,51 @@ cache_save :: proc() -> os.Error {
 	dir := os.user_data_dir(context.allocator) or_return
 	app_dir := os.join_path({dir, "GriPlayer"}, context.allocator) or_return
 	os.make_directory(app_dir)
-	path := os.join_path({app_dir, "cache.cbor"}, context.allocator) or_return
+	path := os.join_path({app_dir, "cache.bin"}, context.allocator) or_return
 
-	songs := make(map[string]Music, 1024)
+	b: bytes.Buffer
+	bytes.buffer_init_allocator(&b, 0, 64 * 1024, context.allocator)
 
-	for playlist in playlists[LIBRARY_PLAYLIST_START:] {
-		for song in playlist.songs {
-			songs[song.fullpath] = song^
+	total_tracks := len(music_by_id)
+	cache_write(&b, i64(total_tracks))
+
+	saved_set := make(map[string]bool, total_tracks, context.temp_allocator)
+
+	for _, song in music_by_id {
+		if song.fullpath in saved_set do continue
+		saved_set[song.fullpath] = true
+
+		cache_write_string(&b, song.fullpath)
+		cache_write_string(&b, song.title)
+		cache_write_string(&b, song.artist)
+		cache_write_string(&b, song.album)
+
+		cache_write(&b, i64(song.track))
+		cache_write(&b, song.playtime)
+		cache_write(&b, song.duration)
+		cache_write(&b, u8(song.liked ? 1 : 0))
+		cache_write(&b, song.liked_timestamp._nsec)
+		cache_write(&b, song.listen_timestamp._nsec)
+
+		cache_write(&b, i64(len(song.lyrics)))
+		for lyric in song.lyrics {
+			cache_write(&b, lyric.time)
+			cache_write_string(&b, lyric.text)
+		}
+
+		word_count := len(song.lyrics_filter.bits)
+		cache_write(&b, i64(word_count))
+		for w in song.lyrics_filter.bits {
+			cache_write(&b, w)
+		}
+
+		pixel_count := len(song.thumbnail_pixels)
+		cache_write(&b, i64(pixel_count))
+		if pixel_count > 0 {
+			bytes.buffer_write_ptr(&b, raw_data(song.thumbnail_pixels), pixel_count * size_of(fx.Color))
 		}
 	}
 
-	if bytes, err := cbor.marshal(songs); err == nil {
-		os.write_entire_file(path, bytes) or_return
-	} else {
-		panic("Failed to save cache:")
-	}
-
+	os.write_entire_file(path, bytes.buffer_to_bytes(&b)) or_return
 	return nil
 }

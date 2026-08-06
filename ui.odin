@@ -268,9 +268,9 @@ animation_update_all :: proc() {
 	}
 }
 
-to_string :: proc(args: ..any, allocator := context.temp_allocator) -> string {
+to_string :: proc(args: ..any) -> string {
 	b: strings.Builder
-	strings.builder_init(&b, allocator = allocator)
+	strings.builder_init(&b, allocator = context.temp_allocator)
 
 	for arg in args {
 		switch v in arg {
