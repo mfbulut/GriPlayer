@@ -2,7 +2,6 @@ package main
 
 import "core:container/bit_array"
 import "core:encoding/cbor"
-import "core:fmt"
 import "core:hash"
 import "core:os"
 import "core:slice"
@@ -176,7 +175,7 @@ loader_start :: proc() {
 
 music_id :: proc(music: ^Music) -> Id {
 	ext := os.ext(music.fullpath)
-	key := fmt.tprintf("%s|%s|%s|%s|%.1f", music.title, music.artist, music.album, ext, music.duration)
+	key := to_string(music.title, music.artist, music.album, ext, music.duration)
 	return Id(hash.fnv64a(transmute([]byte)key))
 }
 
@@ -481,7 +480,7 @@ cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
 	data := os.read_entire_file(path, context.temp_allocator) or_return
 
 	if err := cbor.unmarshal(data, &songs, {.Trusted_Input}); err != nil {
-		fmt.eprintln("Failed to load cache:", err)
+		panic("Failed to load cache:")
 	}
 
 	return
@@ -506,7 +505,7 @@ cache_save :: proc() -> os.Error {
 	if bytes, err := cbor.marshal(songs); err == nil {
 		os.write_entire_file(path, bytes) or_return
 	} else {
-		fmt.eprintln("Failed to save cache:", err)
+		panic("Failed to save cache:")
 	}
 
 	return nil

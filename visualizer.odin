@@ -6,7 +6,6 @@ import "core:slice"
 import "core:sync"
 
 import "fx"
-import "fx/audio"
 
 FFT_SIZE       :: 2048
 FFT_BITS       :: 11

@@ -2,8 +2,8 @@ package fx
 
 import "base:runtime"
 import "core:dynlib"
-import "core:fmt"
 import "core:mem"
+import "core:os"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
@@ -107,7 +107,13 @@ vk_init :: proc() {
 				pUserData: rawptr,
 			) -> b32 {
 				context = runtime.default_context()
-				fmt.eprintln("Vulkan Validation:", pCallbackData.pMessage)
+				when ODIN_DEBUG {
+					os.write_string(os.stderr, "Vulkan Validation: ")
+					if pCallbackData != nil && pCallbackData.pMessage != nil {
+						os.write_string(os.stderr, string(pCallbackData.pMessage))
+					}
+					os.write_string(os.stderr, "\n")
+				}
 				return false
 			}
 
@@ -755,8 +761,7 @@ texture_create :: proc(w, h: int, mipmaps := false) -> Texture {
 	}
 
 	if index == 0 {
-		fmt.eprintln("Texture Pool Is Full")
-		return {}
+		panic("Texture Pool Is Full")
 	}
 
 	tex_data := &textures[index]

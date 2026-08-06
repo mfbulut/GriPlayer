@@ -162,7 +162,7 @@ link :: proc(id: Id, text: string, font_size := f32(16)) -> (res: Result_Set) {
 	color := ui_color(LINK_COLOR, res)
 	fx.draw_text_faded(text, bounds, font_size, color)
 
-	amount := animate(child_id(id, "amount"), .HOVER in res ? f32(1) : f32(0))
+	amount := animate(child_id(id, get_id("amount")), .HOVER in res ? f32(1) : f32(0))
 	if amount > 0.001 {
 		underline_width := bounds.size.x * amount
 		c := LINK_COLOR.hover
@@ -278,8 +278,8 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 	maxscroll := cs[i] - body.size[i]
 
 	if maxscroll > 0 && body.size[i] > 0 {
-		id := child_id(layout_id, id_string)
-		id_thumb := child_id(id, "thumb")
+		id := child_id(layout_id, get_id(id_string))
+		id_thumb := child_id(id, get_id("thumb"))
 
 		base := body
 		base.pos[1-i] += base.size[1-i]
@@ -338,7 +338,7 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 
 		if marker >= 0 {
 			marker_target := clamp(marker, 0, 1)
-			marker_position := animate(child_id(id, "marker"), marker_target, 0.5)
+			marker_position := animate(child_id(id, get_id("marker")), marker_target, 0.5)
 			marker_height := min(f32(10), base.size[i])
 			marker_rect := base
 			marker_rect.pos[i] = base.pos[i] + (base.size[i] - marker_height) * marker_position

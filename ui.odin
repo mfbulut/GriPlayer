@@ -3,6 +3,8 @@ package main
 import "core:math/ease"
 import "core:hash"
 import "core:time"
+import "core:strconv"
+import "core:strings"
 
 import "fx"
 
@@ -111,8 +113,18 @@ get_id :: proc(str: string) -> Id {
 	return Id(hash.fnv64a(transmute([]byte)str, seed))
 }
 
-child_id :: proc(id: Id, str: string) -> Id {
-	return Id(hash.fnv64a(transmute([]byte)str, u64(id)))
+child_id :: proc(id: Id, child: Id) -> Id {
+	child_u64 := u64(child)
+	buf: [8]byte
+	buf[0] = byte(child_u64)
+	buf[1] = byte(child_u64 >> 8)
+	buf[2] = byte(child_u64 >> 16)
+	buf[3] = byte(child_u64 >> 24)
+	buf[4] = byte(child_u64 >> 32)
+	buf[5] = byte(child_u64 >> 40)
+	buf[6] = byte(child_u64 >> 48)
+	buf[7] = byte(child_u64 >> 56)
+	return Id(hash.fnv64a(buf[:], u64(id)))
 }
 
 get_scroll_state :: proc(id: Id) -> ^Scroll_State {
@@ -254,4 +266,26 @@ animation_update_all :: proc() {
 	for key in keys_to_delete {
 		delete_key(&animations, key)
 	}
+}
+
+to_string :: proc(args: ..any, allocator := context.temp_allocator) -> string {
+	b: strings.Builder
+	strings.builder_init(&b, allocator = allocator)
+
+	for arg in args {
+		switch v in arg {
+		case string:
+			strings.write_string(&b, v)
+		case int:
+			buf: [32]byte
+			s := strconv.write_int(buf[:], i64(v), 10)
+			strings.write_string(&b, s)
+		case f32:
+			buf: [64]byte
+			s := strconv.write_float(buf[:], f64(v), 'f', 1, 32)
+			strings.write_string(&b, s)
+		}
+	}
+
+	return strings.to_string(b)
 }

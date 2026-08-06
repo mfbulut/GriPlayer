@@ -133,7 +133,7 @@ set_always_on_top :: proc(top: bool) {
 	glfw.SetWindowAttrib(window.handle, glfw.FLOATING, top ? glfw.TRUE : glfw.FALSE)
 }
 
-get_window_rect :: proc() -> Vec4 {
+get_window_rect :: proc() -> Bounds {
 	xpos, ypos := glfw.GetWindowPos(window.handle)
 	w, h := glfw.GetWindowSize(window.handle)
 	scale := dpi_scale()
@@ -145,7 +145,7 @@ get_window_rect :: proc() -> Vec4 {
 	}
 }
 
-set_window_rect :: proc(rect: Vec4) {
+set_window_rect :: proc(rect: Bounds) {
 	scale := dpi_scale()
 	glfw.SetWindowPos(window.handle, c.int(rect.x), c.int(rect.y))
 	glfw.SetWindowSize(window.handle, c.int(rect.z * scale), c.int(rect.w * scale))

@@ -12,6 +12,10 @@ Rect :: struct {
 	pos, size: Vec2,
 }
 
+Bounds :: struct {
+	left, bottom, right, top: f32,
+}
+
 WHITE := Color{255, 255, 255, 255}
 BLACK := Color{0, 0, 0, 255}
 BLANK := Color{0, 0, 0, 0}

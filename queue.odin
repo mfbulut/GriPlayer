@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "fx"
 
 queue_drag: struct {
@@ -23,8 +22,8 @@ shift_animation :: proc(old_id, new_id: Id) {
 }
 
 shift_row_animations :: proc(prefix: string, old_index, new_index: int) {
-	old_id := get_id(fmt.tprintf("%s_%d", prefix, old_index))
-	new_id := get_id(fmt.tprintf("%s_%d", prefix, new_index))
+	old_id := child_id(get_id(prefix), Id(old_index))
+	new_id := child_id(get_id(prefix), Id(new_index))
 	shift_animation(old_id, new_id)
 }
 
@@ -64,7 +63,7 @@ draw_queue :: proc() {
 			layout_row({-1}, 48)
 			bounds := layout_next()
 
-			row_id := get_id(fmt.tprintf("queue_%d", i))
+			row_id := child_id(get_id("queue"), Id(i))
 			local_y := bounds.pos.y - layout.body.pos.y
 			bounds.pos.y = animate(row_id, local_y) + layout.body.pos.y
 
@@ -109,7 +108,7 @@ draw_queue :: proc() {
 			layout_row({-1}, 48)
 			bounds := layout_next()
 
-			row_id := get_id(fmt.tprintf("playlist_%d", i))
+			row_id := child_id(get_id("playlist"), Id(i))
 			local_y := bounds.pos.y - layout.body.pos.y
 			bounds.pos.y = animate(row_id, local_y) + layout.body.pos.y
 
@@ -136,7 +135,7 @@ draw_queue :: proc() {
 draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]^Music, bounds: fx.Rect, is_overlay := false) {
 	if !fx.rect_visible(bounds) && !is_overlay do return
 
-	row_id := is_overlay ? get_id(song.fullpath) : get_id(fmt.tprintf("%s_%d", prefix, index))
+	row_id := is_overlay ? get_id(song.fullpath) : child_id(get_id(prefix), Id(index))
 
 	pad := f32(6)
 	handle_bounds := fx.Rect{bounds.pos, {38, bounds.size.y}}
@@ -146,9 +145,9 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 		{max(remove_bounds.pos.x - handle_bounds.pos.x - handle_bounds.size.x, 0), bounds.size.y}
 	}
 
-	handle_res := update_control(child_id(row_id, "handle"), handle_bounds)
-	remove_res := update_control(child_id(row_id, "remove"), remove_bounds)
-	body_res   := update_control(child_id(row_id, "body"), body_bounds)
+	handle_res := update_control(child_id(row_id, get_id("handle")), handle_bounds)
+	remove_res := update_control(child_id(row_id, get_id("remove")), remove_bounds)
+	body_res   := update_control(child_id(row_id, get_id("body")), body_bounds)
 
 	if .ACTIVE in handle_res && queue_drag.song == nil {
 		queue_drag = {
@@ -160,7 +159,7 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 			row_w = bounds.size.x,
 			needs_remove = true,
 		}
-		ctx.focus_id = child_id(get_id(song.fullpath), "handle")
+		ctx.focus_id = child_id(get_id(song.fullpath), get_id("handle"))
 	}
 
 	res := handle_res + remove_res + body_res
@@ -291,7 +290,7 @@ queue_update_drag_target :: proc(layout: ^Layout) {
 
 		inject_at(queue_drag.target_arr, queue_drag.target_index, song)
 
-		row_id := get_id(fmt.tprintf("%s_%d", prefix, queue_drag.target_index))
+		row_id := child_id(get_id(prefix), Id(queue_drag.target_index))
 		row_layout := get_layout()
 		start_local_y := fx.mouse_pos().y - queue_drag.grab_offset - row_layout.body.pos.y
 

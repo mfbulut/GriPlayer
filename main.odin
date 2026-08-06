@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "core:time"
 import "core:time/timezone"
 import "core:math/linalg"
@@ -380,7 +379,7 @@ frame :: proc() {
 							get_id("vol_tooltip"),
 							vol_bounds,
 							vol,
-							fmt.tprintf("%d%%", int(vol * 100 + 0.5)),
+							to_string(int(vol * 100 + 0.5), "%"),
 							centered = true,
 						)
 					}
@@ -466,7 +465,7 @@ draw_equalizer :: proc() {
 			audio.pregain_db = clamp(audio.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
 		}
 
-		pregain_text := audio.pregain_db > 0 ? fmt.tprintf("+%.1f dB", audio.pregain_db) : (audio.pregain_db < 0 ? fmt.tprintf("%.1f dB", audio.pregain_db) : "0.0 dB")
+		pregain_text := to_string(audio.pregain_db, " dB")
 		label(pregain_text, 12)
 
 		if .SUBMIT in button("Reset", 12) {
@@ -497,7 +496,7 @@ draw_equalizer :: proc() {
 				{col_w, canvas.size.y},
 			}
 
-			col_id := get_id(fmt.tprintf("eq_col_%d", i))
+			col_id := child_id(get_id("eq_col"), Id(i))
 			res := update_control(col_id, col_rect)
 
 			if ctx.focus_id == col_id && fx.key_is_down(.Mouse_Left) {
@@ -596,7 +595,7 @@ draw_equalizer :: proc() {
 			fx.draw_circle(pos, 4.5, COLOR_ACCENT)
 			fx.draw_circle(pos, is_act ? 3.0 : 2.0, COLOR_TEXT)
 
-			gain_text := gains[i] > 0 ? fmt.tprintf("+%.1f", gains[i]) : (gains[i] < 0 ? fmt.tprintf("%.1f", gains[i]) : "0")
+			gain_text := to_string(gains[i])
 			gain_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y}, {col_w, 16}}
 			gain_color := is_act ? COLOR_TEXT : COLOR_MUTED
 			fx.draw_text_rect(gain_text, gain_rect, 12, gain_color, true)
@@ -629,8 +628,8 @@ draw_lyrics :: proc() {
 				lyrics_synced = false
 			}
 
-			scrollbar_id := child_id(lyrics_layout.id, "scrollbar_v")
-			thumb_id := child_id(scrollbar_id, "thumb")
+			scrollbar_id := child_id(lyrics_layout.id, get_id("scrollbar_v"))
+			thumb_id := child_id(scrollbar_id, get_id("thumb"))
 			if ctx.focus_id == thumb_id {
 				lyrics_synced = false
 			}
@@ -667,11 +666,11 @@ draw_lyrics :: proc() {
 
 				if !fx.rect_visible(row) do continue
 
-				row_id := get_id(fmt.tprintf("lyric_%d", i))
+				row_id := child_id(get_id("lyric"), Id(i))
 				hit := update_control(row_id, row)
 
 				active_amount := animate(
-					child_id(row_id, "active"),
+					child_id(row_id, get_id("active")),
 					is_active ? f32(1) : f32(0),
 					0.1, .Linear
 				)
@@ -729,7 +728,7 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 		if .HOVER in res do fx.set_cursor(.Hand)
 
 		count := i == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
-		count_text := fmt.tprintf("%d", count)
+		count_text := to_string(count)
 		count_width := fx.measure_text(count_text, 10).x + 6
 
 		layout_row({20, -1, count_width}, -1, gap = 8)
@@ -760,11 +759,11 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		#partial switch sort {
 		case .Track:
-			right_text = fmt.tprintf("#%d", song.track)
+			right_text = to_string("#", song.track)
 		case .Duration:
 			right_text = format_time(song.duration)
 		case .Playtime:
-			right_text = fmt.tprintf("%dm", int(song.playtime) / 60)
+			right_text = to_string(int(song.playtime) / 60, "m")
 		case .Last_Listened:
 			if time.to_unix_nanoseconds(song.listen_timestamp) > 0 {
 				local_time := time.Time{ song.listen_timestamp._nsec + utc_offset }
@@ -772,9 +771,13 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				y2, m2, d2 := time.date(time.now())
 				if y1 == y2 && m1 == m2 && d1 == d2 {
 					h, m, _ := time.clock(local_time)
-					right_text = fmt.tprintf("%02d:%02d", h, m)
+					h_str := h < 10 ? to_string("0", h) : to_string(h)
+					m_str := m < 10 ? to_string("0", m) : to_string(m)
+					right_text = to_string(h_str, ":", m_str)
 				} else {
-					right_text = fmt.tprintf("%02d/%02d", d1, int(m1))
+					d_str := d1 < 10 ? to_string("0", d1) : to_string(d1)
+					mon_str := int(m1) < 10 ? to_string("0", int(m1)) : to_string(int(m1))
+					right_text = to_string(d_str, "/", mon_str)
 				}
 			} else {
 				right_text = "—"
@@ -807,7 +810,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				{right_bounds.pos.x, right_bounds.pos.y + (right_bounds.size.y - 36) * 0.5},
 				{36, 36},
 			}
-			like_id := child_id(id, "like")
+			like_id := child_id(id, get_id("like"))
 			like_res := update_control(like_id, like_bounds)
 
 			icon_color := ui_color(LINK_COLOR, like_res)
@@ -832,7 +835,10 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 format_time :: proc(seconds: f32) -> string {
 	value := max(int(seconds), 0)
-	return fmt.tprintf("%d:%02d", value / 60, value % 60)
+	mins := value / 60
+	secs := value % 60
+	secs_str := secs < 10 ? to_string("0", secs) : to_string(secs)
+	return to_string(mins, ":", secs_str)
 }
 
 open_context_menu :: proc(song: ^Music) {
@@ -1052,7 +1058,7 @@ draw_mini_player :: proc() {
 		fx.draw_rect(toast_rect, COLOR_ACCENT, 8)
 
 		vol_percent := int((muted ? 0 : audio.get_volume()) * 100 + 0.5)
-		vol_str := fmt.tprintf("Vol: %d%%", vol_percent)
+		vol_str := to_string("Vol: ", vol_percent, "%")
 		fx.draw_text_rect(vol_str, toast_rect, 12, COLOR_TEXT, true)
 	}
 }
