@@ -16,6 +16,7 @@ wasapi_state: struct {
 initialize :: proc() {
 	sync.guard(&global_mutex)
 	decoder.volume = 0.5
+	decoder.sample_rate = 48000
 
 	windows.CoInitializeEx(nil, .MULTITHREADED)
 	enumerator: ^wasapi.IMMDeviceEnumerator
