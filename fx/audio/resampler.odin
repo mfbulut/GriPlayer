@@ -3,10 +3,10 @@ package audio
 import "core:math"
 
 TABLE_PHASES :: 32
-TAPS         :: 16
+TAPS :: 16
 
 resampler_state: struct {
-	buffer:        [65536][2]f32,
+	buffer:        [4096][2]f32,
 	buf_count:     int,
 	pos_in:        f64,
 	sample_rate:   u32,
@@ -58,7 +58,7 @@ rebuild_polyphase_table :: proc() {
 		sum: f64 = 0.0
 
 		for k in 0 ..< TAPS {
-			t := (f64(k) - 7.5) - eta
+			t := (f64(k) - 7.0) - eta
 			val := c * sinc(2.0 * cutoff * t) * kaiser_window(t * c, half_taps, beta)
 			resampler_state.table[p][k] = f32(val)
 			sum += val
