@@ -15,9 +15,7 @@ wasapi_state: struct {
 
 initialize :: proc() {
 	sync.guard(&global_mutex)
-
 	decoder.volume = 0.5
-	eq_recalculate_all()
 
 	windows.CoInitializeEx(nil, .MULTITHREADED)
 	enumerator: ^wasapi.IMMDeviceEnumerator
@@ -74,7 +72,10 @@ init_wasapi :: proc(new_sample_rate: u32) {
 	wasapi_state.audio_client->SetEventHandle(wasapi_state.buffer_event)
 	wasapi_state.audio_client->GetService(wasapi.IID_IAudioRenderClient, cast(^rawptr)&wasapi_state.render_client)
 	wasapi_state.audio_client->GetBufferSize(&wasapi_state.buffer_size)
-	eq_recalculate_all()
+
+	for i in 0 ..< 10 {
+		eq_recalculate_band(i)
+	}
 }
 
 audio_thread_proc :: proc() {

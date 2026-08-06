@@ -175,7 +175,8 @@ loader_start :: proc() {
 }
 
 music_id :: proc(music: ^Music) -> Id {
-	key := fmt.tprintf("%s|%s|%s|%.1f", music.title, music.artist, music.album, music.duration)
+	ext := os.ext(music.fullpath)
+	key := fmt.tprintf("%s|%s|%s|%s|%.1f", music.title, music.artist, music.album, ext, music.duration)
 	return Id(hash.fnv64a(transmute([]byte)key))
 }
 
@@ -449,7 +450,7 @@ save_settings :: proc() -> os.Error {
 	}
 
 	for i in 0..<10 {
-		settings.band_gains[i] = audio.eq_bands[i].gain_db
+		settings.band_gains[i] = audio.eq_get_gain(i)
 	}
 
 	os.write_entire_file(settings_path, slice.bytes_from_ptr(&settings, size_of(Settings))) or_return
@@ -468,9 +469,8 @@ load_settings :: proc() -> os.Error {
 	audio.set_volume(settings.volume)
 	audio.pregain_db = settings.pregain_db
 	for i in 0..<10 {
-		audio.eq_bands[i].gain_db = settings.band_gains[i]
+		audio.eq_set_gain(i, settings.band_gains[i]) =
 	}
-	audio.eq_recalculate_all()
 
 	return nil
 }

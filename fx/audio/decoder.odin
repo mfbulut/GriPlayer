@@ -257,12 +257,6 @@ eq_reset :: proc() {
 	}
 }
 
-eq_recalculate_all :: proc() {
-	for i in 0 ..< 10 {
-		eq_recalculate_band(i)
-	}
-}
-
 eq_recalculate_band :: proc(i: int) {
 	band := &eq_bands[i]
 
