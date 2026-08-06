@@ -168,12 +168,18 @@ seek :: proc(position: f32) {
 	case:
 	}
 
-	resampler_reset()
+	resampler_reset(target_pcm)
 	wasapi_reset()
 }
 
 position :: proc() -> f32 {
 	sync.guard(&global_mutex)
+
+	if decoder.decoder == nil do return 0
+
+	if decoder.sample_rate != 48000 {
+		return resampler_position()
+	}
 
 	current_pcm: i64
 	switch d in decoder.decoder {

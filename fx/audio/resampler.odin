@@ -6,12 +6,14 @@ TABLE_PHASES :: 32
 TAPS         :: 16
 
 resampler_state: struct {
-	buffer:      [65536][2]f32,
-	buf_count:   int,
-	pos_in:      f64,
-	sample_rate: u32,
-	table:       [33][16]f32,
-	eof:         bool,
+	buffer:        [65536][2]f32,
+	buf_count:     int,
+	pos_in:        f64,
+	sample_rate:   u32,
+	table:         [33][16]f32,
+	eof:           bool,
+	seek_pcm:      i64,
+	total_shifted: i64,
 }
 
 bessel_i0 :: proc(x: f64) -> f64 {
@@ -71,7 +73,7 @@ rebuild_polyphase_table :: proc() {
 	}
 }
 
-resampler_reset :: proc() {
+resampler_reset :: proc(start_pcm: i64 = 0) {
 	for i in 0 ..< len(resampler_state.buffer) {
 		resampler_state.buffer[i] = {0, 0}
 	}
@@ -79,7 +81,18 @@ resampler_reset :: proc() {
 	resampler_state.pos_in = 7.0
 	resampler_state.sample_rate = decoder.sample_rate
 	resampler_state.eof = false
+	resampler_state.seek_pcm = start_pcm
+	resampler_state.total_shifted = 0
 	rebuild_polyphase_table()
+}
+
+resampler_position :: proc() -> f32 {
+	if decoder.sample_rate == 0 do return 0
+	current_pcm := f64(resampler_state.seek_pcm + resampler_state.total_shifted) + (resampler_state.pos_in - 7.0)
+	if decoder.total_pcm > 0 {
+		current_pcm = math.min(current_pcm, f64(decoder.total_pcm))
+	}
+	return f32(current_pcm / f64(decoder.sample_rate))
 }
 
 resampler_read :: proc(out_samples: [][2]f32) -> int {
@@ -108,6 +121,7 @@ resampler_read :: proc(out_samples: [][2]f32) -> int {
 			copy(resampler_state.buffer[:resampler_state.buf_count - shift], resampler_state.buffer[shift:resampler_state.buf_count])
 			resampler_state.buf_count -= shift
 			resampler_state.pos_in -= f64(shift)
+			resampler_state.total_shifted += i64(shift)
 			int_pos = 7
 		}
 
