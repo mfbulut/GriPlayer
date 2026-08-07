@@ -107,6 +107,7 @@ wasapi_reset :: proc() {
 	if wasapi_state.audio_client != nil {
 		wasapi_state.audio_client->Stop()
 		wasapi_state.audio_client->Reset()
+		wasapi_state.audio_client->Start()
 	}
 }
 
