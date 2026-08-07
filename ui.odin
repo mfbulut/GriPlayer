@@ -49,6 +49,7 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scro
 	fx.draw_rect(layout.rect, bg, 8)
 
 	body := layout.rect
+	append(&ctx.layout_stack, layout)
 
 	if scroll {
 		state := get_scroll_state(id)
@@ -59,13 +60,11 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scro
 		scrollbar(id, state, body, cs, "scrollbar_h", 0, -1)
 
 		layout_body := fx.rect_shrink(body, pad)
-		layout.body = fx.Rect{layout_body.pos - state.scroll, layout_body.size}
+		get_layout().body = fx.Rect{layout_body.pos - state.scroll, layout_body.size}
 		fx.set_scissor(body)
 	} else {
-		layout.body = fx.rect_shrink(body, pad)
+		get_layout().body = fx.rect_shrink(body, pad)
 	}
-
-	append(&ctx.layout_stack, layout)
 
 	return true
 }

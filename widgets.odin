@@ -146,12 +146,12 @@ update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
 	return
 }
 
-label :: proc(text: string, font_size := f32(14)) {
+label :: proc(text: string, font_size := f32(17)) {
 	rect := layout_next()
 	fx.draw_text_rect(text, rect, font_size, COLOR_TEXT, true)
 }
 
-link :: proc(id: Id, text: string, font_size := f32(16)) -> (res: Result_Set) {
+link :: proc(id: Id, text: string, font_size := f32(19)) -> (res: Result_Set) {
 	text_width := fx.measure_text(text, font_size).x
 
 	bounds := layout_next()
@@ -179,7 +179,7 @@ link :: proc(id: Id, text: string, font_size := f32(16)) -> (res: Result_Set) {
 	return
 }
 
-button :: proc(label: string, font_size := f32(14), active := false) -> (res: Result_Set) {
+button :: proc(label: string, font_size := f32(17), active := false) -> (res: Result_Set) {
 	id := get_id(label)
 	r := layout_next()
 	res = update_control(id, r)
@@ -382,7 +382,7 @@ menu_button :: proc(text: string, icon: Icon) -> (res: Result_Set) {
 		{max(bounds.size.x - 32, 0), 14}
 	}
 
-	fx.draw_text_faded(text, text_bounds, 13, COLOR_TEXT)
+	fx.draw_text_faded(text, text_bounds, 16, COLOR_TEXT)
 
 	return
 }

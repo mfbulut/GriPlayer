@@ -5,12 +5,12 @@ layout(push_constant) uniform PushConstants {
 };
 
 struct Instance {
-    vec4 dest;       // x0, y0, x1, y1 in pixels
-    vec4 src;        // u0, v0, u1, v1 in UV
-    uvec4 colors;    // TL, TR, BL, BR
+    vec4 dest;
+    vec4 src;
+    uvec4 colors;
     float radius;
+    uint index;
     uint kind;
-    uint tex_idx;
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer InstanceBuffer {
@@ -22,8 +22,8 @@ layout(location = 1) out vec4 out_color;
 layout(location = 2) out vec2 out_sdf_pos;
 layout(location = 3) out vec2 out_half_size;
 layout(location = 4) out flat float out_radius;
-layout(location = 5) out flat uint out_kind;
 layout(location = 6) out flat uint out_tex_idx;
+layout(location = 5) out flat uint out_kind;
 
 vec4 unpack_color(uint packed) {
     return vec4(
@@ -38,7 +38,6 @@ void main() {
     Instance inst = instances[gl_InstanceIndex];
     uint vid = gl_VertexIndex & 3u;
 
-    // Corner: TL, TR, BL, BR
     vec2 corner = vec2(
         (vid & 1u) != 0u ? 1.0 : 0.0,
         (vid & 2u) != 0u ? 1.0 : 0.0
@@ -65,6 +64,6 @@ void main() {
     out_sdf_pos = local * half_size;
     out_half_size = half_size;
     out_radius = inst.radius;
+    out_tex_idx = inst.index;
     out_kind = inst.kind;
-    out_tex_idx = inst.tex_idx;
 }

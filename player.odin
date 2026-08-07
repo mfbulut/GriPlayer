@@ -44,11 +44,9 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 		return
 	}
 
+	if !gapless do audio.reset()
 	if paused do audio.pause()
 	else do audio.resume()
-	if gapless == false {
-        audio.reset()
-    }
 
 	audio.eq_reset_state()
 	player.session += 1
@@ -206,6 +204,6 @@ player_update :: proc() {
 		player_next(true)
 		return
 	}
-	
+
 	visualizer_update()
 }

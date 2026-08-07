@@ -1,65 +1,38 @@
 package fx
 
+import "core:mem"
+import "core:slice"
+
 Instance :: struct #align(16) {
-	dest:   Rect,      // x0, y0, x1, y1
-	src:    Rect,      // u0, v0, u1, v1
-	color:  [4]Color,  // TL, TR, BL, BR
+	dest:   Rect,     // x0, y0, x1, y1
+	src:    Rect,     // u0, v0, u1, v1
+	color:  [4]Color, // TL, TR, BL, BR
 	radius: f32,
-	kind:   enum u32 { Rect, Texture, MSDF, Quad },
-	texture_index: u32,
-}
-
-// Font
-
-Font :: struct {
-	atlas:   Texture,
-	metrics: Font_Metrics,
-	glyphs:  map[rune]Glyph,
+	index:  u32,
+	kind:   enum u32 { Rect, Texture, MSDF, Quad, Text },
 }
 
 Glyph :: struct {
-	unicode:     u32,
+	unicode:     rune,
 	advance:     f32,
-	atlasBounds: Bounds,
-	planeBounds: Bounds,
-}
-
-Font_Metrics :: struct {
-	emSize:             f32,
-	lineHeight:         f32,
-	ascender:           f32,
-	descender:          f32,
-	underlineY:         f32,
-	underlineThickness: f32,
+	curve_start: u32,
+	curve_count: u32,
 }
 
 Batch :: struct {
-	offset: u32,
-	count:  u32,
+	offset:  u32,
+	count:   u32,
 	scissor: Rect,
 }
 
-font: Font
+total_curves_loaded: u32
 scissor: Rect
+font: map[rune]Glyph
 batches: [dynamic; 256]Batch
 instances: [dynamic; MAX_INSTANCES]Instance
 
-renderer_init :: proc() {
-	font.atlas = texture_load(#load("../assets/Inter.png"))
-	font.metrics = INTER_METRICS
-
-	for glyph in INTER_GLYPHS {
-		font.glyphs[cast(rune)glyph.unicode] = Glyph{
-			advance     = glyph.advance,
-			atlasBounds = glyph.atlasBounds,
-			planeBounds = glyph.planeBounds,
-		}
-	}
-}
-
 clear_window :: proc(color: Color) {
-	if window.size.x <= 0 || window.size.y <= 0 || window_is_minimized() do return
-	vks.clear_color = color_to_vec4(color)
+	vks.clear_color = Vec4(color) / 255.0
 }
 
 set_scissor :: proc(rect: Rect) {
@@ -82,20 +55,17 @@ flush :: proc() {
 	}
 
 	count := u32(len(instances)) - last_count
-
 	if count == 0 do return
 
 	append(&batches, Batch{
-		offset = last_count,
-		count  = count,
+		offset  = last_count,
+		count   = count,
 		scissor = scissor,
 	})
 }
 
 rect_visible :: proc(rect: Rect) -> bool {
-	if rect.size.x <= 0 || rect.size.y <= 0  do return false
-	if !rect_overlaps(rect, scissor) do return false
-	return true
+	return rect_overlaps(rect, scissor)
 }
 
 draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
@@ -108,31 +78,31 @@ draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 			color  = color,
 			radius = radius,
 			kind   = .Rect,
-		},
+		}
 	)
+}
+
+draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
+	r := Rect{center - radius, radius * 2}
+	if !rect_visible(r) do return
+	draw_rect(r, color, radius)
 }
 
 draw_quad :: proc(p0, p1, p2, p3: Vec2, color: [4]Color) {
 	append(&instances,
 		Instance{
-			dest    = {p0, p1},
-			src     = {p2, p3},
-			color   = color,
-			kind    = .Quad,
+			dest   = {p0, p1},
+			src    = {p2, p3},
+			color  = color,
+			kind   = .Quad,
 		},
 	)
 }
 
-draw_circle :: proc(center: Vec2, radius: f32, color: [4]Color) {
-	top_left := center - radius
-	draw_rect({top_left, radius * 2}, color, radius)
-}
-
 draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Color)WHITE, radius := f32(0)) {
-	if !rect_visible(dest) do return
-	if tex.index == 0 do return
+	if !rect_overlaps(dest, scissor) || tex.index == 0 do return
 
-	size := cast(Vec2)tex.size
+	size := Vec2(tex.size)
 
 	src_uv := Rect{
 		src.pos / size,
@@ -141,13 +111,13 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Col
 
 	append(&instances,
 		Instance{
-			src     = src_uv,
-			dest    = {dest.pos, dest.pos + dest.size},
-			color   = tint,
-			radius  = radius,
-			kind    = .Texture,
-			texture_index = u32(tex.index),
-		},
+			src    = src_uv,
+			dest   = {dest.pos, dest.pos + dest.size},
+			color  = tint,
+			radius = radius,
+			kind   = .Texture,
+			index  = u32(tex.index),
+		}
 	)
 }
 
@@ -159,7 +129,7 @@ draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint :=
 	if !rect_visible(dest) do return
 	if tex.index == 0 do return
 
-	size := cast(Vec2)tex.size
+	size := Vec2(tex.size)
 
 	src_uv := Rect{
 		src.pos / size,
@@ -168,12 +138,12 @@ draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint :=
 
 	append(&instances,
 		Instance{
-			src     = src_uv,
-			dest    = {dest.pos, dest.pos + dest.size},
-			color   = tint,
-			radius  = px_range / size.x,
-			kind    = .MSDF,
-			texture_index = u32(tex.index),
+			src    = src_uv,
+			dest   = {dest.pos, dest.pos + dest.size},
+			color  = tint,
+			radius = px_range / size.x,
+			kind   = .MSDF,
+			index  = u32(tex.index),
 		},
 	)
 }
@@ -184,100 +154,93 @@ draw_msdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := cast([4]Color
 
 // Text Rendering
 
-draw_text :: proc {
-	draw_text_vec,
-	draw_text_rect,
+font_load :: proc(font_bytes: []u8) {
+	offset := 0
+
+	glyph_count := (^u32)(raw_data(font_bytes[offset:]))^
+	offset += size_of(u32)
+
+	curve_count := (^u32)(raw_data(font_bytes[offset:]))^
+	offset += size_of(u32)
+
+	glyphs_bytes_len := int(glyph_count) * size_of(Glyph)
+	glyph_bytes := font_bytes[offset : offset + glyphs_bytes_len]
+	glyphs_slice := slice.reinterpret([]Glyph, glyph_bytes)
+	offset += glyphs_bytes_len
+
+	curves_bytes_len := int(curve_count) * 12
+	curve_bytes := font_bytes[offset : offset + curves_bytes_len]
+
+	curves_to_copy := min(curve_count, MAX_CURVES)
+	glyphs := make(map[rune]Glyph, glyph_count)
+
+	for g in glyphs_slice {
+		glyphs[g.unicode] = g
+	}
+
+	if curves_to_copy > 0 {
+		mem.copy(vks.curve_buffer_mapped, raw_data(curve_bytes), int(curves_to_copy) * 12)
+		total_curves_loaded += curves_to_copy
+	}
+
+	font = glyphs
 }
 
-draw_text_vec :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Color)WHITE) {
+draw_text :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Color)WHITE) {
 	if text == "" do return
 
-	size := measure_text(text, font_size)
-	if !rect_visible({pos, size}) do return
-
-	font_scale := font_size / font.metrics.emSize
-	line_h := font.metrics.lineHeight * font_scale
-
 	x := pos.x
-	y := pos.y + (font.metrics.ascender * font_scale)
-
-	atlas_w := cast(f32)font.atlas.size.x
-	atlas_h := cast(f32)font.atlas.size.y
-	unit_range := 8 / atlas_w
+	y := pos.y
 
 	for char in text {
 		if char == '\n' {
 			x = pos.x
-			y += line_h
+			y += font_size
 			continue
 		}
 
-		glyph := font.glyphs[char] or_else font.glyphs['?']
+		glyph := font[char] or_else font['?']
 
-		dest := Rect{
-			{x + (glyph.planeBounds.left * font_scale),
-			y - (glyph.planeBounds.top * font_scale)},
-			{x + (glyph.planeBounds.right * font_scale),
-			y - (glyph.planeBounds.bottom * font_scale)},
+		if glyph.curve_count > 0 {
+			dest := Rect{{x, y}, {x, y} + font_size}
+			if !rect_overlaps(dest, scissor) do continue
+
+			append(&instances,
+				Instance{
+					dest   = dest,
+					src    = {{0, 0}, {1, 1}},
+					color  = color,
+					radius = f32(glyph.curve_count),
+					index  = glyph.curve_start,
+					kind   = .Text,
+				}
+			)
 		}
 
-		src := Rect{
-			{glyph.atlasBounds.left / atlas_w,
-			1 - (glyph.atlasBounds.top / atlas_h)},
-			{glyph.atlasBounds.right / atlas_w,
-			1 - (glyph.atlasBounds.bottom / atlas_h)},
-		}
-
-		append(&instances,
-			Instance{
-				dest    = dest,
-				src     = src,
-				color   = color,
-				radius  = unit_range,
-				kind    = .MSDF,
-				texture_index = u32(font.atlas.index),
-			},
-		)
-
-		x += glyph.advance * font_scale
+		x += glyph.advance * font_size
 	}
 }
 
-draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast([4]Color)WHITE, center_x := false) {
+draw_text_rect :: proc(text: string, bounds: Rect, font_size: f32, color := cast([4]Color)WHITE, center_x := false, center_y := true) {
 	if text == "" do return
-
 	size := measure_text(text, font_size)
-	x := bounds.pos.x
-	if center_x {
-		x = bounds.pos.x + (bounds.size.x - size.x) * 0.5
-	}
-
-	font_scale := font_size / font.metrics.emSize
-	line_h := font.metrics.lineHeight * font_scale
-	y := bounds.pos.y + (bounds.size.y - line_h) * 0.5
-
-	draw_text_vec(text, {x, y}, font_size, color)
+	x := bounds.pos.x + (center_x ? (bounds.size.x - size.x) * 0.5 : 0)
+	y := bounds.pos.y + (center_y ? (bounds.size.y - font_size) * 0.5 : 0)
+	draw_text(text, {x, y}, font_size, color)
 }
 
-draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color) {
+draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color, center_y := true) {
 	if text == "" || bounds.size.x <= 0 do return
 	if !rect_visible(bounds) do return
 
 	size := measure_text(text, font_size)
 	if size.x <= bounds.size.x {
-		draw_text_rect(text, bounds, font_size, color)
+		draw_text_rect(text, bounds, font_size, color, false, center_y)
 		return
 	}
 
-	font_scale := font_size / font.metrics.emSize
-	line_h := font.metrics.lineHeight * font_scale
-
 	x := bounds.pos.x
-	y := bounds.pos.y + (bounds.size.y - line_h) * 0.5 + (font.metrics.ascender * font_scale)
-
-	atlas_w := cast(f32)font.atlas.size.x
-	atlas_h := cast(f32)font.atlas.size.y
-	unit_range := 8 / atlas_w
+	y := bounds.pos.y + (center_y ? (bounds.size.y - font_size) * 0.5 : 0)
 
 	max_w := bounds.size.x
 	fade_w := min(20, max_w)
@@ -286,14 +249,14 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 	for char in text {
 		if char == '\n' {
 			x = bounds.pos.x
-			y += line_h
+			y += font_size
 			continue
 		}
 
-		glyph := font.glyphs[char] or_else font.glyphs['?']
+		glyph := font[char] or_else font['?']
 
-		left_x := x + (glyph.planeBounds.left * font_scale)
-		right_x := x + (glyph.planeBounds.right * font_scale)
+		left_x := x
+		right_x := x + glyph.advance * font_size
 
 		if left_x > bounds.pos.x + max_w {
 			break
@@ -319,57 +282,43 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 
 		c := [4]Color{color_tl, color_tr, color_bl, color_br}
 
-		dest := Rect{
-			{left_x,
-			y - (glyph.planeBounds.top * font_scale)},
-			{right_x,
-			y - (glyph.planeBounds.bottom * font_scale)},
+		if glyph.curve_count > 0 {
+			dest := Rect{{x, y}, {x, y} + font_size}
+			if rect_overlaps(dest, scissor) {
+				append(&instances,
+					Instance{
+						dest   = dest,
+						src    = {{0, 0}, {1, 1}},
+						color  = c,
+						radius = f32(glyph.curve_count),
+						index  = glyph.curve_start,
+						kind   = .Text,
+					},
+				)
+			}
 		}
 
-		src := Rect{
-			{glyph.atlasBounds.left / atlas_w,
-			1 - (glyph.atlasBounds.top / atlas_h)},
-			{glyph.atlasBounds.right / atlas_w,
-			1 - (glyph.atlasBounds.bottom / atlas_h)},
-		}
-
-		append(&instances,
-			Instance{
-				dest    = dest,
-				src     = src,
-				color   = c,
-				radius  = unit_range,
-				kind    = .MSDF,
-				texture_index = u32(font.atlas.index),
-			},
-		)
-
-		x += glyph.advance * font_scale
+		x += glyph.advance * font_size
 	}
 }
 
-measure_text :: proc(text: string, font_size: f32) -> Vec2 {
-	if text == "" do return {0, 0}
-	font := font
+measure_text :: proc(text: string, font_size: f32) -> (size: Vec2) {
+	if text == "" do return
 
 	cursor_x := f32(0)
-	max_x := f32(0)
-
-	font_scale := font_size / font.metrics.emSize
-	line_height := font.metrics.lineHeight * font_scale
-	total_height := line_height
+	size.y = font_size
 
 	for char in text {
 		if char == '\n' {
-			max_x = max(max_x, cursor_x)
 			cursor_x = 0
-			total_height += line_height
+			size.y += font_size
 			continue
 		}
 
-		glyph := font.glyphs[char] or_else font.glyphs['?']
-		cursor_x += glyph.advance * font_scale
+		glyph := font[char] or_else font['?']
+		cursor_x += glyph.advance * font_size
+		size.x = max(size.x, cursor_x)
 	}
 
-	return {max(max_x, cursor_x), total_height}
+	return
 }

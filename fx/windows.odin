@@ -1,11 +1,12 @@
 package fx
 
 import "base:runtime"
-import "core:time"
 import "core:mem"
+import "core:time"
 import "core:unicode/utf16"
 import win "core:sys/windows"
-import vk "vendor:vulkan"
+
+Key_State :: enum { Held, Pressed, Released, Repeat }
 
 Cursor :: enum {
 	Arrow,
@@ -14,26 +15,23 @@ Cursor :: enum {
 	SizeAll,
 }
 
-Key_State :: enum { Held, Pressed, Released, Repeat }
-Key_States :: [256]bit_set[Key_State]
-
 window: struct {
 	hInstance:      win.HINSTANCE,
 	hwnd:           win.HWND,
-	size:           [2]u32,
+	size:           [2]int,
 	is_resized:     bool,
 	should_close:   bool,
-	key_state:      Key_States,
-	cursor:         Cursor,
+	key_state:      [256]bit_set[Key_State],
 	mouse_pos:      Vec2,
 	mouse_scroll:   Vec2,
 	text_input:     [dynamic; 32]rune,
 	prev_time:      time.Time,
 	frame_time:     f32,
 	frame_callback: proc(),
+	cursor:         Cursor,
 }
 
-init :: proc(title: string, size := [2]u32{1280, 720}) {
+init :: proc(title: string, size := [2]int{1280, 720}) {
 	win.SetProcessDPIAware()
 
 	window.hInstance = cast(win.HINSTANCE)win.GetModuleHandleW(nil)
@@ -44,7 +42,7 @@ init :: proc(title: string, size := [2]u32{1280, 720}) {
 		hIcon         = win.LoadIconW(window.hInstance, cast(win.LPCWSTR)win.MAKEINTRESOURCEW(1)),
 		hCursor       = win.LoadCursorA(nil, win.IDC_ARROW),
 		hbrBackground = cast(win.HBRUSH)win.GetStockObject(win.BLACK_BRUSH),
-		lpszClassName = "GriPlayer",
+		lpszClassName = "Font Renderer",
 	}
 
 	win.RegisterClassW(&wndclass)
@@ -65,7 +63,7 @@ init :: proc(title: string, size := [2]u32{1280, 720}) {
 	ypos := (win.GetSystemMetrics(win.SM_CYSCREEN) - window_h) / 2
 
 	title16 := win.utf8_to_wstring(title, context.temp_allocator)
-	window.hwnd = win.CreateWindowExW(ex_style, "GriPlayer", title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, window.hInstance, nil)
+	window.hwnd = win.CreateWindowExW(ex_style, "Font Renderer", title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, window.hInstance, nil)
 
 	scale := dpi_scale()
 	if scale != 1.0 {
@@ -94,7 +92,7 @@ init :: proc(title: string, size := [2]u32{1280, 720}) {
 	win.UpdateWindow(window.hwnd)
 
 	vk_init()
-	renderer_init()
+	font_load(#load("../assets/fonts/Inter.bin"))
 }
 
 mouse_pos :: proc() -> Vec2 {
@@ -125,10 +123,6 @@ frame_time :: proc() -> f32 {
 	return min(window.frame_time, 1.0 / 60.0)
 }
 
-set_cursor :: proc(cursor: Cursor) {
-	window.cursor = cursor
-}
-
 dpi_scale :: proc() -> f32 {
 	return f32(win.GetDpiForWindow(window.hwnd)) / f32(96.0)
 }
@@ -143,6 +137,69 @@ window_is_minimized :: proc() -> bool {
 
 text_input :: proc() -> []rune {
 	return window.text_input[:]
+}
+
+set_cursor :: proc(c: Cursor) {
+	window.cursor = c
+}
+
+get_window_rect :: proc() -> Vec4 {
+	rect: win.RECT
+	win.GetWindowRect(window.hwnd, &rect)
+	scale := dpi_scale()
+	return Vec4 {
+		f32(rect.left),
+		f32(rect.top),
+		f32(rect.right - rect.left) / scale,
+		f32(rect.bottom - rect.top) / scale
+	}
+}
+
+set_window_rect :: proc(rect: Vec4) {
+	x := i32(rect.x)
+	y := i32(rect.y)
+	dw_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	ex_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_EXSTYLE)
+
+	scale := dpi_scale()
+	window_rect: win.RECT = {
+		x,
+		y,
+		x + cast(i32)(rect.z * scale),
+		y + cast(i32)(rect.w * scale),
+	}
+	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
+
+	new_w := window_rect.right - window_rect.left
+	new_h := window_rect.bottom - window_rect.top
+	win.SetWindowPos(window.hwnd, nil, x, y, new_w, new_h, win.SWP_NOZORDER)
+}
+
+set_always_on_top :: proc(top: bool) {
+	hwnd_top := top ? win.HWND_TOPMOST : win.HWND_NOTOPMOST
+	win.SetWindowPos(window.hwnd, hwnd_top, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE)
+}
+
+start_window_drag :: proc() {
+	if win.GetAsyncKeyState(win.VK_LBUTTON) >= 0 {
+		return
+	}
+	win.ReleaseCapture()
+	window.key_state[Key.Mouse_Left] = {}
+	win.SendMessageW(window.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
+}
+
+set_window_borderless :: proc(borderless: bool) {
+	style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
+	if borderless {
+		style &= ~(win.WS_CAPTION | win.WS_THICKFRAME | win.WS_MINIMIZEBOX | win.WS_MAXIMIZEBOX | win.WS_SYSMENU)
+		style |= win.WS_POPUP
+	} else {
+		style &= ~(win.WS_POPUP)
+		style |= win.WS_OVERLAPPEDWINDOW
+	}
+	win.SetWindowLongW(window.hwnd, win.GWL_STYLE, cast(win.LONG)style)
+	win.SetWindowPos(window.hwnd, nil, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOZORDER | win.SWP_FRAMECHANGED)
 }
 
 get_clipboard :: proc(allocator := context.temp_allocator) -> (text: string, ok: bool) {
@@ -190,68 +247,10 @@ set_clipboard :: proc(text: string) -> (ok: bool) {
 	return true
 }
 
-set_always_on_top :: proc(top: bool) {
-	insert_after := top ? win.HWND_TOPMOST : win.HWND_NOTOPMOST
-	win.SetWindowPos(window.hwnd, insert_after, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE)
-}
-
-get_window_rect :: proc() -> Vec4 {
-	rect: win.RECT
-	win.GetWindowRect(window.hwnd, &rect)
-	scale := dpi_scale()
-	return Vec4 {
-		f32(rect.left),
-		f32(rect.top),
-		f32(rect.right - rect.left) / scale,
-		f32(rect.bottom - rect.top) / scale
-	}
-}
-
-set_window_rect :: proc(rect: Vec4) {
-	x := i32(rect.x)
-	y := i32(rect.y)
-	dw_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
-	ex_style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_EXSTYLE)
-
-	scale := dpi_scale()
-	window_rect: win.RECT = {
-		x,
-		y,
-		x + cast(i32)(rect.z * scale),
-		y + cast(i32)(rect.w * scale),
-	}
-	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
-
-	new_w := window_rect.right - window_rect.left
-	new_h := window_rect.bottom - window_rect.top
-	win.SetWindowPos(window.hwnd, nil, x, y, new_w, new_h, win.SWP_NOZORDER)
-}
-
-start_window_drag :: proc() {
-	if win.GetAsyncKeyState(win.VK_LBUTTON) >= 0 {
-		return
-	}
-	win.ReleaseCapture()
-	window.key_state[Key.Mouse_Left] = {}
-	win.SendMessageW(window.hwnd, win.WM_NCLBUTTONDOWN, win.HTCAPTION, 0)
-}
-
-set_window_borderless :: proc(borderless: bool) {
-	style := cast(win.DWORD)win.GetWindowLongW(window.hwnd, win.GWL_STYLE)
-	if borderless {
-		style &= ~(win.WS_CAPTION | win.WS_THICKFRAME | win.WS_MINIMIZEBOX | win.WS_MAXIMIZEBOX | win.WS_SYSMENU)
-		style |= win.WS_POPUP
-	} else {
-		style &= ~(win.WS_POPUP)
-		style |= win.WS_OVERLAPPEDWINDOW
-	}
-	win.SetWindowLongW(window.hwnd, win.GWL_STYLE, cast(win.LONG)style)
-	win.SetWindowPos(window.hwnd, nil, 0, 0, 0, 0, win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOZORDER | win.SWP_FRAMECHANGED)
-}
-
 update :: proc(poll_msg := true) {
 	window.mouse_scroll = {0, 0}
 	clear(&window.text_input)
+	reset_scissor()
 
 	for &state in window.key_state {
 		state -= {.Pressed, .Released, .Repeat}
@@ -306,7 +305,6 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	case win.WM_DESTROY:
 	case win.WM_CLOSE:
 		window.should_close = true
-
 	case win.WM_HOTKEY:
 		if wparam == 1 {window.key_state[Key.Next_Track] += {.Pressed, .Held, .Repeat}}
 		if wparam == 2 {window.key_state[Key.Prev_Track] += {.Pressed, .Held, .Repeat}}
@@ -335,8 +333,8 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 		if wparam == 1 do update(false)
 
 	case win.WM_SIZE:
-		window.size.x = cast(u32)win.LOWORD(lparam)
-		window.size.y = cast(u32)win.HIWORD(lparam)
+		window.size.x = cast(int)win.LOWORD(lparam)
+		window.size.y = cast(int)win.HIWORD(lparam)
 		window.is_resized = true
 
 	case win.WM_SETFOCUS:
@@ -413,24 +411,18 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 	        high_surrogate = w
 	        break
 	    case 0xDC00..=0xDFFF:
-	        if high_surrogate == 0 {
-	            break
-	        }
-
+	        if high_surrogate == 0 do break
 	        codepoint := utf16.decode_surrogate_pair(high_surrogate, w)
 	        high_surrogate = 0
-
 	        if codepoint >= 32 && codepoint != 127 {
 	            append(&window.text_input, codepoint)
 	        }
 	    case:
 	        high_surrogate = 0
-
 	        if w >= 32 && w != 127 {
 	            append(&window.text_input, w)
 	        }
 	    }
-
 	case:
 		result = win.DefWindowProcW(hwnd, msg, wparam, lparam)
 	}
@@ -515,22 +507,4 @@ Key :: enum u8 {
 
 	LeftBracket  = 0xDB, RightBracket = 0xDD,
 	BackSlash    = 0xDC, Quote        = 0xDE,
-}
-
-vk_get_required_instance_extensions :: proc(allocator := context.temp_allocator) -> []cstring {
-	exts := make([]cstring, 2, allocator)
-	exts[0] = vk.KHR_SURFACE_EXTENSION_NAME
-	exts[1] = vk.KHR_WIN32_SURFACE_EXTENSION_NAME
-	return exts
-}
-
-vk_create_surface :: proc(instance: vk.Instance) -> vk.SurfaceKHR {
-	surface: vk.SurfaceKHR
-	surface_create_info := vk.Win32SurfaceCreateInfoKHR {
-		sType = .WIN32_SURFACE_CREATE_INFO_KHR,
-		hinstance = window.hInstance,
-		hwnd = window.hwnd,
-	}
-	vk.CreateWin32SurfaceKHR(instance, &surface_create_info, nil, &surface)
-	return surface
 }

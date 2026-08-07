@@ -84,15 +84,15 @@ draw_queue :: proc() {
 		divider_bounds.pos.y = animate(divider_id, local_divider_y) + layout.body.pos.y
 
 		if fx.rect_visible(divider_bounds) {
-			text_width := fx.measure_text("Playlist", 11).x + 18
+			text_width := fx.measure_text("Playlist", 14).x + 18
 			center := divider_bounds.pos.x + divider_bounds.size.x * 0.5
 			line_y := divider_bounds.pos.y + divider_bounds.size.y * 0.5
 
 			fx.draw_rect({{divider_bounds.pos.x + 5, line_y}, {max(center - text_width * 0.5 - divider_bounds.pos.x - 5, 0), 1}}, COLOR_BORDER)
 			fx.draw_rect({{center + text_width * 0.5, line_y}, {max(divider_bounds.pos.x + divider_bounds.size.x - center - text_width * 0.5 - 5, 0), 1}}, COLOR_BORDER)
 
-			text_bounds := fx.Rect{{center - text_width * 0.5, divider_bounds.pos.y + (divider_bounds.size.y - 11) * 0.5}, {text_width, 11}}
-			fx.draw_text_rect("Playlist", text_bounds, 11, COLOR_MUTED, true)
+			text_bounds := fx.Rect{{center - text_width * 0.5, divider_bounds.pos.y + (divider_bounds.size.y - 14) * 0.5}, {text_width, 14}}
+			fx.draw_text_rect("Playlist", text_bounds, 14, COLOR_MUTED, true)
 		}
 
 		// Playlist
@@ -222,12 +222,12 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 	text_w := max(remove_bounds.pos.x - text_x - pad, 0)
 
 	title_bounds := fx.Rect{{text_x, bounds.pos.y + 6}, {text_w, 18}}
-	fx.draw_text_faded(song.title, title_bounds, 14, COLOR_TEXT)
+	fx.draw_text_faded(song.title, title_bounds, 17, COLOR_TEXT)
 
 	secondary := song.artist
 	if secondary == "" do secondary = song.album
 	artist_bounds := fx.Rect{{text_x, bounds.pos.y + 24}, {text_w, 15}}
-	fx.draw_text_faded(secondary, artist_bounds, 11, COLOR_MUTED)
+	fx.draw_text_faded(secondary, artist_bounds, 14, COLOR_MUTED)
 
 	cross_color := ui_color(LINK_COLOR, remove_res)
 	draw_icon(.Cross, remove_bounds, 24, is_overlay ? COLOR_TEXT : cross_color)

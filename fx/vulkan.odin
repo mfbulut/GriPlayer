@@ -3,13 +3,14 @@ package fx
 import "base:runtime"
 import "core:os"
 
-import "core:dynlib"
 import "core:mem"
+import "core:dynlib"
 import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
 MAX_TEXTURES :: 1024
-MAX_INSTANCES :: 1024 * 16
+MAX_INSTANCES :: 16 * mem.Megabyte / size_of(Instance)
+MAX_CURVES :: 16 * mem.Megabyte / 12
 
 swapchain: struct {
 	swapchain: vk.SwapchainKHR,
@@ -37,6 +38,7 @@ vks: struct {
 	descriptor_set_layout: vk.DescriptorSetLayout,
 	descriptor_set: vk.DescriptorSet,
 	instance_buffer_mapped: rawptr,
+	curve_buffer_mapped: rawptr,
 	clear_color: [4]f32,
 }
 
@@ -56,12 +58,7 @@ textures: #soa[MAX_TEXTURES]struct {
 
 vk_init :: proc() {
 	{	// Load Vulkan library
-		when ODIN_OS == .Windows {
-			lib_name := "vulkan-1.dll"
-		} else {
-			lib_name := "libvulkan.so.1"
-		}
-		lib := dynlib.load_library(lib_name) or_else panic("Failed to load Vulkan library")
+		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load Vulkan library")
 		vkGetInstanceProcAddr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr")
 		vk.load_proc_addresses(vkGetInstanceProcAddr)
 	}
@@ -77,17 +74,15 @@ vk_init :: proc() {
 		}
 
 		extensions: [dynamic]cstring
-		req_exts := vk_get_required_instance_extensions()
-		for ext in req_exts {
-			append(&extensions, ext)
-		}
+		append(&extensions, vk.KHR_SURFACE_EXTENSION_NAME)
+		append(&extensions, vk.KHR_WIN32_SURFACE_EXTENSION_NAME)
 		when ODIN_DEBUG {
 			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		}
 
 		app_info := vk.ApplicationInfo {
 			sType = .APPLICATION_INFO,
-			pApplicationName = "GriPlayer",
+			pApplicationName = "Font Renderer",
 			apiVersion = vk.API_VERSION_1_3,
 		}
 
@@ -95,7 +90,7 @@ vk_init :: proc() {
 			sType = .INSTANCE_CREATE_INFO,
 			pApplicationInfo = &app_info,
 			enabledExtensionCount =  u32(len(extensions)),
-			ppEnabledExtensionNames = raw_data(extensions),
+			ppEnabledExtensionNames = raw_data(extensions[:]),
 			enabledLayerCount = layer_count,
 			ppEnabledLayerNames = layer_names,
 		}
@@ -138,7 +133,12 @@ vk_init :: proc() {
 	}
 
 	{	// Create Surface
-		vks.surface = vk_create_surface(vks.instance)
+		surface_create_info := vk.Win32SurfaceCreateInfoKHR {
+			sType = .WIN32_SURFACE_CREATE_INFO_KHR,
+			hinstance = window.hInstance,
+			hwnd = window.hwnd,
+		}
+		vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
 	}
 
 	{	// Pick Physical Device
@@ -188,14 +188,21 @@ vk_init :: proc() {
 			synchronization2 = true,
 		}
 
+		features_16bit := vk.PhysicalDevice16BitStorageFeatures {
+			sType = .PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+			pNext = &features_13,
+			storageBuffer16BitAccess = true,
+		}
+
 		features_12 := vk.PhysicalDeviceVulkan12Features {
 			sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-			pNext = &features_13,
+			pNext = &features_16bit,
 			descriptorIndexing = true,
 			descriptorBindingPartiallyBound = true,
 			descriptorBindingSampledImageUpdateAfterBind = true,
 			runtimeDescriptorArray = true,
 			shaderSampledImageArrayNonUniformIndexing = true,
+			shaderFloat16 = true,
 		}
 
 		device_extensions := [?]cstring {
@@ -258,10 +265,11 @@ vk_init :: proc() {
 		binding_flags := [?]vk.DescriptorBindingFlags {
 			{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
 			{},
+			{},
 		}
 		layout_binding_flags := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-			bindingCount = 2,
+			bindingCount = 3,
 			pBindingFlags = &binding_flags[0],
 		}
 		bindings := [?]vk.DescriptorSetLayoutBinding {
@@ -277,19 +285,25 @@ vk_init :: proc() {
 				descriptorCount = 1,
 				stageFlags = {.VERTEX},
 			},
+			{
+				binding = 2,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.FRAGMENT},
+			},
 		}
 		layout_info := vk.DescriptorSetLayoutCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			pNext = &layout_binding_flags,
 			flags = {.UPDATE_AFTER_BIND_POOL},
-			bindingCount = 2,
+			bindingCount = 3,
 			pBindings = &bindings[0],
 		}
 		vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &vks.descriptor_set_layout)
 
 		pool_sizes := [?]vk.DescriptorPoolSize {
 			{ type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_TEXTURES },
-			{ type = .STORAGE_BUFFER, descriptorCount = 1 },
+			{ type = .STORAGE_BUFFER, descriptorCount = 2 },
 		}
 		desc_pool_info := vk.DescriptorPoolCreateInfo {
 			sType = .DESCRIPTOR_POOL_CREATE_INFO,
@@ -328,6 +342,32 @@ vk_init :: proc() {
 			sType = .WRITE_DESCRIPTOR_SET,
 			dstSet = vks.descriptor_set,
 			dstBinding = 1,
+			dstArrayElement = 0,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			pBufferInfo = &buffer_info,
+		}
+
+		vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
+	}
+
+	{	// Curve Buffer for Scanline Sweeper
+		buffer, memory := create_buffer(
+			vk.DeviceSize(MAX_CURVES * 12),
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+		)
+		vk.MapMemory(vks.device, memory, 0, vk.DeviceSize(vk.WHOLE_SIZE), {}, &vks.curve_buffer_mapped)
+
+		buffer_info := vk.DescriptorBufferInfo {
+			buffer = buffer,
+			range = vk.DeviceSize(vk.WHOLE_SIZE),
+		}
+
+		write_desc := vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = vks.descriptor_set,
+			dstBinding = 2,
 			dstArrayElement = 0,
 			descriptorType = .STORAGE_BUFFER,
 			descriptorCount = 1,
@@ -605,11 +645,9 @@ vk_render :: proc() {
 
 	if len(instances) > 0 {
 		mem.copy(vks.instance_buffer_mapped, raw_data(instances[:]), len(instances) * size_of(Instance))
-
 		scale := dpi_scale()
-		for b in batches {
-			if b.count == 0 do continue
 
+		for b in batches {
 			rect := vk.Rect2D {
 				offset = {i32(b.scissor.pos.x * scale), i32(b.scissor.pos.y * scale)},
 				extent = {u32(b.scissor.size.x * scale), u32(b.scissor.size.y * scale)},
