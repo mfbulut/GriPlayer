@@ -14,7 +14,6 @@ wasapi_state: struct {
 }
 
 init :: proc() {
-	decoder.volume = 0.5
 	for i in 0 ..< 10 {
 		eq_recalculate_band(i)
 	}

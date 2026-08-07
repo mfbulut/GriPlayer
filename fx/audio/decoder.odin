@@ -22,7 +22,7 @@ EqBand :: struct {
 	z1, z2:     [2]f32,
 }
 
-decoder: struct {
+Decoder :: struct {
 	decoder:       Decoder_Union,
 	total_pcm:     i64,
 	sample_rate:   u32,
@@ -32,6 +32,8 @@ decoder: struct {
 	eq_bands:      [10]EqBand,
 	pregain_db:    f32,
 }
+
+decoder := Decoder{ volume = 0.5 }
 
 global_mutex: sync.Mutex
 
