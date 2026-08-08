@@ -139,7 +139,7 @@ frame :: proc() {
 						layout_row({-1}, 42)
 						if begin("PlaylistsHeader", pad = 8) {
 							layout_row({-1}, 30)
-							label("Playlists", font_size = 19)
+							label("Playlists", font_size = 22)
 						}
 
 						layout_row({-1}, -1)
@@ -166,7 +166,7 @@ frame :: proc() {
 							layout_row({-1}, 42)
 							if begin("SongsHeader", pad = 8, gap = 4) {
 								text := PLAYLIST_SORT_LABELS[playlist.sort]
-								text_width := fx.measure_text(text, 15).x
+								text_width := fx.measure_text(text, 18).x
 								text_button_width := text_width + 20
 								icon_button_width := f32(30)
 
@@ -175,9 +175,9 @@ frame :: proc() {
 								name_bounds := layout_next()
 								name_bounds.pos.x += 12
 								name_bounds.size.x -= 12
-								fx.draw_text_faded(playlist.name, name_bounds, 19, COLOR_TEXT)
+								fx.draw_text_faded(playlist.name, name_bounds, 22, COLOR_TEXT)
 
-								sort_btn_res := button(text, font_size = 15)
+								sort_btn_res := button(text, font_size = 18)
 								if .SUBMIT in sort_btn_res {
 									playlist.sort = Playlist_Sort(
 										(int(playlist.sort) + 1) % len(PLAYLIST_SORT_LABELS),
@@ -252,12 +252,12 @@ frame :: proc() {
 						draw_cover(cover_region, layout_next(), radius = 8)
 
 						if begin("NowPlayingInfo", pad = 8, gap = 8) {
-							layout_row({-1}, 32)
+							layout_row({-1}, 40)
 							title_bounds := layout_next()
-							fx.draw_text_faded(player.music.title, title_bounds, 30, COLOR_TEXT)
+							fx.draw_text_faded(player.music.title, title_bounds, 38, COLOR_TEXT)
 
-							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 19).x : 0
-							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 19).x : 0
+							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 24).x : 0
+							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 24).x : 0
 							dot_size := artist_w > 0 && album_w > 0 ? f32(10) : 0
 							avail_w := max(title_bounds.size.x - dot_size, 0)
 
@@ -281,14 +281,14 @@ frame :: proc() {
 
 							layout_row({artist_w, dot_size, album_w}, 24, gap = 4)
 
-							if .SUBMIT in link(get_id("link_artist"), player.music.artist) {
+							if .SUBMIT in link(get_id("link_artist"), player.music.artist, font_size = 24) {
 								search_open(player.music.artist, .Artist)
 							}
 
 							dot_bounds := layout_next()
 							fx.draw_circle(dot_bounds.pos + dot_bounds.size * 0.5 ,2, COLOR_MUTED)
 
-							if .SUBMIT in link(get_id("link_album"), player.music.album) {
+							if .SUBMIT in link(get_id("link_album"), player.music.album, font_size = 24) {
 								search_open(player.music.album, .Album)
 							}
 
@@ -298,7 +298,7 @@ frame :: proc() {
 					} else {
 						layout_row({-1}, -1)
 						bounds := layout_next()
-						fx.draw_text_rect("No song playing", bounds, 19, COLOR_MUTED, true)
+						fx.draw_text_rect("No song playing", bounds, 22, COLOR_MUTED, true)
 					}
 				}
 
@@ -308,12 +308,12 @@ frame :: proc() {
 					position := scrub_time >= 0 ? scrub_time : audio.position()
 					position_text := format_time(position)
 					duration_text := format_time(duration)
-					position_width := fx.measure_text(position_text, 14).x + 6
-					duration_width := fx.measure_text(duration_text, 14).x + 6
+					position_width := fx.measure_text(position_text, 17).x + 6
+					duration_width := fx.measure_text(duration_text, 17).x + 6
 
 					layout_row({position_width, -1, duration_width, 20, 90}, 20)
 
-					label(position_text, 14)
+					label(position_text, 17)
 
 					prog_res, prog_bounds := slider(get_id("progress"), &position, 0, max(duration, 1), preview = true)
 
@@ -342,7 +342,7 @@ frame :: proc() {
 						)
 					}
 
-					label(duration_text, 14)
+					label(duration_text, 17)
 
 					if .SUBMIT in icon_button("mute", muted ? .Mute : .Volume, radius = 999, offset = 2, scale = 0.85, bg = false) {
 						muted = !muted
@@ -456,8 +456,8 @@ frame :: proc() {
 
 draw_equalizer :: proc() {
 	if begin("Equalizer", bg = COLOR_SURFACE, pad = 36, gap = 12) {
-		layout_row({64, -1, 64, 56}, 28)
-		label("Pre-gain", 12)
+		layout_row({84, -1, 84, 64}, 30)
+		label("Pre-gain", 19)
 
 		pregain_res, _ := slider(get_id("pregain"), &audio.decoder.pregain_db, -12, 12)
 		if .SECONDARY in pregain_res {
@@ -468,9 +468,9 @@ draw_equalizer :: proc() {
 		}
 
 		pregain_text := to_string(audio.decoder.pregain_db, " dB")
-		label(pregain_text, 12)
+		label(pregain_text, 19)
 
-		if .SUBMIT in button("Reset", 12) {
+		if .SUBMIT in button("Reset", 18) {
 			audio.eq_reset()
 		}
 
@@ -600,10 +600,10 @@ draw_equalizer :: proc() {
 			gain_text := to_string(gains[i])
 			gain_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y}, {col_w, 16}}
 			gain_color := is_act ? COLOR_TEXT : COLOR_MUTED
-			fx.draw_text_rect(gain_text, gain_rect, 15, gain_color, true)
+			fx.draw_text_rect(gain_text, gain_rect, 18, gain_color, true)
 
 			label_rect := fx.Rect{{nodes[i].x - col_w * 0.5, canvas.pos.y + canvas.size.y - 16}, {col_w, 16}}
-			fx.draw_text_rect(labels[i], label_rect, 15, COLOR_MUTED, true)
+			fx.draw_text_rect(labels[i], label_rect, 18, COLOR_MUTED, true)
 		}
 	}
 }
@@ -688,7 +688,7 @@ draw_lyrics :: proc() {
 					icon_rect := fx.Rect{{row.pos.x, row.pos.y}, {icon_size, row.size.y}}
 					draw_icon(.Note, icon_rect, icon_size, color)
 				} else {
-					fx.draw_text_faded(lyric.text, row, 21 + 4 * active_amount, color)
+					fx.draw_text_faded(lyric.text, row, 24 + 4 * active_amount, color)
 				}
 
 				if .SUBMIT in hit {
@@ -731,13 +731,13 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 
 		count := i == LIKED_PLAYLIST_INDEX ? liked_playlist_count() : len(playlist.songs)
 		count_text := to_string(count)
-		count_width := fx.measure_text(count_text, 13).x + 6
+		count_width := fx.measure_text(count_text, 16).x + 6
 
 		layout_row({20, -1, count_width}, -1, gap = 8)
 
 		draw_icon(playlist.icon, layout_next(), 20, is_active ? COLOR_TEXT : COLOR_MUTED)
-		fx.draw_text_faded(playlist.name, layout_next(), 16, is_active ? COLOR_TEXT : COLOR_MUTED)
-		fx.draw_text_faded(count_text, layout_next(), 13, COLOR_MUTED)
+		fx.draw_text_faded(playlist.name, layout_next(), 19, is_active ? COLOR_TEXT : COLOR_MUTED)
+		fx.draw_text_faded(count_text, layout_next(), 16, COLOR_MUTED)
 	}
 
 	return res
@@ -789,7 +789,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 		}
 
 		if right_text != "" {
-			right_width = fx.measure_text(right_text, 15).x + 2
+			right_width = fx.measure_text(right_text, 18).x + 2
 		}
 
 		layout_row({38, -1, right_width}, -1)
@@ -799,11 +799,11 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		text_bounds := layout_next()
 		title_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 6}, {text_bounds.size.x, 18}}
-		fx.draw_text_faded(song.title, title_bounds, 17, COLOR_TEXT)
+		fx.draw_text_faded(song.title, title_bounds, 20, COLOR_TEXT)
 
 		secondary := song.artist
 		artist_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 24}, {text_bounds.size.x, 15}}
-		fx.draw_text_faded(secondary, artist_bounds, 14, COLOR_MUTED)
+		fx.draw_text_faded(secondary, artist_bounds, 17, COLOR_MUTED)
 
 		right_bounds := layout_next()
 
@@ -824,7 +824,7 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 				toggle_like(song)
 			}
 		} else if right_text != "" {
-			fx.draw_text_faded(right_text, right_bounds, 15, COLOR_MUTED)
+			fx.draw_text_faded(right_text, right_bounds, 18, COLOR_MUTED)
 		}
 
 		if .HOVER in res && fx.key_is_pressed(.Mouse_Right) {
@@ -892,13 +892,13 @@ draw_context_menu :: proc() {
 }
 
 draw_slider_tooltip :: proc(id: Id, bounds: fx.Rect, value: f32, text: string, centered: bool = false) {
-	width := fx.measure_text(text, 15).x + 14
+	width := fx.measure_text(text, 18).x + 14
 	target_x := centered ? bounds.pos.x + bounds.size.x * 0.5 : fx.mouse_pos().x
 	x := clamp(target_x - width * 0.5, bounds.pos.x, bounds.pos.x + bounds.size.x - width)
 	tooltip := fx.Rect{{x, bounds.pos.y - 20}, {width, 21}}
 
 	fx.draw_rect(tooltip, ROW_COLOR.focus, 6)
-	fx.draw_text_rect(text, tooltip, 15, COLOR_TEXT, true)
+	fx.draw_text_rect(text, tooltip, 18, COLOR_TEXT, true)
 }
 
 handle_keyboard_input :: proc() {
@@ -1017,17 +1017,17 @@ draw_mini_player :: proc() {
 		if begin("mini_info", pad = 0, gap = 2) {
 			layout_row({-1}, 24)
 			title_text := player.music != nil ? player.music.title : "No Track Playing"
-			fx.draw_text_faded(title_text, layout_next(), 25, COLOR_TEXT)
+			fx.draw_text_faded(title_text, layout_next(), 31, COLOR_TEXT)
 
 			layout_row({-1}, 24)
 			artist_text := player.music != nil ? player.music.artist : ""
-			fx.draw_text_faded(artist_text, layout_next(), 17, COLOR_MUTED)
+			fx.draw_text_faded(artist_text, layout_next(), 22, COLOR_MUTED)
 
 			lyric_index, found := current_lyric()
 			if found {
 				layout_row({-1}, 24)
 				lyric_str := player.music.lyrics[lyric_index].text
-				fx.draw_text_faded(lyric_str, layout_next(), 17, COLOR_ACCENT)
+				fx.draw_text_faded(lyric_str, layout_next(), 20, COLOR_ACCENT)
 			}
 		}
 
@@ -1061,6 +1061,6 @@ draw_mini_player :: proc() {
 
 		vol_percent := int((muted ? 0 : audio.get_volume()) * 100 + 0.5)
 		vol_str := to_string("Vol: ", vol_percent, "%")
-		fx.draw_text_rect(vol_str, toast_rect, 15, COLOR_TEXT, true)
+		fx.draw_text_rect(vol_str, toast_rect, 18, COLOR_TEXT, true)
 	}
 }

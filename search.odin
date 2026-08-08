@@ -194,7 +194,7 @@ draw_search_box :: proc() {
 
 		badge_width := f32(0)
 		if search.filter != "" {
-			badge_width = min(fx.measure_text(search.filter, 13).x + 32, bounds.size.x * 0.5)
+			badge_width = min(fx.measure_text(search.filter, 16).x + 32, bounds.size.x * 0.5)
 		}
 
 		widths: [dynamic; 4]f32
@@ -212,7 +212,7 @@ draw_search_box :: proc() {
 			filter_icon := search.filter_type == .Artist ? Icon.Artist : Icon.Album
 			filter_rect := fx.Rect{{rect.pos.x + 5, rect.pos.y}, {16, rect.size.y}}
 			draw_icon(filter_icon, filter_rect, 16, fx.WHITE)
-			fx.draw_text_faded(search.filter, fx.Rect{{rect.pos.x + 24, rect.pos.y}, {badge_width - 32, rect.size.y}}, 13, fx.WHITE)
+			fx.draw_text_faded(search.filter, fx.Rect{{rect.pos.x + 24, rect.pos.y}, {badge_width - 32, rect.size.y}}, 16, fx.WHITE)
 		}
 
 		text_rect := layout_next()
@@ -227,9 +227,9 @@ draw_search_box :: proc() {
 
 		text := string(textbox.builder.buf[:])
 		if len(text) == 0 && !search.focused {
-			fx.draw_text_faded("Search tracks, artists, lyrics", text_rect, 19, COLOR_MUTED)
+			fx.draw_text_faded("Search tracks, artists, lyrics", text_rect, 22, COLOR_MUTED)
 		} else {
-			draw_textbox(text_rect, 19)
+			draw_textbox(text_rect, 22)
 		}
 
 		if show_close {

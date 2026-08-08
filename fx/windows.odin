@@ -92,7 +92,7 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 	win.UpdateWindow(window.hwnd)
 
 	vk_init()
-	font_load(#load("../assets/fonts/Inter.bin"))
+	font_load(#load("../assets/fonts/SourceSans3-Medium.bin"))
 }
 
 mouse_pos :: proc() -> Vec2 {

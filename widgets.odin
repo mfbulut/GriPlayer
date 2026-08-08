@@ -146,12 +146,12 @@ update_control :: proc(id: Id, rect: fx.Rect) -> (res: Result_Set) {
 	return
 }
 
-label :: proc(text: string, font_size := f32(17)) {
+label :: proc(text: string, font_size := f32(20)) {
 	rect := layout_next()
 	fx.draw_text_rect(text, rect, font_size, COLOR_TEXT, true)
 }
 
-link :: proc(id: Id, text: string, font_size := f32(19)) -> (res: Result_Set) {
+link :: proc(id: Id, text: string, font_size := f32(22)) -> (res: Result_Set) {
 	text_width := fx.measure_text(text, font_size).x
 
 	bounds := layout_next()
@@ -179,7 +179,7 @@ link :: proc(id: Id, text: string, font_size := f32(19)) -> (res: Result_Set) {
 	return
 }
 
-button :: proc(label: string, font_size := f32(17), active := false) -> (res: Result_Set) {
+button :: proc(label: string, font_size := f32(20), active := false) -> (res: Result_Set) {
 	id := get_id(label)
 	r := layout_next()
 	res = update_control(id, r)
@@ -198,7 +198,7 @@ draw_icon :: proc(icon: Icon, bounds: fx.Rect, size := f32(0), tint := COLOR_TEX
 	final_size := size > 0 ? size : max(min(bounds.size.x, bounds.size.y), 0)
 	dest := fx.Rect{bounds.pos + (bounds.size - final_size) * 0.5, final_size}
 	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 32 + 1, 30}
-	fx.draw_msdf_ex(icon_atlas, source, dest, 4, tint)
+	fx.draw_msdf_ex(icon_atlas, source, dest, 8, tint)
 }
 
 icon_button :: proc(id_str: string, icon: Icon, tint: fx.Color = COLOR_MUTED, radius: f32 = 8, bg: bool = true, offset: f32 = 0, scale: f32 = 0.7, active: bool = false) -> (res: Result_Set) {
@@ -378,11 +378,11 @@ menu_button :: proc(text: string, icon: Icon) -> (res: Result_Set) {
 	draw_icon(icon, icon_rect, 20, icon_color)
 
 	text_bounds := fx.Rect{
-		{bounds.pos.x + 32, bounds.pos.y + (bounds.size.y - 14) * 0.5},
-		{max(bounds.size.x - 32, 0), 14}
+		{bounds.pos.x + 32, bounds.pos.y + (bounds.size.y - 17) * 0.5},
+		{max(bounds.size.x - 32, 0), 17}
 	}
 
-	fx.draw_text_faded(text, text_bounds, 16, COLOR_TEXT)
+	fx.draw_text_faded(text, text_bounds, 19, COLOR_TEXT)
 
 	return
 }
