@@ -4,7 +4,6 @@ import "core:mem"
 import "core:slice"
 import "core:unicode/utf8"
 
-
 Instance :: struct #align(16) {
 	dest:   Rect,     // x0, y0, x1, y1
 	src:    Rect,     // u0, v0, u1, v1
@@ -535,4 +534,4 @@ measure_text_wrapped :: proc(text: string, font_size: f32, max_width: f32) -> (s
 	size.x = max_x
 	size.y = f32(line_count) * font_size
 	return
-}
+}

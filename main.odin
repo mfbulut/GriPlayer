@@ -648,7 +648,7 @@ draw_lyrics :: proc() {
 
 			for lyric, i in player.music.lyrics {
 				is_active := found && i == active
-				font_sz := 24 + (is_active ? f32(4) : f32(0))
+				font_sz := f32(36)
 				row_h := f32(60)
 				if lyric.text != "" {
 					text_sz := fx.measure_text_wrapped(lyric.text, font_sz, lyrics_layout.body.size.x)
@@ -695,7 +695,9 @@ draw_lyrics :: proc() {
 					icon_rect := fx.Rect{{row.pos.x, row.pos.y}, {icon_size, row.size.y}}
 					draw_icon(.Note, icon_rect, icon_size, color)
 				} else {
-					fx.draw_text_wrapped(lyric.text, row, 24 + 4 * active_amount, color)
+					// Keeps wpat the same during transitions
+					row.size.x *= (28.0 + 8 * active_amount) / 36.0
+					fx.draw_text_wrapped(lyric.text, row, 28 + 8 * active_amount, color)
 				}
 
 				if .SUBMIT in hit {
