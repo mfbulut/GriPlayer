@@ -139,7 +139,7 @@ frame :: proc() {
 						layout_row({-1}, 42)
 						if begin("PlaylistsHeader", pad = 8) {
 							layout_row({-1}, 30)
-							label("Playlists", font_size = 22)
+							label("Playlists", font_size = 25)
 						}
 
 						layout_row({-1}, -1)
@@ -175,7 +175,7 @@ frame :: proc() {
 								name_bounds := layout_next()
 								name_bounds.pos.x += 12
 								name_bounds.size.x -= 12
-								fx.draw_text_faded(playlist.name, name_bounds, 22, COLOR_TEXT)
+								fx.draw_text_faded(playlist.name, name_bounds, 25, COLOR_TEXT)
 
 								sort_btn_res := button(text, font_size = 18)
 								if .SUBMIT in sort_btn_res {
@@ -298,7 +298,7 @@ frame :: proc() {
 					} else {
 						layout_row({-1}, -1)
 						bounds := layout_next()
-						fx.draw_text_rect("No song playing", bounds, 22, COLOR_MUTED, true)
+						fx.draw_text_rect("No song playing", bounds, 26, COLOR_MUTED, true)
 					}
 				}
 
@@ -733,10 +733,10 @@ playlist_row :: proc(playlist: ^Playlist, i: int, is_active: bool) -> (res: Resu
 		count_text := to_string(count)
 		count_width := fx.measure_text(count_text, 16).x + 6
 
-		layout_row({20, -1, count_width}, -1, gap = 8)
+		layout_row({20, -1, count_width}, -1, gap = 6)
 
 		draw_icon(playlist.icon, layout_next(), 20, is_active ? COLOR_TEXT : COLOR_MUTED)
-		fx.draw_text_faded(playlist.name, layout_next(), 19, is_active ? COLOR_TEXT : COLOR_MUTED)
+		fx.draw_text_faded(playlist.name, layout_next(), 22, is_active ? COLOR_TEXT : COLOR_MUTED)
 		fx.draw_text_faded(count_text, layout_next(), 16, COLOR_MUTED)
 	}
 
