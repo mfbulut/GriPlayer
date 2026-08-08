@@ -647,10 +647,17 @@ draw_lyrics :: proc() {
 			}
 
 			for lyric, i in player.music.lyrics {
-				layout_row({-1}, 60)
+				is_active := found && i == active
+				font_sz := 24 + (is_active ? f32(4) : f32(0))
+				row_h := f32(60)
+				if lyric.text != "" {
+					text_sz := fx.measure_text_wrapped(lyric.text, font_sz, lyrics_layout.body.size.x)
+					row_h = max(f32(60), text_sz.y + 16)
+				}
+
+				layout_row({-1}, row_h)
 				row := layout_next()
 
-				is_active := found && i == active
 				if lyrics_synced && is_active {
 					row_center := row.pos.y + row.size.y * 0.5
 					container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
@@ -688,7 +695,7 @@ draw_lyrics :: proc() {
 					icon_rect := fx.Rect{{row.pos.x, row.pos.y}, {icon_size, row.size.y}}
 					draw_icon(.Note, icon_rect, icon_size, color)
 				} else {
-					fx.draw_text_faded(lyric.text, row, 24 + 4 * active_amount, color)
+					fx.draw_text_wrapped(lyric.text, row, 24 + 4 * active_amount, color)
 				}
 
 				if .SUBMIT in hit {

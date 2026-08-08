@@ -98,8 +98,27 @@ loader_start :: proc() {
 	})
 
 	thread.create_and_start(proc() {
-		music_dir, directory_error := os.user_music_dir(context.temp_allocator)
-		if directory_error != nil {
+		dirs_to_scan := make([dynamic]string, context.allocator)
+
+		if music_dir, err := os.user_music_dir(context.allocator); err == nil {
+			append(&dirs_to_scan, music_dir)
+		}
+
+		if app_dir, app_err := get_app_dir(context.temp_allocator); app_err == nil {
+			if playlist_path, p_err := os.join_path({app_dir, "playlists.txt"}, context.temp_allocator); p_err == nil {
+				if content, err := os.read_entire_file(playlist_path, context.temp_allocator); err == nil {
+					lines := string(content)
+					for line in strings.split_lines_iterator(&lines) {
+						trimmed := strings.trim_space(line)
+						if trimmed != "" {
+							append(&dirs_to_scan, strings.clone(trimmed))
+						}
+					}
+				}
+			}
+		}
+
+		if len(dirs_to_scan) == 0 {
 			sync.lock(&loader_mutex)
 			loading_finished = true
 			sync.unlock(&loader_mutex)
@@ -116,60 +135,62 @@ loader_start :: proc() {
 			}
 		}
 
-		walker := os.walker_create(music_dir)
-		defer os.walker_destroy(&walker)
+		for scan_dir in dirs_to_scan {
+			walker := os.walker_create(scan_dir)
+			defer os.walker_destroy(&walker)
 
-		for info in os.walker_walk(&walker) {
-			if strings.starts_with(info.fullpath, ".") {
-				os.walker_skip_dir(&walker)
-				continue
-			}
-
-			extension := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
-			if extension != ".opus" && extension != ".ogg" && extension != ".flac" {
-				continue
-			}
-
-			music := new(Music)
-
-			if cache_err == nil {
-				if cached, found := cache[info.fullpath]; found {
-					music^ = cached
+			for info in os.walker_walk(&walker) {
+				if strings.starts_with(info.fullpath, ".") {
+					os.walker_skip_dir(&walker)
+					continue
 				}
-			}
 
-			if music.fullpath == "" {
-				music.fullpath = strings.clone(info.fullpath)
-				if metadata, ok := audio.metadata(music.fullpath); ok {
-					music.title = strings.clone(metadata.title)
-					music.artist = strings.clone(metadata.artist)
-					music.album = strings.clone(metadata.album)
-					music.track = metadata.track
-					music.duration = metadata.duration
+				extension := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
+				if extension != ".opus" && extension != ".ogg" && extension != ".flac" {
+					continue
+				}
 
-					if len(metadata.cover) > 0 {
-						load_thumbnail(music, metadata.cover)
+				music := new(Music)
+
+				if cache_err == nil {
+					if cached, found := cache[info.fullpath]; found {
+						music^ = cached
 					}
 				}
 
-				if music.title == "" {
-					music.title = strings.clone(os.stem(music.fullpath))
+				if music.fullpath == "" {
+					music.fullpath = strings.clone(info.fullpath)
+					if metadata, ok := audio.metadata(music.fullpath); ok {
+						music.title = strings.clone(metadata.title)
+						music.artist = strings.clone(metadata.artist)
+						music.album = strings.clone(metadata.album)
+						music.track = metadata.track
+						music.duration = metadata.duration
+
+						if len(metadata.cover) > 0 {
+							load_thumbnail(music, metadata.cover)
+						}
+					}
+
+					if music.title == "" {
+						music.title = strings.clone(os.stem(music.fullpath))
+					}
 				}
-			}
 
-			id := music_id(music)
-			if cached, found := cached_by_id[id]; found {
-				music.playtime = cached.playtime
-				music.liked = cached.liked
-				music.liked_timestamp = cached.liked_timestamp
-				music.listen_timestamp = cached.listen_timestamp
-			}
+				id := music_id(music)
+				if cached, found := cached_by_id[id]; found {
+					music.playtime = cached.playtime
+					music.liked = cached.liked
+					music.liked_timestamp = cached.liked_timestamp
+					music.listen_timestamp = cached.listen_timestamp
+				}
 
-			load_lrc(music)
-			free_all(context.temp_allocator)
-			sync.lock(&loader_mutex)
-			append(&loader_queue, music)
-			sync.unlock(&loader_mutex)
+				load_lrc(music)
+				free_all(context.temp_allocator)
+				sync.lock(&loader_mutex)
+				append(&loader_queue, music)
+				sync.unlock(&loader_mutex)
+			}
 		}
 
 		sync.lock(&loader_mutex)
@@ -436,10 +457,15 @@ Settings :: struct {
 	band_gains: [10]f32,
 }
 
-save_settings :: proc() -> os.Error {
-	dir := os.user_data_dir(context.temp_allocator) or_return
-	app_dir := os.join_path({dir, "GriPlayer"}, context.temp_allocator) or_return
+get_app_dir :: proc(allocator := context.temp_allocator) -> (app_dir: string, err: os.Error) {
+	dir := os.user_data_dir(allocator) or_return
+	app_dir = os.join_path({dir, "GriPlayer"}, allocator) or_return
 	os.make_directory(app_dir)
+	return app_dir, nil
+}
+
+save_settings :: proc() -> os.Error {
+	app_dir := get_app_dir(context.temp_allocator) or_return
 	settings_path := os.join_path({app_dir, "settings.bin"}, context.temp_allocator) or_return
 
 	settings := Settings{
@@ -457,8 +483,7 @@ save_settings :: proc() -> os.Error {
 }
 
 load_settings :: proc() -> os.Error {
-	dir := os.user_data_dir(context.temp_allocator) or_return
-	app_dir := os.join_path({dir, "GriPlayer"}, context.temp_allocator) or_return
+	app_dir := get_app_dir(context.temp_allocator) or_return
 	settings_path := os.join_path({app_dir, "settings.bin"}, context.temp_allocator) or_return
 
 	data := os.read_entire_file(settings_path, context.temp_allocator) or_return
@@ -502,8 +527,8 @@ cache_read_string :: proc(r: ^bytes.Reader, allocator := context.allocator) -> (
 }
 
 cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
-	dir := os.user_data_dir(context.temp_allocator) or_return
-	path := os.join_path({dir, "GriPlayer", "cache.bin"}, context.temp_allocator) or_return
+	app_dir := get_app_dir(context.temp_allocator) or_return
+	path := os.join_path({app_dir, "cache.bin"}, context.temp_allocator) or_return
 	data := os.read_entire_file(path, context.allocator) or_return
 
 	r: bytes.Reader
@@ -565,9 +590,7 @@ cache_load :: proc() -> (songs: map[string]Music, error: os.Error) {
 cache_save :: proc() -> os.Error {
 	if !polling_finished do return nil
 
-	dir := os.user_data_dir(context.allocator) or_return
-	app_dir := os.join_path({dir, "GriPlayer"}, context.allocator) or_return
-	os.make_directory(app_dir)
+	app_dir := get_app_dir(context.allocator) or_return
 	path := os.join_path({app_dir, "cache.bin"}, context.allocator) or_return
 
 	b: bytes.Buffer

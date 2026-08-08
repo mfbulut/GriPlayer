@@ -2,6 +2,8 @@ package fx
 
 import "core:mem"
 import "core:slice"
+import "core:unicode/utf8"
+
 
 Instance :: struct #align(16) {
 	dest:   Rect,     // x0, y0, x1, y1
@@ -332,6 +334,133 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 	}
 }
 
+draw_text_wrapped :: proc(text: string, bounds: Rect, font_size: f32, color := cast([4]Color)WHITE, center_x := false, center_y := true) {
+	if text == "" || bounds.size.x <= 0 do return
+
+	total_size := measure_text_wrapped(text, font_size, bounds.size.x)
+	start_y := bounds.pos.y + (center_y ? (bounds.size.y - total_size.y) * 0.5 : 0)
+
+	space_w := (font[' '] or_else font['?']).advance * font_size
+	cur_y := start_y
+
+	i := 0
+	n := len(text)
+	for i < n {
+		line_start := i
+		line_end := i
+		cursor_x := f32(0)
+		line_w := f32(0)
+
+		scan_i := i
+		for scan_i < n {
+			if text[scan_i] == '\n' {
+				if scan_i == line_start {
+					line_end = scan_i
+					line_w = 0
+					i = scan_i + 1
+				} else {
+					line_end = scan_i
+					line_w = cursor_x
+					i = scan_i + 1
+				}
+				break
+			}
+
+			if text[scan_i] == ' ' {
+				scan_i += 1
+				continue
+			}
+
+			w_start := scan_i
+			for scan_i < n && text[scan_i] != ' ' && text[scan_i] != '\n' {
+				_, rune_len := utf8.decode_rune_in_string(text[scan_i:])
+				scan_i += rune_len
+			}
+			word := text[w_start:scan_i]
+			word_w := f32(0)
+			for char in word {
+				glyph := font[char] or_else font['?']
+				word_w += glyph.advance * font_size
+			}
+
+			if cursor_x > 0 {
+				if cursor_x + space_w + word_w <= bounds.size.x {
+					cursor_x += space_w + word_w
+					line_end = scan_i
+					line_w = cursor_x
+				} else {
+					line_end = w_start
+					line_w = cursor_x
+					i = w_start
+					break
+				}
+			} else {
+				cursor_x = word_w
+				line_end = scan_i
+				line_w = cursor_x
+			}
+
+			if scan_i >= n {
+				i = n
+				break
+			}
+		}
+
+		draw_x := bounds.pos.x + (center_x ? (bounds.size.x - line_w) * 0.5 : 0)
+		draw_i := line_start
+		first_word := true
+
+		for draw_i < line_end {
+			if text[draw_i] == ' ' {
+				draw_i += 1
+				continue
+			}
+			if text[draw_i] == '\n' {
+				break
+			}
+
+			w_start := draw_i
+			for draw_i < line_end && text[draw_i] != ' ' && text[draw_i] != '\n' {
+				_, rune_len := utf8.decode_rune_in_string(text[draw_i:])
+				draw_i += rune_len
+			}
+			word := text[w_start:draw_i]
+
+			if !first_word {
+				draw_x += space_w
+			}
+
+			for char in word {
+				glyph := font[char] or_else font['?']
+
+				dest := Rect {
+					pos  = {draw_x, cur_y} + glyph.bounds.pos * font_size,
+					size = {draw_x, cur_y} + glyph.bounds.size * font_size,
+				}
+
+				if rect_overlaps(dest, scissor) {
+					append(&instances,
+						Instance{
+							dest   = dest,
+							src    = glyph.bounds,
+							color  = color,
+							radius = 0,
+							index  = glyph.index,
+							kind   = .Text,
+						},
+					)
+				}
+
+				draw_x += glyph.advance * font_size
+			}
+
+			first_word = false
+		}
+
+		cur_y += font_size
+	}
+}
+
 measure_text :: proc(text: string, font_size: f32) -> (size: Vec2) {
 	if text == "" do return
 
@@ -352,3 +481,58 @@ measure_text :: proc(text: string, font_size: f32) -> (size: Vec2) {
 
 	return
 }
+
+measure_text_wrapped :: proc(text: string, font_size: f32, max_width: f32) -> (size: Vec2) {
+	if text == "" || max_width <= 0 do return measure_text(text, font_size)
+
+	space_w := (font[' '] or_else font['?']).advance * font_size
+	cursor_x := f32(0)
+	max_x := f32(0)
+	line_count := 1
+
+	i := 0
+	n := len(text)
+	for i < n {
+		if text[i] == '\n' {
+			max_x = max(max_x, cursor_x)
+			cursor_x = 0
+			line_count += 1
+			i += 1
+			continue
+		}
+
+		if text[i] == ' ' {
+			i += 1
+			continue
+		}
+
+		word_start := i
+		for i < n && text[i] != ' ' && text[i] != '\n' {
+			_, rune_len := utf8.decode_rune_in_string(text[i:])
+			i += rune_len
+		}
+		word := text[word_start:i]
+		word_w := f32(0)
+		for char in word {
+			glyph := font[char] or_else font['?']
+			word_w += glyph.advance * font_size
+		}
+
+		if cursor_x > 0 {
+			if cursor_x + space_w + word_w <= max_width {
+				cursor_x += space_w + word_w
+			} else {
+				max_x = max(max_x, cursor_x)
+				cursor_x = word_w
+				line_count += 1
+			}
+		} else {
+			cursor_x = word_w
+		}
+		max_x = max(max_x, cursor_x)
+	}
+
+	size.x = max_x
+	size.y = f32(line_count) * font_size
+	return
+}
