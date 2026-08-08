@@ -12,11 +12,23 @@ Instance :: struct #align(16) {
 	kind:   enum u32 { Rect, Texture, MSDF, Quad, Text },
 }
 
-Glyph :: struct {
-	unicode:     rune,
-	advance:     f32,
+NUM_STRIPES :: 8
+
+Stripe :: struct {
 	curve_start: u32,
 	curve_count: u32,
+}
+
+Glyph :: struct {
+	unicode: u32,
+	advance: f32,
+	bounds:  Rect,
+}
+
+FontGlyph :: struct {
+	advance: f32,
+	index:   u32,
+	bounds:  Rect,
 }
 
 Batch :: struct {
@@ -27,7 +39,7 @@ Batch :: struct {
 
 total_curves_loaded: u32
 scissor: Rect
-font: map[rune]Glyph
+font: map[rune]FontGlyph
 batches: [dynamic; 256]Batch
 instances: [dynamic; MAX_INSTANCES]Instance
 
@@ -168,16 +180,30 @@ font_load :: proc(font_bytes: []u8) {
 	glyphs_slice := slice.reinterpret([]Glyph, glyph_bytes)
 	offset += glyphs_bytes_len
 
+	total_stripes := int(glyph_count) * NUM_STRIPES
+	stripes_bytes_len := total_stripes * size_of(Stripe)
+	stripe_bytes := font_bytes[offset : offset + stripes_bytes_len]
+	stripes_slice := slice.reinterpret([]Stripe, stripe_bytes)
+	offset += stripes_bytes_len
+
 	curves_bytes_len := int(curve_count) * 12
 	curve_bytes := font_bytes[offset : offset + curves_bytes_len]
 
-	curves_to_copy := min(curve_count, MAX_CURVES)
-	glyphs := make(map[rune]Glyph, glyph_count)
-
-	for g in glyphs_slice {
-		glyphs[g.unicode] = g
+	glyphs := make(map[rune]FontGlyph, glyph_count)
+	for g, i in glyphs_slice {
+		glyphs[rune(g.unicode)] = FontGlyph {
+			advance = g.advance,
+			index = u32(i) * NUM_STRIPES,
+			bounds = g.bounds,
+		}
 	}
 
+	stripes_to_copy := min(u32(len(stripes_slice)), MAX_STRIPES)
+	if stripes_to_copy > 0 {
+		mem.copy(vks.stripe_buffer_mapped, raw_data(stripe_bytes), int(stripes_to_copy) * size_of(Stripe))
+	}
+
+	curves_to_copy := min(curve_count, MAX_CURVES)
 	if curves_to_copy > 0 {
 		mem.copy(vks.curve_buffer_mapped, raw_data(curve_bytes), int(curves_to_copy) * 12)
 		total_curves_loaded += curves_to_copy
@@ -201,19 +227,21 @@ draw_text :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Colo
 
 		glyph := font[char] or_else font['?']
 
-		if glyph.curve_count > 0 {
-			dest := Rect{{x, y}, {x, y} + font_size}
-			if !rect_overlaps(dest, scissor) do continue
+		dest := Rect {
+			pos  = {x, y} + glyph.bounds.pos * font_size,
+			size = {x, y} + glyph.bounds.size * font_size,
+		}
 
+		if rect_overlaps(dest, scissor) {
 			append(&instances,
 				Instance{
 					dest   = dest,
-					src    = {{0, 0}, {1, 1}},
+					src    = glyph.bounds,
 					color  = color,
-					radius = f32(glyph.curve_count),
-					index  = glyph.curve_start,
+					radius = 0,
+					index  = glyph.index,
 					kind   = .Text,
-				}
+				},
 			)
 		}
 
@@ -282,20 +310,22 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 
 		c := [4]Color{color_tl, color_tr, color_bl, color_br}
 
-		if glyph.curve_count > 0 {
-			dest := Rect{{x, y}, {x, y} + font_size}
-			if rect_overlaps(dest, scissor) {
-				append(&instances,
-					Instance{
-						dest   = dest,
-						src    = {{0, 0}, {1, 1}},
-						color  = c,
-						radius = f32(glyph.curve_count),
-						index  = glyph.curve_start,
-						kind   = .Text,
-					},
-				)
-			}
+		dest := Rect {
+			pos  = {x, y} + glyph.bounds.pos * font_size,
+			size = {x, y} + glyph.bounds.size * font_size,
+		}
+
+		if rect_overlaps(dest, scissor) {
+			append(&instances,
+				Instance{
+					dest   = dest,
+					src    = glyph.bounds,
+					color  = c,
+					radius = 0,
+					index  = glyph.index,
+					kind   = .Text,
+				},
+			)
 		}
 
 		x += glyph.advance * font_size

@@ -15,6 +15,15 @@ layout(std430, set = 0, binding = 2) readonly buffer CurveBuffer {
     Curve curves[];
 };
 
+struct Stripe {
+    uint curve_start;
+    uint curve_count;
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer StripeBuffer {
+    Stripe stripes[];
+};
+
 layout(location = 0) in vec2 in_uv;
 layout(location = 1) in vec4 in_color;
 layout(location = 2) in vec2 in_sdf_pos;
@@ -59,10 +68,11 @@ float intersect_monotonic(float qa, float c0, float c1, float c2, float target) 
 }
 
 float scanline_sweep(vec2 size, vec2 offset, vec2 p0, vec2 p1, vec2 p2) {
-    if (abs(p2.y - p0.y) < 1e-5) return 0.0;
-    if (max(p0.y, p2.y) <= offset.y || min(p0.y, p2.y) >= offset.y + size.y) {
-        return 0.0;
-    }
+    vec2 min_p = min(p0, min(p1, p2));
+    vec2 max_p = max(p0, max(p1, p2));
+
+    if (max_p.y <= offset.y || min_p.y >= offset.y + size.y) return 0.0;
+    if (min_p.x >= offset.x + size.x) return 0.0;
 
     vec2 delta = p2 - p0;
 
@@ -185,15 +195,22 @@ void main() {
         alpha *= smoothstep(0.0, aa_width * 1.5, edge_dist);
     }
 
-    if (in_kind == KIND_TEXT) {
-        uint num_curves = uint(in_radius);
+    #define NUM_STRIPES 8u
 
+    if (in_kind == KIND_TEXT) {
         vec2 pixel_size = fwidth(in_uv);
         vec2 pixel_offset = in_uv - 0.5 * pixel_size;
 
+        float clamped_y = clamp(in_uv.y, 0.0, 0.9999);
+        uint stripe_idx = uint(clamped_y * float(NUM_STRIPES));
+        stripe_idx = min(stripe_idx, NUM_STRIPES - 1u);
+
+        Stripe s = stripes[in_index + stripe_idx];
+
         float total_coverage = 0.0;
-        for (uint i = 0u; i < num_curves; i++) {
-            Curve c = curves[in_index + i];
+        float max_y = pixel_offset.y + pixel_size.y;
+        for (uint i = 0u; i < s.curve_count; i++) {
+            Curve c = curves[s.curve_start + i];
             total_coverage += scanline_sweep(pixel_size, pixel_offset, vec2(c.p0), vec2(c.p1), vec2(c.p2));
         }
 
@@ -203,7 +220,4 @@ void main() {
 
     out_color = in_color * tex_color;
     out_color.a *= alpha;
-
-    float noise = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * (2.0 / 255.0);
-    out_color.rgb += noise;
 }

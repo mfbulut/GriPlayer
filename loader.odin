@@ -79,7 +79,6 @@ polling_finished: bool
 music_by_id: map[Id]^Music
 
 music_id :: proc(music: ^Music) -> Id {
-	ext := os.ext(music.fullpath)
 	key := to_string(music.title, music.artist, music.album, music.duration)
 	return Id(hash.fnv64a(transmute([]byte)key))
 }

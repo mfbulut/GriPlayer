@@ -11,6 +11,7 @@ import stbi "vendor:stb/image"
 MAX_TEXTURES :: 1024
 MAX_INSTANCES :: 16 * mem.Megabyte / size_of(Instance)
 MAX_CURVES :: 16 * mem.Megabyte / 12
+MAX_STRIPES :: 64 * 1024
 
 swapchain: struct {
 	swapchain: vk.SwapchainKHR,
@@ -40,6 +41,8 @@ vks: struct {
 	instance_buffer_mapped: rawptr,
 	curve_buffer_mapped: rawptr,
 	clear_color: [4]f32,
+
+	stripe_buffer_mapped: rawptr,
 }
 
 Texture :: struct {
@@ -243,6 +246,7 @@ vk_init :: proc() {
 		vk.AllocateCommandBuffers(vks.device, &alloc_info, &vks.command_buffer)
 		vk.CreateSemaphore(vks.device, &semaphore_info, nil, &vks.acquire_semaphore)
 		vk.CreateFence(vks.device, &fence_info, nil, &vks.in_flight_fence)
+
 	}
 
 	{	// Sampler
@@ -266,10 +270,11 @@ vk_init :: proc() {
 			{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
 			{},
 			{},
+			{},
 		}
 		layout_binding_flags := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-			bindingCount = 3,
+			bindingCount = 4,
 			pBindingFlags = &binding_flags[0],
 		}
 		bindings := [?]vk.DescriptorSetLayoutBinding {
@@ -291,19 +296,25 @@ vk_init :: proc() {
 				descriptorCount = 1,
 				stageFlags = {.FRAGMENT},
 			},
+			{
+				binding = 3,
+				descriptorType = .STORAGE_BUFFER,
+				descriptorCount = 1,
+				stageFlags = {.FRAGMENT},
+			},
 		}
 		layout_info := vk.DescriptorSetLayoutCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			pNext = &layout_binding_flags,
 			flags = {.UPDATE_AFTER_BIND_POOL},
-			bindingCount = 3,
+			bindingCount = 4,
 			pBindings = &bindings[0],
 		}
 		vk.CreateDescriptorSetLayout(vks.device, &layout_info, nil, &vks.descriptor_set_layout)
 
 		pool_sizes := [?]vk.DescriptorPoolSize {
 			{ type = .COMBINED_IMAGE_SAMPLER, descriptorCount = MAX_TEXTURES },
-			{ type = .STORAGE_BUFFER, descriptorCount = 2 },
+			{ type = .STORAGE_BUFFER, descriptorCount = 3 },
 		}
 		desc_pool_info := vk.DescriptorPoolCreateInfo {
 			sType = .DESCRIPTOR_POOL_CREATE_INFO,
@@ -368,6 +379,32 @@ vk_init :: proc() {
 			sType = .WRITE_DESCRIPTOR_SET,
 			dstSet = vks.descriptor_set,
 			dstBinding = 2,
+			dstArrayElement = 0,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			pBufferInfo = &buffer_info,
+		}
+
+		vk.UpdateDescriptorSets(vks.device, 1, &write_desc, 0, nil)
+	}
+
+	{	// Stripe Buffer for Scanline Sweeper
+		buffer, memory := create_buffer(
+			vk.DeviceSize(MAX_STRIPES * 8),
+			{.STORAGE_BUFFER},
+			{.HOST_VISIBLE, .HOST_COHERENT},
+		)
+		vk.MapMemory(vks.device, memory, 0, vk.DeviceSize(vk.WHOLE_SIZE), {}, &vks.stripe_buffer_mapped)
+
+		buffer_info := vk.DescriptorBufferInfo {
+			buffer = buffer,
+			range = vk.DeviceSize(vk.WHOLE_SIZE),
+		}
+
+		write_desc := vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = vks.descriptor_set,
+			dstBinding = 3,
 			dstArrayElement = 0,
 			descriptorType = .STORAGE_BUFFER,
 			descriptorCount = 1,

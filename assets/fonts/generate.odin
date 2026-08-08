@@ -8,20 +8,30 @@ import "core:strings"
 import "core:math/linalg"
 import "vendor:stb/truetype"
 
+NUM_STRIPES :: 8
+
 Vec2f16 :: [2]f16
 Vec2 :: [2]f32
 
 Curve :: struct {
-	p0:   Vec2f16,
-	p1:   Vec2f16,
-	p2:   Vec2f16,
+	p0: Vec2f16,
+	p1: Vec2f16,
+	p2: Vec2f16,
+}
+
+Rect :: struct {
+	pos, size: Vec2,
+}
+
+Stripe :: struct {
+	curve_start: u32,
+	curve_count: u32,
 }
 
 Glyph :: struct {
-	unicode:     u32,
-	advance:     f32,
-	curve_start: u32,
-	curve_count: u32,
+	unicode: u32,
+	advance: f32,
+	bounds:  Rect,
 }
 
 divide_curve :: proc(p0, p1, p2: Vec2, t: f32) -> (left: [3]Vec2, right: [3]Vec2) {
@@ -92,8 +102,10 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 	em_scale := 1.0 / f32(ascent - descent)
 
 	glyphs: [dynamic]Glyph
+	stripes: [dynamic]Stripe
 	curves: [dynamic]Curve
 	defer delete(glyphs)
+	defer delete(stripes)
 	defer delete(curves)
 
 	for ch in u32(32)..=u32(0xFFFF) {
@@ -107,7 +119,8 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 		verts: [^]truetype.vertex
 		num_verts := truetype.GetCodepointShape(&info, rune(ch), &verts)
 
-		curve_start := u32(len(curves))
+		glyph_curves: [dynamic]Curve
+		defer delete(glyph_curves)
 
 		p0: Vec2
 		for i in 0..<int(num_verts) {
@@ -118,12 +131,12 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 			case 2: // LINE
 				p1 := Vec2{f32(v.x), f32(ascent) - f32(v.y)} * em_scale
 				c0 := (p0 + p1) * 0.5
-				subdivide_to_monotonic(p0, c0, p1, &curves)
+				subdivide_to_monotonic(p0, c0, p1, &glyph_curves)
 				p0 = p1
 			case 3: // QUADRATIC
 				p1 := Vec2{f32(v.x), f32(ascent) - f32(v.y)} * em_scale
 				c0 := Vec2{f32(v.cx), f32(ascent) - f32(v.cy)} * em_scale
-				subdivide_to_monotonic(p0, c0, p1, &curves)
+				subdivide_to_monotonic(p0, c0, p1, &glyph_curves)
 				p0 = p1
 			case 4: // CUBIC
 				c1 := Vec2{f32(v.cx), f32(ascent) - f32(v.cy)} * em_scale
@@ -132,20 +145,76 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 				mid := (p0 + 3.0 * c1 + 3.0 * c2 + p1) * 0.125
 				q1_control := (3.0 * c1 - p0) * 0.5
 				q2_control := (3.0 * c2 - p1) * 0.5
-				subdivide_to_monotonic(p0, q1_control, mid, &curves)
-				subdivide_to_monotonic(mid, q2_control, p1, &curves)
+				subdivide_to_monotonic(p0, q1_control, mid, &glyph_curves)
+				subdivide_to_monotonic(mid, q2_control, p1, &glyph_curves)
 				p0 = p1
 			}
 		}
 
 		truetype.FreeShape(&info, cast(^truetype.vertex)verts)
 
-		curve_count := u32(len(curves)) - curve_start
+		bounds := Rect{{0, 0}, {0, 0}}
+
+		if len(glyph_curves) > 0 {
+			min_x := f32(1e9)
+			min_y := f32(1e9)
+			max_x := f32(-1e9)
+			max_y := f32(-1e9)
+
+			for c in glyph_curves {
+				p0 := Vec2{f32(c.p0.x), f32(c.p0.y)}
+				p1 := Vec2{f32(c.p1.x), f32(c.p1.y)}
+				p2 := Vec2{f32(c.p2.x), f32(c.p2.y)}
+
+				min_x = min(min_x, p0.x, p1.x, p2.x)
+				min_y = min(min_y, p0.y, p1.y, p2.y)
+				max_x = max(max_x, p0.x, p1.x, p2.x)
+				max_y = max(max_y, p0.y, p1.y, p2.y)
+			}
+
+			pad := f32(0.02)
+			bounds = Rect{
+				pos  = {min_x - pad, min_y - pad},
+				size = {max_x + pad, max_y + pad},
+			}
+
+			for s in 0..<NUM_STRIPES {
+				s_min_y := f32(s) / f32(NUM_STRIPES)
+				s_max_y := f32(s + 1) / f32(NUM_STRIPES)
+
+				st_curve_start := u32(len(curves))
+
+				for c in glyph_curves {
+					p0 := Vec2{f32(c.p0.x), f32(c.p0.y)}
+					p2 := Vec2{f32(c.p2.x), f32(c.p2.y)}
+
+					c_min_y := min(p0.y, p2.y)
+					c_max_y := max(p0.y, p2.y)
+
+					if c_min_y <= s_max_y && c_max_y >= s_min_y {
+						append(&curves, c)
+					}
+				}
+
+				st_curve_count := u32(len(curves)) - st_curve_start
+				append(&stripes, Stripe{
+					curve_start = st_curve_start,
+					curve_count = st_curve_count,
+				})
+			}
+		} else {
+			for s in 0..<NUM_STRIPES {
+				append(&stripes, Stripe{
+					curve_start = 0,
+					curve_count = 0,
+				})
+			}
+		}
+
 		append(&glyphs, Glyph{
-			unicode     = ch,
-			advance     = advance,
-			curve_start = curve_start,
-			curve_count  = curve_count,
+			unicode = ch,
+			advance = advance,
+			bounds  = bounds,
 		})
 	}
 
@@ -163,6 +232,9 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 	glyphs_bytes := slice.to_bytes(glyphs[:])
 	for b in glyphs_bytes do append(&out_buffer, b)
 
+	stripes_bytes := slice.to_bytes(stripes[:])
+	for b in stripes_bytes do append(&out_buffer, b)
+
 	curves_bytes := slice.to_bytes(curves[:])
 	for b in curves_bytes do append(&out_buffer, b)
 
@@ -172,7 +244,7 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 		return false
 	}
 
-	fmt.printf("Generated %s from %s (%d glyphs, %d curves, total %d bytes)\n", out_bin_path, font_path, glyph_count, curve_count, len(out_buffer))
+	fmt.printf("Generated %s from %s (%d glyphs, %d stripes, %d curves, total %d bytes)\n", out_bin_path, font_path, glyph_count, len(stripes), curve_count, len(out_buffer))
 	return true
 }
 
