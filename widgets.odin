@@ -168,7 +168,7 @@ link :: proc(id: Id, text: string, font_size := f32(22)) -> (res: Result_Set) {
 		c := LINK_COLOR.hover
 		c.a = u8(amount * 255.0)
 		fx.draw_rect(
-			{ bounds.pos + {(bounds.size.x - underline_width) * 0.5, bounds.size.y - 3},
+			{ bounds.pos + {(bounds.size.x - underline_width) * 0.5, bounds.size.y - 4},
 			{ underline_width, 1}},
 			c,
 		)

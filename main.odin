@@ -251,13 +251,13 @@ frame :: proc() {
 						}
 						draw_cover(cover_region, layout_next(), radius = 8)
 
-						if begin("NowPlayingInfo", pad = 8, gap = 8) {
+						if begin("NowPlayingInfo", pad = 8, gap = 4) {
 							layout_row({-1}, 40)
 							title_bounds := layout_next()
-							fx.draw_text_faded(player.music.title, title_bounds, 38, COLOR_TEXT)
+							fx.draw_text_faded(player.music.title, title_bounds, 42, COLOR_TEXT)
 
-							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 24).x : 0
-							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 24).x : 0
+							artist_w := player.music.artist != "" ? fx.measure_text(player.music.artist, 26).x : 0
+							album_w := player.music.album != "" ? fx.measure_text(player.music.album, 26).x : 0
 							dot_size := artist_w > 0 && album_w > 0 ? f32(10) : 0
 							avail_w := max(title_bounds.size.x - dot_size, 0)
 
@@ -279,16 +279,16 @@ frame :: proc() {
 								}
 							}
 
-							layout_row({artist_w, dot_size, album_w}, 24, gap = 4)
+							layout_row({artist_w, dot_size, album_w}, 26, gap = 4)
 
-							if .SUBMIT in link(get_id("link_artist"), player.music.artist, font_size = 24) {
+							if .SUBMIT in link(get_id("link_artist"), player.music.artist, font_size = 26) {
 								search_open(player.music.artist, .Artist)
 							}
 
 							dot_bounds := layout_next()
 							fx.draw_circle(dot_bounds.pos + dot_bounds.size * 0.5 ,2, COLOR_MUTED)
 
-							if .SUBMIT in link(get_id("link_album"), player.music.album, font_size = 24) {
+							if .SUBMIT in link(get_id("link_album"), player.music.album, font_size = 26) {
 								search_open(player.music.album, .Album)
 							}
 
