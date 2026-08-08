@@ -354,7 +354,7 @@ frame :: proc() {
 						}
 
 						audio.reset()
-						if player.playing do audio.resume()
+						if !player.playing do audio.pause()
 					}
 
 					vol_color := muted ? LINK_COLOR : SLIDER_FILL_COLOR
