@@ -808,11 +808,10 @@ song_row :: proc(song: ^Music, i: int, is_active: bool, sort: Playlist_Sort = .T
 
 		text_bounds := layout_next()
 		title_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 6}, {text_bounds.size.x, 18}}
-		fx.draw_text_faded(song.title, title_bounds, 20, COLOR_TEXT)
+		fx.draw_text_faded(song.title, title_bounds, 22, COLOR_TEXT)
 
-		secondary := song.artist
 		artist_bounds := fx.Rect{{text_bounds.pos.x, layout.rect.pos.y + 24}, {text_bounds.size.x, 15}}
-		fx.draw_text_faded(secondary, artist_bounds, 17, COLOR_MUTED)
+		fx.draw_text_faded(song.artist, artist_bounds, 18, COLOR_MUTED)
 
 		right_bounds := layout_next()
 
