@@ -84,15 +84,15 @@ draw_queue :: proc() {
 		divider_bounds.pos.y = animate(divider_id, local_divider_y) + layout.body.pos.y
 
 		if fx.rect_visible(divider_bounds) {
-			text_width := fx.measure_text("Playlist", 17).x + 18
+			text_width := fx.measure_text("Playlist", 20).x + 18
 			center := divider_bounds.pos.x + divider_bounds.size.x * 0.5
 			line_y := divider_bounds.pos.y + divider_bounds.size.y * 0.5
 
 			fx.draw_rect({{divider_bounds.pos.x + 5, line_y}, {max(center - text_width * 0.5 - divider_bounds.pos.x - 5, 0), 1}}, COLOR_BORDER)
 			fx.draw_rect({{center + text_width * 0.5, line_y}, {max(divider_bounds.pos.x + divider_bounds.size.x - center - text_width * 0.5 - 5, 0), 1}}, COLOR_BORDER)
 
-			text_bounds := fx.Rect{{center - text_width * 0.5, divider_bounds.pos.y + (divider_bounds.size.y - 17) * 0.5}, {text_width, 17}}
-			fx.draw_text_rect("Playlist", text_bounds, 17, COLOR_MUTED, true)
+			text_bounds := fx.Rect{{center - text_width * 0.5, divider_bounds.pos.y + (divider_bounds.size.y - 20) * 0.5}, {text_width, 20}}
+			fx.draw_text_rect("Playlist", text_bounds, 20, COLOR_MUTED, true)
 		}
 
 		// Playlist
