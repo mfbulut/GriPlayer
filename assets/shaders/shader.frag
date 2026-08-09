@@ -36,17 +36,13 @@ layout(location = 0) out vec4 out_color;
 
 #define KIND_RECT    0u
 #define KIND_TEXTURE 1u
-#define KIND_MSDF    2u
+#define KIND_SDF     2u
 #define KIND_QUAD    3u
 #define KIND_TEXT    4u
 
 float rect_sdf(vec2 pos, vec2 half_size, float r) {
     vec2 q = abs(pos) - half_size + r;
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-}
-
-float msdf_median(float r, float g, float b) {
-    return max(min(r, g), min(max(r, g), b));
 }
 
 vec2 evaluate_bezier(vec2 p0, vec2 p1, vec2 p2, float t) {
@@ -150,19 +146,15 @@ void main() {
     float alpha = 1.0;
     vec4 tex_color = vec4(1.0);
 
-    if (in_kind == KIND_TEXTURE || in_kind == KIND_MSDF) {
+    if (in_kind == KIND_TEXTURE || in_kind == KIND_SDF) {
         tex_color = texture(textures[nonuniformEXT(in_index)], in_uv);
     }
 
-    if (in_kind == KIND_MSDF) {
-        float sd = msdf_median(tex_color.r, tex_color.g, tex_color.b) - 0.5;
-
-        vec2 unit_range = vec2(in_radius);
-        vec2 screen_tex_size = vec2(1.0) / fwidth(in_uv);
-        float screen_px_range = max(0.5 * dot(unit_range, screen_tex_size), 1.0);
-
-        float screen_px_dist = screen_px_range * sd;
-        float opacity = clamp(screen_px_dist, 0.0, 1.0);
+    if (in_kind == KIND_SDF) {
+        float sd = tex_color.r - 0.5;
+        float afwidth = length(vec2(dFdx(sd), dFdy(sd)));
+        if (afwidth < 1e-5) afwidth = 1e-5;
+        float opacity = clamp(sd / afwidth + 0.5, 0.0, 1.0);
 
         tex_color = vec4(1.0, 1.0, 1.0, opacity);
     }

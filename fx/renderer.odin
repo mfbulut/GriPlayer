@@ -10,7 +10,7 @@ Instance :: struct #align(16) {
 	color:  [4]Color, // TL, TR, BL, BR
 	radius: f32,
 	index:  u32,
-	kind:   enum u32 { Rect, Texture, MSDF, Quad, Text },
+	kind:   enum u32 { Rect, Texture, SDF, Quad, Text },
 }
 
 NUM_STRIPES :: 8
@@ -138,7 +138,7 @@ draw_texture :: proc(tex: Texture, rect: Rect, tint := cast([4]Color)WHITE, radi
 	draw_texture_ex(tex, {{0, 0}, {f32(tex.size.x), f32(tex.size.y)}}, rect, tint, radius)
 }
 
-draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
+draw_sdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
 	if !rect_visible(dest) do return
 	if tex.index == 0 do return
 
@@ -155,14 +155,14 @@ draw_msdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint :=
 			dest   = {dest.pos, dest.pos + dest.size},
 			color  = tint,
 			radius = px_range / size.x,
-			kind   = .MSDF,
+			kind   = .SDF,
 			index  = u32(tex.index),
 		},
 	)
 }
 
-draw_msdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
-	draw_msdf_ex(tex, {{0, 0}, {f32(tex.size.x), f32(tex.size.y)}}, rect, px_range, tint)
+draw_sdf :: proc(tex: Texture, rect: Rect, px_range: f32, tint := cast([4]Color)WHITE) {
+	draw_sdf_ex(tex, {{0, 0}, {f32(tex.size.x), f32(tex.size.y)}}, rect, px_range, tint)
 }
 
 // Text Rendering

@@ -197,8 +197,8 @@ button :: proc(label: string, font_size := f32(20), active := false) -> (res: Re
 draw_icon :: proc(icon: Icon, bounds: fx.Rect, size := f32(0), tint := COLOR_TEXT) {
 	final_size := size > 0 ? size : max(min(bounds.size.x, bounds.size.y), 0)
 	dest := fx.Rect{bounds.pos + (bounds.size - final_size) * 0.5, final_size}
-	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 32 + 1, 30}
-	fx.draw_msdf_ex(icon_atlas, source, dest, 8, tint)
+	source := fx.Rect{{f32(int(icon) % 8), f32(int(icon) / 8)} * 64 + 2, 60}
+	fx.draw_sdf_ex(icon_atlas, source, dest, 16, tint)
 }
 
 icon_button :: proc(id_str: string, icon: Icon, tint: fx.Color = COLOR_MUTED, radius: f32 = 8, bg: bool = true, offset: f32 = 0, scale: f32 = 0.7, active: bool = false) -> (res: Result_Set) {
