@@ -68,31 +68,15 @@ float intersect_monotonic(float qa, float c0, float c1, float c2, float target) 
 }
 
 float scanline_sweep(vec2 size, vec2 offset, vec2 p0, vec2 p1, vec2 p2) {
-    vec2 min_p = min(p0, min(p1, p2));
-    vec2 max_p = max(p0, max(p1, p2));
-
-    if (max_p.y <= offset.y || min_p.y >= offset.y + size.y) return 0.0;
-    if (min_p.x >= offset.x + size.x) return 0.0;
+    if (max(p0.y, p2.y) <= offset.y || min(p0.y, p2.y) >= offset.y + size.y) {
+        return 0.0;
+    }
 
     vec2 delta = p2 - p0;
 
     p0 -= offset;
     p1 -= offset;
     p2 -= offset;
-
-    if (p0.x == p1.x && p0.x == p2.x) {
-        if (p0.x >= size.x) {
-            return 0.0;
-        }
-
-        float top = min(max(p0.y, p2.y), size.y);
-        float bottom = max(min(p0.y, p2.y), 0.0);
-
-        float h = top - bottom;
-        float b = min(size.x, size.x - p0.x);
-
-        return sign(delta.y) * b * h;
-    }
 
     float qa = fma(-2.0, p1.y, p0.y + p2.y);
     float bt = intersect_monotonic(qa, p0.y, p1.y, p2.y, 0.0);
@@ -186,8 +170,7 @@ void main() {
     if (in_kind == KIND_RECT || in_kind == KIND_TEXTURE) {
         float safe_radius = min(in_radius, min(in_half_size.x, in_half_size.y));
         float dist = rect_sdf(in_sdf_pos, in_half_size, safe_radius);
-        float aa = fwidth(dist);
-        float feather = aa * 0.5;
+        float feather = fwidth(dist) * 0.5;
         alpha = 1.0 - smoothstep(-feather, feather, dist);
     } else if (in_kind == KIND_QUAD) {
         float edge_dist = min(in_uv.y, 1.0 - in_uv.y);

@@ -178,6 +178,9 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 				size = {max_x + pad, max_y + pad},
 			}
 
+			stripe_height := 1.0 / f32(NUM_STRIPES)
+			margin := stripe_height * 0.2
+
 			for s in 0..<NUM_STRIPES {
 				s_min_y := f32(s) / f32(NUM_STRIPES)
 				s_max_y := f32(s + 1) / f32(NUM_STRIPES)
@@ -191,7 +194,7 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 					c_min_y := min(p0.y, p2.y)
 					c_max_y := max(p0.y, p2.y)
 
-					if c_min_y <= s_max_y && c_max_y >= s_min_y {
+					if c_max_y > s_min_y - margin && c_min_y < s_max_y + margin {
 						append(&curves, c)
 					}
 				}
