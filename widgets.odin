@@ -382,7 +382,7 @@ menu_button :: proc(text: string, icon: Icon) -> (res: Result_Set) {
 		{max(bounds.size.x - 32, 0), 17}
 	}
 
-	fx.draw_text_faded(text, text_bounds, 19, COLOR_TEXT)
+	fx.draw_text_faded(text, text_bounds, 21, COLOR_TEXT)
 
 	return
 }

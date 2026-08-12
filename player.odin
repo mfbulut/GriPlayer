@@ -73,8 +73,12 @@ player_play_music :: proc(song: ^Music, gapless := false, paused := false) {
 
 player_next :: proc(gapless := false) {
 	if len(player.queue) > 0 {
-		player_play_music(player.queue[0], gapless)
+		song := player.queue[0]
 		ordered_remove(&player.queue, 0)
+		insert_idx := clamp(player.cursor + 1, 0, len(player.songs))
+		inject_at(&player.songs, insert_idx, song)
+		player.cursor = insert_idx
+		player_play_music(song, gapless)
 		return
 	}
 	if len(player.songs) == 0 {
@@ -154,6 +158,9 @@ player_seek :: proc(position: f32) {
 player_queue_add :: proc(song: ^Music, next := false) {
 	if song == nil do return
 	if player.music == nil && len(player.queue) == 0 {
+		insert_idx := clamp(player.cursor + 1, 0, len(player.songs))
+		inject_at(&player.songs, insert_idx, song)
+		player.cursor = insert_idx
 		player_play_music(song, paused = true)
 		return
 	}

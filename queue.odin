@@ -201,10 +201,17 @@ draw_queue_row :: proc(song: ^Music, prefix: string, index: int, arr: ^[dynamic]
 			player.cursor = index
 			player_play_music(song)
 		} else if arr == &player.queue {
+			count := index + 1
+			for _ in 0..<count {
+				q_song := player.queue[0]
+				ordered_remove(&player.queue, 0)
+				insert_idx := clamp(player.cursor + 1, 0, len(player.songs))
+				inject_at(&player.songs, insert_idx, q_song)
+				player.cursor = insert_idx
+			}
 			player_play_music(song)
-			for _ in 0..<index+1 do ordered_remove(&player.queue, 0)
 			for i in 0..=len(player.queue) {
-				shift_row_animations("queue", i, i - (i + 1))
+				shift_row_animations("queue", i, i - (i + count))
 			}
 		}
 	}
