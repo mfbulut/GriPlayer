@@ -61,7 +61,12 @@ textures: #soa[MAX_TEXTURES]struct {
 
 vk_init :: proc() {
 	{	// Load Vulkan library
-		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load Vulkan library")
+		lib: dynlib.Library
+		when ODIN_OS == .Windows {
+			lib = dynlib.load_library("vulkan-1.dll") or_else panic("Failed to load Vulkan library")
+		} else {
+			lib = dynlib.load_library("libvulkan.so.1") or_else panic("Failed to load Vulkan library")
+		}
 		vkGetInstanceProcAddr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr")
 		vk.load_proc_addresses(vkGetInstanceProcAddr)
 	}
@@ -78,7 +83,11 @@ vk_init :: proc() {
 
 		extensions: [dynamic]cstring
 		append(&extensions, vk.KHR_SURFACE_EXTENSION_NAME)
-		append(&extensions, vk.KHR_WIN32_SURFACE_EXTENSION_NAME)
+		when ODIN_OS == .Windows {
+			append(&extensions, vk.KHR_WIN32_SURFACE_EXTENSION_NAME)
+		} else {
+			append(&extensions, vk.KHR_XLIB_SURFACE_EXTENSION_NAME)
+		}
 		when ODIN_DEBUG {
 			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		}
@@ -136,12 +145,21 @@ vk_init :: proc() {
 	}
 
 	{	// Create Surface
-		surface_create_info := vk.Win32SurfaceCreateInfoKHR {
-			sType = .WIN32_SURFACE_CREATE_INFO_KHR,
-			hinstance = window.hInstance,
-			hwnd = window.hwnd,
+		when ODIN_OS == .Windows {
+			surface_create_info := vk.Win32SurfaceCreateInfoKHR {
+				sType = .WIN32_SURFACE_CREATE_INFO_KHR,
+				hinstance = window.hInstance,
+				hwnd = window.hwnd,
+			}
+			vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
+		} else {
+			surface_create_info := vk.XlibSurfaceCreateInfoKHR {
+				sType = .XLIB_SURFACE_CREATE_INFO_KHR,
+				dpy = window.display,
+				window = window.win,
+			}
+			vk.CreateXlibSurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
 		}
-		vk.CreateWin32SurfaceKHR(vks.instance, &surface_create_info, nil, &vks.surface)
 	}
 
 	{	// Pick Physical Device

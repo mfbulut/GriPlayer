@@ -2,7 +2,11 @@ package opusfile
 
 import "core:strings"
 
-foreign import lib "opusfile.lib"
+when ODIN_OS == .Windows {
+    foreign import lib "opusfile.lib"
+} else {
+    foreign import lib "system:opusfile"
+}
 
 File  :: struct {}
 Tags :: struct {
