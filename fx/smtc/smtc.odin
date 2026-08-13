@@ -1,3 +1,4 @@
+#+build windows
 package smtc
 
 import "core:sync"

@@ -181,7 +181,7 @@ seek :: proc(position: f32) {
 
 	decoder.song_finished = false
 	resampler_reset(target_pcm)
-	wasapi_reset()
+	reset_locked()
 }
 
 position :: proc() -> f32 {
@@ -285,19 +285,10 @@ eq_recalculate_band :: proc(i: int) {
 	band.a2 = a2 / a0
 }
 
-// UTF-8 Path support for vorbis
-
-import "core:c"
-import "core:sys/windows"
-foreign import libc "system:libucrt.lib"
-
-foreign libc {
-	_wfopen :: proc(filename, mode: cstring16) -> ^c.FILE ---
-}
+// UTF-8 Path support for vorbis — see vorbis_open_windows.odin / vorbis_open_linux.odin
 
 open_vorbis_file :: proc(path: string) -> ^vorbis.vorbis {
-	path_w := windows.utf8_to_wstring(path, context.temp_allocator)
-	f := _wfopen(path_w, "rb")
+	f := vorbis_fopen(path)
 	if f == nil do return nil
 	return vorbis.open_file(f, true, nil, nil)
 }

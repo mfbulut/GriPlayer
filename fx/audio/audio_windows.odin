@@ -1,3 +1,4 @@
+#+build windows
 package audio
 
 import "core:sync"
@@ -103,7 +104,9 @@ resume :: proc() {
 	}
 }
 
-wasapi_reset :: proc() {
+// Called both from reset() below (mutex not yet held) and directly from
+// decoder.odin's seek() (mutex already held there) — must not lock itself.
+reset_locked :: proc() {
 	if wasapi_state.audio_client != nil {
 		wasapi_state.audio_client->Stop()
 		wasapi_state.audio_client->Reset()
@@ -113,5 +116,5 @@ wasapi_reset :: proc() {
 
 reset :: proc() {
 	sync.guard(&global_mutex)
-	wasapi_reset()
+	reset_locked()
 }
