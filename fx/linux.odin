@@ -401,6 +401,12 @@ handle_event :: proc(event: ^xlib.XEvent) {
 		handle_button(int(event.xbutton.button), false)
 	case .MotionNotify:
 		window.mouse_pos = Vec2{f32(event.xmotion.x), f32(event.xmotion.y)} / dpi_scale()
+	case .ConfigureNotify:
+		new_size := [2]int{int(event.xconfigure.width), int(event.xconfigure.height)}
+		if new_size != window.size {
+			window.size = new_size
+			window.is_resized = true
+		}
 	case .FocusOut:
 		for &state in window.key_state {
 			state = {}
