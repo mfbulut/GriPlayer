@@ -7,8 +7,8 @@ import "core:text/edit"
 import "core:strings"
 
 import "fx"
-import "fx/audio"
-import "fx/smtc"
+import "audio"
+import "smtc"
 
 Player_Panel :: enum {
 	Lyrics,

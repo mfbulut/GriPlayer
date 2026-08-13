@@ -179,7 +179,7 @@ process_font_file :: proc(font_path, out_bin_path: string) -> bool {
 			}
 
 			stripe_height := 1.0 / f32(NUM_STRIPES)
-			margin := stripe_height * 0.2
+			margin := stripe_height * 0.25
 
 			for s in 0..<NUM_STRIPES {
 				s_min_y := f32(s) / f32(NUM_STRIPES)

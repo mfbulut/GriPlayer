@@ -12,7 +12,7 @@ import "core:thread"
 import "core:time"
 
 import "fx"
-import "fx/audio"
+import "audio"
 import "vendor:stb/image"
 
 AtlasRegion :: struct {

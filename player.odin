@@ -3,8 +3,8 @@ package main
 import "core:math/rand"
 
 import "fx"
-import "fx/audio"
-import "fx/smtc"
+import "audio"
+import "smtc"
 
 player: struct {
 	songs:    [dynamic]^Music,

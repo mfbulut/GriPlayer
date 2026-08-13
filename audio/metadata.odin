@@ -5,7 +5,6 @@ import "core:slice"
 import "core:strings"
 import "core:strconv"
 import "core:encoding/base64"
-import "core:encoding/endian"
 
 import "flac"
 import "opusfile"
@@ -70,7 +69,7 @@ parse_tags :: proc(tags: []string, meta: ^Metadata) {
 }
 
 parse_vorbis_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
-	vf := open_vorbis_file(path)
+	vf := vorbis_fopen(path)
 	if vf == nil do return
 	defer vorbis.close(vf)
 	ok = true
@@ -132,24 +131,4 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	}
 
 	return
-}
-
-parse_flac_picture :: proc(block_data: []byte) -> []byte {
-	if len(block_data) < 32 do return nil
-
-	buf := block_data[4:]
-	mime_len := endian.unchecked_get_u32be(buf)
-	if len(buf) < int(4 + mime_len) do return nil
-	buf = buf[4+mime_len:]
-
-	if len(buf) < 4 do return nil
-	desc_len := endian.unchecked_get_u32be(buf)
-	if len(buf) < int(4 + desc_len + 16) do return nil
-	buf = buf[4+desc_len+16:]
-
-	if len(buf) < 4 do return nil
-	pic_len := endian.unchecked_get_u32be(buf)
-	if len(buf) < int(4 + pic_len) do return nil
-
-	return slice.clone(buf[4 : 4+pic_len], context.temp_allocator)
 }
