@@ -83,39 +83,120 @@ music_id :: proc(music: ^Music) -> Id {
 	return Id(hash.fnv64a(transmute([]byte)key))
 }
 
-loader_start :: proc() {
-	load_settings()
+get_dirs_to_scan :: proc(allocator := context.allocator) -> [dynamic]string {
+	dirs_to_scan := make([dynamic]string, allocator)
+	seen := make(map[string]bool, context.temp_allocator)
 
-	append(&playlists, Playlist{
-		name = "Liked",
-		icon = .Heart,
-		sort = .Liked_Time,
-	})
-	append(&playlists, Playlist{
-		name = "History",
-		icon = .History,
-		sort = .Last_Listened,
-	})
-
-	thread.create_and_start(proc() {
-		dirs_to_scan := make([dynamic]string, context.allocator)
-
-		if music_dir, err := os.user_music_dir(context.allocator); err == nil {
-			append(&dirs_to_scan, music_dir)
+	if music_dir, err := os.user_music_dir(context.temp_allocator); err == nil {
+		trimmed := strings.trim_space(music_dir)
+		if trimmed != "" && !(trimmed in seen) {
+			seen[trimmed] = true
+			append(&dirs_to_scan, strings.clone(trimmed, allocator))
 		}
+	}
 
-		if app_dir, app_err := get_app_dir(context.temp_allocator); app_err == nil {
-			if playlist_path, p_err := os.join_path({app_dir, "playlists.txt"}, context.temp_allocator); p_err == nil {
-				if content, err := os.read_entire_file(playlist_path, context.temp_allocator); err == nil {
-					lines := string(content)
-					for line in strings.split_lines_iterator(&lines) {
-						trimmed := strings.trim_space(line)
-						if trimmed != "" {
-							append(&dirs_to_scan, strings.clone(trimmed))
-						}
+	if app_dir, app_err := get_app_dir(context.temp_allocator); app_err == nil {
+		if playlist_path, p_err := os.join_path({app_dir, "playlists.txt"}, context.temp_allocator); p_err == nil {
+			if content, err := os.read_entire_file(playlist_path, context.temp_allocator); err == nil {
+				lines := string(content)
+				for line in strings.split_lines_iterator(&lines) {
+					trimmed := strings.trim_space(line)
+					if trimmed != "" && !(trimmed in seen) {
+						seen[trimmed] = true
+						append(&dirs_to_scan, strings.clone(trimmed, allocator))
 					}
 				}
 			}
+		}
+	}
+
+	return dirs_to_scan
+}
+
+read_music_metadata :: proc(music: ^Music, fullpath: string) {
+	if music.fullpath == "" {
+		music.fullpath = strings.clone(fullpath)
+	}
+	if metadata, ok := audio.metadata(music.fullpath); ok {
+		delete(music.title)
+		delete(music.artist)
+		delete(music.album)
+		music.title = strings.clone(metadata.title)
+		music.artist = strings.clone(metadata.artist)
+		music.album = strings.clone(metadata.album)
+		music.track = metadata.track
+		music.duration = metadata.duration
+
+		delete(music.thumbnail_pixels)
+		music.thumbnail_pixels = nil
+		if len(metadata.cover) > 0 {
+			load_thumbnail(music, metadata.cover)
+		} else {
+			music.thumbnail = {}
+		}
+	}
+
+	if music.title == "" {
+		delete(music.title)
+		music.title = strings.clone(os.stem(music.fullpath))
+	}
+
+	for lyric in music.lyrics {
+		delete(lyric.text)
+	}
+	clear(&music.lyrics)
+	bit_array.clear(&music.lyrics_filter)
+	load_lrc(music)
+}
+
+loader_existing: map[string]^Music
+
+loader_start :: proc(reload := false) {
+	if reload {
+		if !loading_finished || !polling_finished do return
+
+		loader_existing = make(map[string]^Music, len(music_by_id))
+		for _, song in music_by_id {
+			loader_existing[song.fullpath] = song
+		}
+
+		sync.lock(&loader_mutex)
+		loading_finished = false
+		polling_finished = false
+		clear(&loader_queue)
+		sync.unlock(&loader_mutex)
+
+		clear(&playlists[LIKED_PLAYLIST_INDEX].songs)
+		clear(&playlists[HISTORY_PLAYLIST_INDEX].songs)
+		for &playlist in playlists[LIBRARY_PLAYLIST_START:] {
+			clear(&playlist.songs)
+		}
+		clear(&music_by_id)
+	} else {
+		load_settings()
+
+		append(&playlists, Playlist{
+			name = "Liked",
+			icon = .Heart,
+			sort = .Liked_Time,
+		})
+		append(&playlists, Playlist{
+			name = "History",
+			icon = .History,
+			sort = .Last_Listened,
+		})
+	}
+
+	thread.create_and_start(proc() {
+		defer if loader_existing != nil {
+			delete(loader_existing)
+			loader_existing = nil
+		}
+
+		dirs_to_scan := get_dirs_to_scan()
+		defer {
+			for d in dirs_to_scan do delete(d)
+			delete(dirs_to_scan)
 		}
 
 		if len(dirs_to_scan) == 0 {
@@ -125,13 +206,16 @@ loader_start :: proc() {
 			return
 		}
 
-		cache, cache_err := cache_load()
+		cache: map[string]Music
 		cached_by_id: map[Id]^Music
-		if cache_err == nil {
-			cached_by_id = make(map[Id]^Music, len(cache))
-			for _, &song in cache {
-				id := music_id(&song)
-				cached_by_id[id] = &song
+		cache_err: os.Error = os.General_Error.Invalid_File
+		if loader_existing == nil {
+			cache, cache_err = cache_load()
+			if cache_err == nil {
+				cached_by_id = make(map[Id]^Music, len(cache))
+				for _, &song in cache {
+					cached_by_id[music_id(&song)] = &song
+				}
 			}
 		}
 
@@ -150,42 +234,36 @@ loader_start :: proc() {
 					continue
 				}
 
-				music := new(Music)
-
-				if cache_err == nil {
-					if cached, found := cache[info.fullpath]; found {
-						music^ = cached
+				music: ^Music
+				if loader_existing != nil {
+					if existing_song, found := loader_existing[info.fullpath]; found {
+						music = existing_song
+					} else {
+						music = new(Music)
 					}
-				}
-
-				if music.fullpath == "" {
-					music.fullpath = strings.clone(info.fullpath)
-					if metadata, ok := audio.metadata(music.fullpath); ok {
-						music.title = strings.clone(metadata.title)
-						music.artist = strings.clone(metadata.artist)
-						music.album = strings.clone(metadata.album)
-						music.track = metadata.track
-						music.duration = metadata.duration
-
-						if len(metadata.cover) > 0 {
-							load_thumbnail(music, metadata.cover)
+					read_music_metadata(music, info.fullpath)
+				} else {
+					music = new(Music)
+					if cache_err == nil {
+						if cached, found := cache[info.fullpath]; found {
+							music^ = cached
 						}
 					}
 
-					if music.title == "" {
-						music.title = strings.clone(os.stem(music.fullpath))
+					if music.fullpath == "" {
+						read_music_metadata(music, info.fullpath)
 					}
+
+					if cached, found := cached_by_id[music_id(music)]; found {
+						music.playtime = cached.playtime
+						music.liked = cached.liked
+						music.liked_timestamp = cached.liked_timestamp
+						music.listen_timestamp = cached.listen_timestamp
+					}
+
+					load_lrc(music)
 				}
 
-				id := music_id(music)
-				if cached, found := cached_by_id[id]; found {
-					music.playtime = cached.playtime
-					music.liked = cached.liked
-					music.liked_timestamp = cached.liked_timestamp
-					music.listen_timestamp = cached.listen_timestamp
-				}
-
-				load_lrc(music)
 				free_all(context.temp_allocator)
 				sync.lock(&loader_mutex)
 				append(&loader_queue, music)
@@ -207,6 +285,16 @@ loader_poll :: proc() {
 	if(loading_finished && len(loader_queue) == 0) {
 		polling_finished = true;
 		sync.unlock(&loader_mutex)
+
+		for i := len(playlists) - 1; i >= LIBRARY_PLAYLIST_START; i -= 1 {
+			if len(playlists[i].songs) == 0 {
+				delete(playlists[i].songs)
+				ordered_remove(&playlists, i)
+			}
+		}
+
+		cache_save()
+		if search.active do update_search()
 		return
 	}
 
@@ -244,25 +332,29 @@ loader_poll :: proc() {
 		}
 
 		if len(music.thumbnail_pixels) > 0 {
-			if len(atlases) == 0 || cursor_y + 64 > ATLAS_SIZE {
-				atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
-				append(&atlases, atlas_tex)
-				cursor_x = 0
-				cursor_y = 0
-			}
+			if music.thumbnail.texture.index != 0 {
+				fx.texture_upload(music.thumbnail.texture, music.thumbnail_pixels, int(music.thumbnail.source.pos.x), int(music.thumbnail.source.pos.y), 64, 64)
+			} else {
+				if len(atlases) == 0 || cursor_y + 64 > ATLAS_SIZE {
+					atlas_tex := fx.texture_create(ATLAS_SIZE, ATLAS_SIZE)
+					append(&atlases, atlas_tex)
+					cursor_x = 0
+					cursor_y = 0
+				}
 
-			current_atlas := atlases[len(atlases) - 1]
-			fx.texture_upload(current_atlas, music.thumbnail_pixels, cursor_x, cursor_y, 64, 64)
+				current_atlas := atlases[len(atlases) - 1]
+				fx.texture_upload(current_atlas, music.thumbnail_pixels, cursor_x, cursor_y, 64, 64)
 
-			music.thumbnail = {
-				texture = current_atlas,
-				source = {{f32(cursor_x), f32(cursor_y)}, {f32(64), f32(64)}},
-			}
+				music.thumbnail = {
+					texture = current_atlas,
+					source = {{f32(cursor_x), f32(cursor_y)}, {f32(64), f32(64)}},
+				}
 
-			cursor_x += 64
-			if cursor_x + 64 > ATLAS_SIZE {
-				cursor_x = 0
-				cursor_y += 64
+				cursor_x += 64
+				if cursor_x + 64 > ATLAS_SIZE {
+					cursor_x = 0
+					cursor_y += 64
+				}
 			}
 		}
 

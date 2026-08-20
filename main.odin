@@ -919,6 +919,12 @@ handle_keyboard_input :: proc() {
 		return
 	}
 
+	if fx.key_is_pressed(.F5) {
+		context_menu = {}
+		loader_start(true)
+		return
+	}
+
 	if fx.key_is_down(.Ctrl) && fx.key_is_pressed(.M) {
 		toggle_mini_player()
 		return
