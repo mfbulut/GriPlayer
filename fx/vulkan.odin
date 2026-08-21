@@ -700,17 +700,13 @@ vk_render :: proc() {
 
 	if len(instances) > 0 {
 		mem.copy(vks.instance_buffer_mapped, raw_data(instances[:]), len(instances) * size_of(Instance))
-		scale := dpi_scale()
 
-		for b in batches {
-			rect := vk.Rect2D {
-				offset = {i32(b.scissor.pos.x * scale), i32(b.scissor.pos.y * scale)},
-				extent = {u32(b.scissor.size.x * scale), u32(b.scissor.size.y * scale)},
-			}
-
-			vk.CmdSetScissor(cmd, 0, 1, &rect)
-			vk.CmdDraw(cmd, 4, b.count, 0, b.offset)
+		scissor := vk.Rect2D {
+			offset = {0, 0},
+			extent = {u32(window.size.x), u32(window.size.y)},
 		}
+		vk.CmdSetScissor(cmd, 0, 1, &scissor)
+		vk.CmdDraw(cmd, 4, u32(len(instances)), 0, 0)
 	}
 
 	vk.CmdEndRendering(cmd)

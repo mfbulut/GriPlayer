@@ -452,7 +452,6 @@ update :: proc(poll_msg := true) {
 	}
 
 	apply_cursor()
-	flush()
 
 	if window.size.x > 0 && window.size.y > 0 {
 		if window.is_resized {
@@ -463,7 +462,6 @@ update :: proc(poll_msg := true) {
 	}
 
 	clear(&instances)
-	clear(&batches)
 }
 
 run :: proc(cb: proc()) {

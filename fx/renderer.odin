@@ -7,10 +7,12 @@ import "core:unicode/utf8"
 Instance :: struct #align(16) {
 	dest:   Rect,     // x0, y0, x1, y1
 	src:    Rect,     // u0, v0, u1, v1
+	clip:   Rect,     // cx0, cy0, cx1, cy1
 	color:  [4]Color, // TL, TR, BL, BR
 	radius: f32,
 	index:  u32,
 	kind:   enum u32 { Rect, Texture, SDF, Quad, Text },
+	_pad:   u32,
 }
 
 NUM_STRIPES :: 8
@@ -32,16 +34,9 @@ FontGlyph :: struct {
 	bounds:  Rect,
 }
 
-Batch :: struct {
-	offset:  u32,
-	count:   u32,
-	scissor: Rect,
-}
-
 total_curves_loaded: u32
 scissor: Rect
 font: map[rune]FontGlyph
-batches: [dynamic; 256]Batch
 instances: [dynamic; MAX_INSTANCES]Instance
 
 clear_window :: proc(color: Color) {
@@ -49,32 +44,11 @@ clear_window :: proc(color: Color) {
 }
 
 set_scissor :: proc(rect: Rect) {
-	if rect != scissor {
-		flush()
-		scissor = rect
-	}
+	scissor = rect
 }
 
 reset_scissor :: proc() {
 	set_scissor({{0, 0}, window_size()})
-}
-
-flush :: proc() {
-	if len(instances) == 0 do return
-
-	last_count: u32 = 0
-	for b in batches {
-		last_count += b.count
-	}
-
-	count := u32(len(instances)) - last_count
-	if count == 0 do return
-
-	append(&batches, Batch{
-		offset  = last_count,
-		count   = count,
-		scissor = scissor,
-	})
 }
 
 rect_visible :: proc(rect: Rect) -> bool {
@@ -87,7 +61,7 @@ draw_rect :: proc(r: Rect, color: [4]Color, radius := f32(0)) {
 	append(&instances,
 		Instance{
 			dest   = {r.pos, r.pos + r.size},
-			src    = {},
+			clip   = {scissor.pos, scissor.pos + scissor.size},
 			color  = color,
 			radius = radius,
 			kind   = .Rect,
@@ -126,6 +100,7 @@ draw_texture_ex :: proc(tex: Texture, src: Rect, dest: Rect, tint := cast([4]Col
 		Instance{
 			src    = src_uv,
 			dest   = {dest.pos, dest.pos + dest.size},
+			clip   = {scissor.pos, scissor.pos + scissor.size},
 			color  = tint,
 			radius = radius,
 			kind   = .Texture,
@@ -153,11 +128,12 @@ draw_sdf_ex :: proc(tex: Texture, src: Rect, dest: Rect, px_range: f32, tint := 
 		Instance{
 			src    = src_uv,
 			dest   = {dest.pos, dest.pos + dest.size},
+			clip   = {scissor.pos, scissor.pos + scissor.size},
 			color  = tint,
 			radius = px_range / size.x,
 			kind   = .SDF,
 			index  = u32(tex.index),
-		},
+		}
 	)
 }
 
@@ -238,6 +214,7 @@ draw_text :: proc(text: string, pos: Vec2, font_size: f32, color := cast([4]Colo
 				Instance{
 					dest   = dest,
 					src    = glyph.bounds,
+					clip   = {scissor.pos, scissor.pos + scissor.size},
 					color  = color,
 					radius = 0,
 					index  = glyph.index,
@@ -321,6 +298,7 @@ draw_text_faded :: proc(text: string, bounds: Rect, font_size: f32, color: Color
 				Instance{
 					dest   = dest,
 					src    = glyph.bounds,
+					clip   = {scissor.pos, scissor.pos + scissor.size},
 					color  = c,
 					radius = 0,
 					index  = glyph.index,
@@ -442,6 +420,7 @@ draw_text_wrapped :: proc(text: string, bounds: Rect, font_size: f32, color := c
 						Instance{
 							dest   = dest,
 							src    = glyph.bounds,
+							clip   = {scissor.pos, scissor.pos + scissor.size},
 							color  = color,
 							radius = 0,
 							index  = glyph.index,

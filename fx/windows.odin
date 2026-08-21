@@ -274,8 +274,6 @@ update :: proc(poll_msg := true) {
 		window.frame_callback()
 	}
 
-	flush()
-
 	if window.size.x > 0 && window.size.y > 0 {
 		if window.is_resized {
 			vk_recreate_swapchain()
@@ -286,7 +284,6 @@ update :: proc(poll_msg := true) {
 	}
 
 	clear(&instances)
-	clear(&batches)
 }
 
 run :: proc(cb: proc()) {
