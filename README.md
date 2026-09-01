@@ -15,6 +15,18 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 - **Vulkan & WASAPI:** Built from scratch, low latency, fast performance.
 - **Supported Formats:** flac, opus, ogg
 
+Mp3 and Wav support are removed in [v0.2.8](https://github.com/mfbulut/GriPlayer/releases/tag/v0.2.8)
+You should be using better codecs in 2026
+
+## Usage
+
+By default the app scans
+* Windows: `C:\Users\username\Music`
+* Linux: `/home/username/Music`
+You can add more directories by playlists.txt where each path is seperated by newlines:
+* Windows: `C:\Users\username\AppData\Local\playlists.txt`
+* Linux: `/home/username/.local/share/playlists.txt`
+  
 ## Screenshots
 
 <img src="https://github.com/user-attachments/assets/a10b3320-02eb-41d0-b61b-24acc2bf2a7b" />
