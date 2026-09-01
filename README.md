@@ -5,18 +5,17 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 
 ## Features
 
-- **UI:** Modern, responsive interface with playlists, queue, and fuzzy search.
-- **Playback:** Gapless playback with a built-in frequency visualizer.
-- **Lyrics:** Search and view synchronized lyrics using `.lrc` files.
-- **Equalizer:** Fine-tune audio across 10 Bands with pre-amp gain control.
-- **Loudness Normalization:** [R128](https://en.wikipedia.org/wiki/EBU_R_128) loudness normalization for Opus files.
-- **Listening History:** Record your play history and track the total time listened.
-- **SMTC:** Full Windows System Media Transport Controls integration.
-- **Vulkan & WASAPI:** Built from scratch, low latency, fast performance.
-- **Supported Formats:** flac, opus, ogg
+* **UI:** Modern, responsive interface with playlists, queue, and fuzzy search.
+* **Playback:** Gapless playback with a built-in frequency visualizer.
+* **Lyrics:** Search and view synchronized lyrics using `.lrc` files.
+* **Equalizer:** Fine-tune audio across 10 Bands with pre-amp gain control.
+* **Loudness Normalization:** [R128](https://en.wikipedia.org/wiki/EBU_R_128) loudness normalization for Opus files.
+* **Listening History:** Record your play history and track the total time listened.
+* **SMTC:** Full Windows System Media Transport Controls integration.
+* **Vulkan & WASAPI:** Built from scratch, low latency, fast performance.
+* **Supported Formats:** flac, opus, ogg
 
-Mp3 and Wav support are removed in [v0.2.8](https://github.com/mfbulut/GriPlayer/releases/tag/v0.2.8)
-You should be using better codecs in 2026
+.mp3 and .wav support are removed in [v0.2.8](https://github.com/mfbulut/GriPlayer/releases/tag/v0.2.8) you should be use better codecs
 
 ## Usage
 
@@ -24,7 +23,7 @@ By default the app scans
 * Windows: `C:\Users\username\Music`
 * Linux: `/home/username/Music`
   
-You can add more directories by creating playlists.txt where each path is seperated by newlines:
+You can add more directories by creating `playlists.txt` where each path is seperated by newlines:
 * Windows: `C:\Users\username\AppData\Local\playlists.txt`
 * Linux: `/home/username/.local/share/playlists.txt`
   
