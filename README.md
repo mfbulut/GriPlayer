@@ -23,6 +23,7 @@ You should be using better codecs in 2026
 By default the app scans
 * Windows: `C:\Users\username\Music`
 * Linux: `/home/username/Music`
+  
 You can add more directories by playlists.txt where each path is seperated by newlines:
 * Windows: `C:\Users\username\AppData\Local\playlists.txt`
 * Linux: `/home/username/.local/share/playlists.txt`
