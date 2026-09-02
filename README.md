@@ -15,7 +15,7 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 * **Vulkan & WASAPI:** Built from scratch, low latency, fast performance.
 * **Supported Formats:** flac, opus, ogg
 
-.mp3 and .wav support are removed in [v0.2.8](https://github.com/mfbulut/GriPlayer/releases/tag/v0.2.8) you should be use better codecs
+.mp3 and .wav support are removed in [v0.2.8](https://github.com/mfbulut/GriPlayer/releases/tag/v0.2.8) you should use better codecs
 
 ## Usage
 
