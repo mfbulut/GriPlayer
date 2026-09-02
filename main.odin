@@ -64,14 +64,14 @@ handle_playlists_resize :: proc(delta: f32) {
 	}
 }
 
-handle_main_resize :: proc(delta: f32, has_playlists: bool) {
+handle_main_resize :: proc(delta: f32) {
 	if delta > 0 {
 		d := min(delta, max(player_width - MIN_PLAYER_WIDTH, 0))
 		songs_width  += d
 		player_width -= d
 	} else if delta < 0 {
 		d1 := min(-delta, max(songs_width - MIN_SONGS_WIDTH, 0))
-		d2 := has_playlists ? min(-delta - d1, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0)) : 0
+		d2 := min(-delta - d1, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0))
 		player_width    += d1 + d2
 		songs_width     -= d1
 		playlists_width -= d2
@@ -155,7 +155,7 @@ frame :: proc() {
 		if library_hidden {
 			layout_row({-1}, -1)
 		} else {
-			library_width := search.active ? songs_width : (playlists_width + 8 + songs_width)
+			library_width := playlists_width + 8 + songs_width
 			layout_row({library_width, -1}, -1)
 
 			if begin("Library", gap = 8) {
@@ -279,7 +279,7 @@ frame :: proc() {
 			if .ACTIVE in res_main {
 				delta := fx.mouse_pos().x - ctx.drag_start.x
 				if delta != 0 {
-					handle_main_resize(delta, !search.active)
+					handle_main_resize(delta)
 					ctx.drag_start = fx.mouse_pos()
 				}
 			}
