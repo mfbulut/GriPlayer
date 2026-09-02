@@ -22,11 +22,24 @@ GriPlayer is a desktop audio player built with [Odin](https://odin-lang.org/)
 By default the app scans
 * Windows: `C:\Users\username\Music`
 * Linux: `/home/username/Music`
-  
+
 You can add more directories by creating `playlists.txt` where each path is seperated by newlines:
 * Windows: `C:\Users\username\AppData\Local\playlists.txt`
 * Linux: `/home/username/.local/share/playlists.txt`
-  
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Space` | Play / Pause |
+| `Up` / `Down` | Volume up / down (5%) |
+| `Left` / `Right` | Seek backward / forward 5 seconds |
+| `Ctrl + Left` / `Ctrl + Right` | Previous / Next lyric line |
+| `Ctrl + F` | Search library |
+| `Ctrl + M` | Toggle Mini Player |
+| `Ctrl + B` | Toggle Library (hides left panels) |
+| `F5` | Rescan and reload music library |
+
 ## Screenshots
 
 <img src="https://github.com/user-attachments/assets/a10b3320-02eb-41d0-b61b-24acc2bf2a7b" />

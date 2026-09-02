@@ -24,17 +24,71 @@ scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
 mini_player_active := false
+library_hidden := false
 muted := false
 saved_volume: f32 = 0.5
 
-current_tab: enum {
-	Both,
-	Player,
-	Library,
+MIN_PLAYLISTS_WIDTH : f32 : 140
+MIN_SONGS_WIDTH     : f32 : 240
+MIN_PLAYER_WIDTH    : f32 : 360
+
+playlists_width : f32 = 180
+songs_width     : f32 = 420
+player_width    : f32 = 500
+
+adjust_panel_widths :: proc(window_width: f32) {
+	total := max(window_width - 32, MIN_PLAYLISTS_WIDTH + MIN_SONGS_WIDTH + MIN_PLAYER_WIDTH)
+	diff := total - (playlists_width + songs_width + player_width)
+	if diff > 0 {
+		songs_width  += diff * 0.5
+		player_width += diff * 0.5
+	} else if diff < 0 {
+		shrink := -diff
+		sp := min(shrink, max(player_width - MIN_PLAYER_WIDTH, 0)); player_width -= sp; shrink -= sp
+		ss := min(shrink, max(songs_width - MIN_SONGS_WIDTH, 0));   songs_width -= ss;  shrink -= ss
+		playlists_width = max(playlists_width - shrink, MIN_PLAYLISTS_WIDTH)
+	}
+}
+
+handle_playlists_resize :: proc(delta: f32) {
+	if delta > 0 {
+		d1 := min(delta, max(songs_width - MIN_SONGS_WIDTH, 0))
+		d2 := min(delta - d1, max(player_width - MIN_PLAYER_WIDTH, 0))
+		playlists_width += d1 + d2
+		songs_width     -= d1
+		player_width    -= d2
+	} else if delta < 0 {
+		d := min(-delta, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0))
+		playlists_width -= d
+		songs_width     += d
+	}
+}
+
+handle_main_resize :: proc(delta: f32, has_playlists: bool) {
+	if delta > 0 {
+		d := min(delta, max(player_width - MIN_PLAYER_WIDTH, 0))
+		songs_width  += d
+		player_width -= d
+	} else if delta < 0 {
+		d1 := min(-delta, max(songs_width - MIN_SONGS_WIDTH, 0))
+		d2 := has_playlists ? min(-delta - d1, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0)) : 0
+		player_width    += d1 + d2
+		songs_width     -= d1
+		playlists_width -= d2
+	}
+}
+
+panel_splitter :: proc(id_str: string, rect: fx.Rect) -> (res: Result_Set) {
+	res = update_control(get_id(id_str), fx.rect_expand(rect, 2))
+	if .HOVER in res || .ACTIVE in res {
+		fx.set_cursor(.ResizeH)
+		fx.draw_rect({{rect.pos.x + rect.size.x * 0.5 - 1, rect.pos.y}, {2, rect.size.y}}, fx.color_opacity(COLOR_ACCENT, .ACTIVE in res ? 0.75 : 0.35), 1)
+	}
+	return
 }
 
 context_menu: struct {
-	song: ^Music,
+	song:   ^Music,
 	bounds: fx.Rect,
 }
 
@@ -92,50 +146,30 @@ frame :: proc() {
 
 	size := fx.window_size()
 
-	if size.x < 800 {
-		if current_tab == .Both {
-			if player.music != nil {
-				current_tab = .Player
-			} else {
-				current_tab = .Library
-			}
-		}
-	} else {
-		current_tab = .Both
-	}
+	adjust_panel_widths(size.x)
+
+	lib_rect: fx.Rect
+	playlists_rect: fx.Rect
 
 	if begin("root", {{0, 0}, size}, pad = 8, gap = 8) {
-		if current_tab == .Both {
-			library_width := clamp(size.x * 0.45, f32(460), size.x)
-			layout_row({library_width, -1}, -1)
-		} else {
-			layout_row({-1}, 42)
-			if begin("Tabs", bg = COLOR_SURFACE, pad = 4, gap = 6) {
-				layout_row({-1, -1}, -1)
-
-				if .SUBMIT in button("Library", active = current_tab == .Library) {
-					current_tab = .Library
-				}
-
-				if .SUBMIT in button("Player", active = current_tab == .Player) {
-					current_tab = .Player
-				}
-			}
-
+		if library_hidden {
 			layout_row({-1}, -1)
-		}
+		} else {
+			library_width := search.active ? songs_width : (playlists_width + 8 + songs_width)
+			layout_row({library_width, -1}, -1)
 
-		if current_tab == .Both || current_tab == .Library {
 			if begin("Library", gap = 8) {
+				lib_rect = get_layout().rect
 				layout_row({-1}, 42)
 				draw_search_box()
 
 				if search.active {
 					layout_row({-1}, -1)
 				} else {
-					layout_row({170, -1}, -1)
+					layout_row({playlists_width, -1}, -1)
 
 					if begin("PlaylistsArea", bg = COLOR_SURFACE) {
+						playlists_rect = get_layout().rect
 						layout_row({-1}, 42)
 						if begin("PlaylistsHeader", pad = 8) {
 							layout_row({-1}, 30)
@@ -153,6 +187,19 @@ frame :: proc() {
 									}
 								}
 							}
+						}
+					}
+
+					playlists_splitter_rect := fx.Rect{
+						pos  = {playlists_rect.pos.x + playlists_rect.size.x, playlists_rect.pos.y},
+						size = {8, playlists_rect.size.y},
+					}
+					res_pl := panel_splitter("playlists_splitter", playlists_splitter_rect)
+					if .ACTIVE in res_pl {
+						delta := fx.mouse_pos().x - ctx.drag_start.x
+						if delta != 0 {
+							handle_playlists_resize(delta)
+							ctx.drag_start = fx.mouse_pos()
 						}
 					}
 				}
@@ -223,10 +270,22 @@ frame :: proc() {
 					}
 				}
 			}
+
+			main_splitter_rect := fx.Rect{
+				pos  = {lib_rect.pos.x + lib_rect.size.x, lib_rect.pos.y},
+				size = {8, lib_rect.size.y},
+			}
+			res_main := panel_splitter("main_splitter", main_splitter_rect)
+			if .ACTIVE in res_main {
+				delta := fx.mouse_pos().x - ctx.drag_start.x
+				if delta != 0 {
+					handle_main_resize(delta, !search.active)
+					ctx.drag_start = fx.mouse_pos()
+				}
+			}
 		}
 
-		if current_tab == .Both || current_tab == .Player {
-			if begin("Player", bg = COLOR_SURFACE) {
+		if begin("Player", bg = COLOR_SURFACE) {
 				if len(visualizer_palette) > 0 {
 					bounds := get_layout().rect
 					tint_height := min(bounds.size.y, f32(280))
@@ -317,8 +376,8 @@ frame :: proc() {
 
 					prog_res, prog_bounds := slider(get_id("progress"), &position, 0, max(duration, 1), preview = true)
 
-					if .HOVER in prog_res && fx.mouse_scroll().y != 0 {
-						player_seek(max(audio.position() + fx.mouse_scroll().y * 5, 0))
+					if .HOVER in prog_res && fx.mouse_scroll() != 0 {
+						player_seek(max(audio.position() + fx.mouse_scroll() * 5, 0))
 					}
 
 					if .CHANGE in prog_res {
@@ -367,8 +426,8 @@ frame :: proc() {
 						audio.set_volume(vol)
 					}
 
-					if .HOVER in vol_res && fx.mouse_scroll().y != 0 {
-						vol = clamp(vol + fx.mouse_scroll().y * 0.05, 0, 1)
+					if .HOVER in vol_res && fx.mouse_scroll() != 0 {
+						vol = clamp(vol + fx.mouse_scroll() * 0.05, 0, 1)
 						muted = false
 						audio.set_volume(vol)
 					} else if .CHANGE in vol_res || .ACTIVE in vol_res {
@@ -447,7 +506,6 @@ frame :: proc() {
 				}
 			}
 		}
-	}
 
 	draw_context_menu()
 	free_all(context.temp_allocator)
@@ -463,8 +521,8 @@ draw_equalizer :: proc() {
 		if .SECONDARY in pregain_res {
 			audio.decoder.pregain_db = 0
 		}
-		if .HOVER in pregain_res && fx.mouse_scroll().y != 0 {
-			audio.decoder.pregain_db = clamp(audio.decoder.pregain_db + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
+		if .HOVER in pregain_res && fx.mouse_scroll() != 0 {
+			audio.decoder.pregain_db = clamp(audio.decoder.pregain_db + fx.mouse_scroll() * 0.5, -12.0, 12.0)
 		}
 
 		pregain_text := to_string(audio.decoder.pregain_db, " dB")
@@ -513,8 +571,8 @@ draw_equalizer :: proc() {
 				gains[i] = 0.0
 			}
 
-			if .HOVER in res && fx.mouse_scroll().y != 0 {
-				new_v := clamp(gains[i] + fx.mouse_scroll().y * 0.5, -12.0, 12.0)
+			if .HOVER in res && fx.mouse_scroll() != 0 {
+				new_v := clamp(gains[i] + fx.mouse_scroll() * 0.5, -12.0, 12.0)
 				audio.eq_set_gain(i, new_v)
 				gains[i] = new_v
 			}
@@ -626,7 +684,7 @@ draw_lyrics :: proc() {
 			lyrics_layout := get_layout()
 			lyrics_cnt := get_scroll_state(lyrics_layout.id)
 
-			if mouse_over(lyrics_layout.rect) && fx.mouse_scroll().y != 0 {
+			if mouse_over(lyrics_layout.rect) && fx.mouse_scroll() != 0 {
 				lyrics_synced = false
 			}
 
@@ -638,12 +696,12 @@ draw_lyrics :: proc() {
 
 			if lyrics_synced && !found {
 				if lyrics_sync_now {
-					lyrics_cnt.scroll_target.y = 0
+					lyrics_cnt.scroll_target = 0
 					lyrics_sync_now = false
 				} else {
-					lyrics_cnt.scroll_target.y += (0 - lyrics_cnt.scroll_target.y) * 6 * fx.frame_time()
+					lyrics_cnt.scroll_target += (0 - lyrics_cnt.scroll_target) * 6 * fx.frame_time()
 				}
-				lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
+				lyrics_cnt.scroll = lyrics_cnt.scroll_target
 			}
 
 			for lyric, i in player.music.lyrics {
@@ -661,16 +719,16 @@ draw_lyrics :: proc() {
 				if lyrics_synced && is_active {
 					row_center := row.pos.y + row.size.y * 0.5
 					container_center := lyrics_layout.rect.pos.y + lyrics_layout.rect.size.y * 0.5
-					target_scroll := lyrics_cnt.scroll.y + (row_center - container_center)
+					target_scroll := lyrics_cnt.scroll + (row_center - container_center)
 
 					if lyrics_sync_now {
-						lyrics_cnt.scroll_target.y = target_scroll
+						lyrics_cnt.scroll_target = target_scroll
 						lyrics_sync_now = false
 					} else {
-						lyrics_cnt.scroll_target.y += (target_scroll - lyrics_cnt.scroll_target.y) * 6 * fx.frame_time()
+						lyrics_cnt.scroll_target += (target_scroll - lyrics_cnt.scroll_target) * 6 * fx.frame_time()
 					}
 
-					lyrics_cnt.scroll.y = lyrics_cnt.scroll_target.y
+					lyrics_cnt.scroll = lyrics_cnt.scroll_target
 				}
 
 				if !fx.rect_visible(row) do continue
@@ -930,7 +988,13 @@ handle_keyboard_input :: proc() {
 		return
 	}
 
+	if !mini_player_active && fx.key_is_down(.Ctrl) && fx.key_is_pressed(.B) {
+		library_hidden = !library_hidden
+		return
+	}
+
 	if !mini_player_active && fx.key_is_down(.Ctrl) && fx.key_is_pressed(.F) {
+		if library_hidden do library_hidden = false
 		if !search.active {
 			search_open()
 		} else {
@@ -1006,8 +1070,8 @@ draw_mini_player :: proc() {
 
 	@(static) volume_timer: f32
 
-	if fx.mouse_scroll().y != 0 {
-		vol := clamp((muted ? saved_volume : audio.get_volume()) + fx.mouse_scroll().y * 0.05, 0, 1)
+	if fx.mouse_scroll() != 0 {
+		vol := clamp((muted ? saved_volume : audio.get_volume()) + fx.mouse_scroll() * 0.05, 0, 1)
 		muted = false
 		audio.set_volume(vol)
 		volume_timer = 1.0

@@ -274,34 +274,33 @@ slider :: proc(id: Id, value: ^f32, low, high: f32, fill: UI_Color = SLIDER_FILL
 	return
 }
 
-scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec2, id_string: string, i: int, marker: f32 = -1) {
-	maxscroll := cs[i] - body.size[i]
+scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: f32, marker: f32 = -1) {
+	maxscroll := cs - body.size.y
 
-	if maxscroll > 0 && body.size[i] > 0 {
-		id := child_id(layout_id, get_id(id_string))
+	if maxscroll > 0 && body.size.y > 0 {
+		id := child_id(layout_id, get_id("scrollbar_v"))
 		id_thumb := child_id(id, get_id("thumb"))
 
-		base := body
-		base.pos[1-i] += base.size[1-i]
-		base.size[1-i] = 4
-		base.pos[i] += 8
-		base.size[i] = max(0, base.size[i] - 16)
+		base := fx.Rect{
+			pos  = {body.pos.x + body.size.x, body.pos.y + 8},
+			size = {4, max(0, body.size.y - 16)},
+		}
 
 		thumb := base
-		thumb.size[i] = clamp(base.size[i] * body.size[i] / cs[i], 30, base.size[i])
-		thumb.pos[i] += state.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+		thumb.size.y = clamp(base.size.y * body.size.y / cs, 30, base.size.y)
+		thumb.pos.y += state.scroll * (base.size.y - thumb.size.y) / maxscroll
 
 		res := update_control(id, fx.rect_expand(base, 4))
 		res_thumb := update_control(id_thumb, fx.rect_expand(thumb, 4))
 
 		if fx.key_is_down(.Mouse_Left) {
-			scroll_ratio := maxscroll / max(1.0, base.size[i] - thumb.size[i])
+			scroll_ratio := maxscroll / max(1.0, base.size.y - thumb.size.y)
 
 			if fx.key_is_pressed(.Mouse_Left) {
 				if ctx.focus_id == id {
-					target_pos := fx.mouse_pos()[i] - thumb.size[i] * 0.5
-					state.scroll[i] = (target_pos - base.pos[i]) * scroll_ratio
-					state.scroll_target[i] = state.scroll[i]
+					target_pos := fx.mouse_pos().y - thumb.size.y * 0.5
+					state.scroll = (target_pos - base.pos.y) * scroll_ratio
+					state.scroll_target = state.scroll
 					ctx.focus_id = id_thumb
 					ctx.drag_start = fx.mouse_pos()
 				}
@@ -312,47 +311,47 @@ scrollbar :: proc(layout_id: Id, state: ^Scroll_State, body: fx.Rect, cs: fx.Vec
 
 			if ctx.focus_id == id_thumb {
 				delta := fx.mouse_pos() - ctx.drag_start
-				state.scroll[i] = clamp(state.drag_start_scroll[i] + delta[i] * scroll_ratio, 0.0, maxscroll)
-				state.scroll_target[i] = state.scroll[i]
+				state.scroll = clamp(state.drag_start_scroll + delta.y * scroll_ratio, 0.0, maxscroll)
+				state.scroll_target = state.scroll
 			}
 		}
 
-		state.scroll_target[i] = clamp(state.scroll_target[i], 0.0, maxscroll)
+		state.scroll_target = clamp(state.scroll_target, 0.0, maxscroll)
 
 		if ctx.focus_id == id_thumb {
-			state.scroll[i] = state.scroll_target[i]
+			state.scroll = state.scroll_target
 		} else {
 			dt := fx.frame_time()
 			t := 1.0 - math.exp(-20.0 * dt)
-			state.scroll[i] += (state.scroll_target[i] - state.scroll[i]) * t
-			if abs(state.scroll_target[i] - state.scroll[i]) < 0.001 {
-				state.scroll[i] = state.scroll_target[i]
+			state.scroll += (state.scroll_target - state.scroll) * t
+			if abs(state.scroll_target - state.scroll) < 0.001 {
+				state.scroll = state.scroll_target
 			}
 		}
 
-		state.scroll[i] = clamp(state.scroll[i], 0.0, maxscroll)
+		state.scroll = clamp(state.scroll, 0.0, maxscroll)
 
-		thumb.pos[i] = base.pos[i] + state.scroll[i] * (base.size[i] - thumb.size[i]) / maxscroll
+		thumb.pos.y = base.pos.y + state.scroll * (base.size.y - thumb.size.y) / maxscroll
 		thumb_color := ui_color(SCROLLBAR_COLOR, res + res_thumb)
 		fx.draw_rect(thumb, thumb_color, 8)
 
 		if marker >= 0 {
 			marker_target := clamp(marker, 0, 1)
 			marker_position := animate(child_id(id, get_id("marker")), marker_target, 0.5)
-			marker_height := min(f32(10), base.size[i])
-			marker_rect := base
-			marker_rect.pos[i] = base.pos[i] + (base.size[i] - marker_height) * marker_position
-			marker_rect.size[i] = marker_height
+			marker_height := min(f32(10), base.size.y)
+			marker_rect := fx.Rect{
+				pos  = {base.pos.x, base.pos.y + (base.size.y - marker_height) * marker_position},
+				size = {base.size.x, marker_height},
+			}
 			fx.draw_rect(marker_rect, COLOR_ACCENT, 8)
 		}
 
 		if mouse_over(body) || mouse_over(base) {
-			state.scroll_target.x += fx.mouse_scroll().x * 60
-			state.scroll_target.y += fx.mouse_scroll().y * -60
+			state.scroll_target += fx.mouse_scroll() * -60
 		}
 	} else {
-		state.scroll[i] = 0
-		state.scroll_target[i] = 0
+		state.scroll = 0
+		state.scroll_target = 0
 	}
 }
 

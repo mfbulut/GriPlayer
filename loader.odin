@@ -544,9 +544,12 @@ record_listen :: proc(song: ^Music) {
 }
 
 Settings :: struct {
-	volume:     f32,
-	pregain_db: f32,
-	band_gains: [10]f32,
+	volume:          f32,
+	pregain_db:      f32,
+	band_gains:      [10]f32,
+	playlists_width: f32,
+	songs_width:     f32,
+	player_width:    f32,
 }
 
 get_app_dir :: proc(allocator := context.temp_allocator) -> (app_dir: string, err: os.Error) {
@@ -561,8 +564,11 @@ save_settings :: proc() -> os.Error {
 	settings_path := os.join_path({app_dir, "settings.bin"}, context.temp_allocator) or_return
 
 	settings := Settings{
-		volume     = audio.get_volume(),
-		pregain_db = audio.decoder.pregain_db,
+		volume          = audio.get_volume(),
+		pregain_db      = audio.decoder.pregain_db,
+		playlists_width = playlists_width,
+		songs_width     = songs_width,
+		player_width    = player_width,
 	}
 
 	for i in 0..<10 {
@@ -580,11 +586,33 @@ load_settings :: proc() -> os.Error {
 
 	data := os.read_entire_file(settings_path, context.temp_allocator) or_return
 
-	settings := (cast(^Settings)raw_data(data))^
-	audio.set_volume(settings.volume)
-	audio.decoder.pregain_db = settings.pregain_db
-	for i in 0..<10 {
-		audio.eq_set_gain(i, settings.band_gains[i])
+	if len(data) >= size_of(Settings) {
+		settings := (cast(^Settings)raw_data(data))^
+		audio.set_volume(settings.volume)
+		audio.decoder.pregain_db = settings.pregain_db
+		for i in 0..<10 {
+			audio.eq_set_gain(i, settings.band_gains[i])
+		}
+		if settings.playlists_width >= MIN_PLAYLISTS_WIDTH {
+			playlists_width = settings.playlists_width
+		}
+		if settings.songs_width >= MIN_SONGS_WIDTH {
+			songs_width = settings.songs_width
+		}
+		if settings.player_width >= MIN_PLAYER_WIDTH {
+			player_width = settings.player_width
+		}
+	} else if len(data) >= size_of(f32) * 12 {
+		settings := (cast(^struct {
+			volume:     f32,
+			pregain_db: f32,
+			band_gains: [10]f32,
+		})raw_data(data))^
+		audio.set_volume(settings.volume)
+		audio.decoder.pregain_db = settings.pregain_db
+		for i in 0..<10 {
+			audio.eq_set_gain(i, settings.band_gains[i])
+		}
 	}
 
 	return nil

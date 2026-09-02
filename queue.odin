@@ -38,17 +38,17 @@ draw_queue :: proc() {
 
 			if mouse_y < layout.rect.pos.y + edge {
 				speed := (layout.rect.pos.y + edge - mouse_y) / edge * 480 * fx.frame_time()
-				state.scroll_target.y -= speed
-				state.scroll.y -= speed
+				state.scroll_target -= speed
+				state.scroll -= speed
 			} else if mouse_y > layout.rect.pos.y + layout.rect.size.y - edge {
 				speed := (mouse_y - layout.rect.pos.y - layout.rect.size.y + edge) / edge * 480 * fx.frame_time()
-				state.scroll_target.y += speed
-				state.scroll.y += speed
+				state.scroll_target += speed
+				state.scroll += speed
 			}
 
-			max_scroll := max(state.content_size.y - layout.body.size.y, 0)
-			state.scroll_target.y = clamp(state.scroll_target.y, 0, max_scroll)
-			state.scroll.y = clamp(state.scroll.y, 0, max_scroll)
+			max_scroll := max(state.content_size - layout.body.size.y, 0)
+			state.scroll_target = clamp(state.scroll_target, 0, max_scroll)
+			state.scroll = clamp(state.scroll, 0, max_scroll)
 
 			queue_update_drag_target(layout)
 		}

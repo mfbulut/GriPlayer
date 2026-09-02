@@ -10,10 +10,10 @@ import "fx"
 Id :: distinct u64
 
 Scroll_State :: struct {
-	scroll:            fx.Vec2,
-	scroll_target:     fx.Vec2,
-	content_size:      fx.Vec2,
-	drag_start_scroll: fx.Vec2,
+	scroll:            f32,
+	scroll_target:     f32,
+	content_size:      f32,
+	drag_start_scroll: f32,
 }
 
 Layout :: struct {
@@ -54,13 +54,11 @@ begin :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scro
 	if scroll {
 		state := get_scroll_state(id)
 		cs := state.content_size + pad
-		if cs.x > body.size.x { body.size.y -= 9 }
-		if cs.y > body.size.y { body.size.x -= 9 }
-		scrollbar(id, state, body, cs, "scrollbar_v", 1, marker)
-		scrollbar(id, state, body, cs, "scrollbar_h", 0, -1)
+		if cs > body.size.y { body.size.x -= 9 }
+		scrollbar(id, state, body, cs, marker)
 
 		layout_body := fx.rect_shrink(body, pad)
-		get_layout().body = fx.Rect{layout_body.pos - state.scroll, layout_body.size}
+		get_layout().body = fx.Rect{{layout_body.pos.x, layout_body.pos.y - state.scroll}, layout_body.size}
 		fx.set_scissor(body)
 	} else {
 		get_layout().body = fx.rect_shrink(body, pad)
@@ -74,24 +72,23 @@ end :: proc(name: string, rect: fx.Rect = {}, pad: f32 = 0, gap: f32 = 0, scroll
 
 	if scroll {
 		state := get_scroll_state(layout.id)
-		state.content_size.x = layout.max.x - layout.body.pos.x
-		state.content_size.y = layout.max.y - layout.body.pos.y
+		state.content_size = layout.max.y - layout.body.pos.y
 
-		if state.content_size.y > layout.rect.size.y {
+		if state.content_size > layout.rect.size.y {
 			fade_height := min(f32(30), layout.rect.size.y * 0.25)
 			transparent := layout.bg_color
 			transparent.a = 0
 			opaque := layout.bg_color
 
-			if state.scroll.y > 0.1 {
+			if state.scroll > 0.1 {
 				fx.draw_rect(
 					{layout.rect.pos, {layout.rect.size.x, fade_height}},
 					{opaque, opaque, transparent, transparent}, 8,
 				)
 			}
 
-			max_scroll := state.content_size.y - layout.rect.size.y
-			if max_scroll - state.scroll.y > 0.1 {
+			max_scroll := state.content_size - layout.rect.size.y
+			if max_scroll - state.scroll > 0.1 {
 				fx.draw_rect(
 					{{layout.rect.pos.x, layout.rect.pos.y + layout.rect.size.y - fade_height}, {layout.rect.size.x, fade_height}},
 					{transparent, transparent, opaque, opaque}, 8,

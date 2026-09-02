@@ -14,6 +14,7 @@ Cursor :: enum {
 	Hand,
 	IBeam,
 	SizeAll,
+	ResizeH,
 }
 
 window: struct {
@@ -24,7 +25,7 @@ window: struct {
 	should_close:   bool,
 	key_state:      [256]bit_set[Key_State],
 	mouse_pos:      Vec2,
-	mouse_scroll:   Vec2,
+	mouse_scroll:   f32,
 	text_input:     [dynamic; 32]rune,
 	prev_time:      time.Time,
 	frame_time:     f32,
@@ -100,7 +101,7 @@ mouse_pos :: proc() -> Vec2 {
 	return window.mouse_pos
 }
 
-mouse_scroll :: proc() -> Vec2 {
+mouse_scroll :: proc() -> f32 {
 	return window.mouse_scroll
 }
 
@@ -249,7 +250,7 @@ set_clipboard :: proc(text: string) -> (ok: bool) {
 }
 
 update :: proc(poll_msg := true) {
-	window.mouse_scroll = {0, 0}
+	window.mouse_scroll = 0
 	clear(&window.text_input)
 	reset_scissor()
 
@@ -316,6 +317,7 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 			case .Hand:    hc = win.LoadCursorA(nil, win.IDC_HAND)
 			case .IBeam:   hc = win.LoadCursorA(nil, win.IDC_IBEAM)
 			case .SizeAll: hc = win.LoadCursorA(nil, win.IDC_SIZEALL)
+			case .ResizeH: hc = win.LoadCursorA(nil, win.IDC_SIZEWE)
 			}
 			win.SetCursor(hc)
 			result = 1
@@ -367,10 +369,7 @@ window_proc :: proc "system" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM,
 
 	case win.WM_MOUSEWHEEL:
 		vert_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
-		window.mouse_scroll.y += vert_scroll
-	case win.WM_MOUSEHWHEEL:
-		horz_scroll := cast(f32)win.GET_WHEEL_DELTA_WPARAM(wparam) / win.WHEEL_DELTA
-		window.mouse_scroll.x += horz_scroll
+		window.mouse_scroll += vert_scroll
 
 	case win.WM_SYSKEYDOWN:
 		if wparam == win.VK_F4 {

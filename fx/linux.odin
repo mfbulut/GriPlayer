@@ -13,6 +13,7 @@ Cursor :: enum {
 	Hand,
 	IBeam,
 	SizeAll,
+	ResizeH,
 }
 
 // vendor:x11/xlib covers the real Xlib ABI; only fill in the small gaps it
@@ -66,7 +67,7 @@ window: struct {
 	should_close:       bool,
 	key_state:          [256]bit_set[Key_State],
 	mouse_pos:          Vec2,
-	mouse_scroll:       Vec2,
+	mouse_scroll:       f32,
 	text_input:         [dynamic; 32]rune,
 	prev_time:          time.Time,
 	frame_time:         f32,
@@ -112,6 +113,7 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 	cursor_handles[.Hand]    = xlib.CreateFontCursor(window.display, .XC_hand2)
 	cursor_handles[.IBeam]   = xlib.CreateFontCursor(window.display, .XC_xterm)
 	cursor_handles[.SizeAll] = xlib.CreateFontCursor(window.display, .XC_fleur)
+	cursor_handles[.ResizeH] = xlib.CreateFontCursor(window.display, .XC_sb_h_double_arrow)
 
 	xlib.MapWindow(window.display, window.win)
 	xlib.Flush(window.display)
@@ -143,7 +145,7 @@ mouse_pos :: proc() -> Vec2 {
 	return window.mouse_pos
 }
 
-mouse_scroll :: proc() -> Vec2 {
+mouse_scroll :: proc() -> f32 {
 	return window.mouse_scroll
 }
 
@@ -378,10 +380,8 @@ handle_button :: proc(button: int, is_down: bool) {
 	case 1: update_button(.Mouse_Left, is_down)
 	case 2: update_button(.Mouse_Middle, is_down)
 	case 3: update_button(.Mouse_Right, is_down)
-	case 4: if is_down do window.mouse_scroll.y += 1
-	case 5: if is_down do window.mouse_scroll.y -= 1
-	case 6: if is_down do window.mouse_scroll.x -= 1
-	case 7: if is_down do window.mouse_scroll.x += 1
+	case 4: if is_down do window.mouse_scroll += 1
+	case 5: if is_down do window.mouse_scroll -= 1
 	}
 }
 
@@ -426,7 +426,7 @@ apply_cursor :: proc() {
 }
 
 update :: proc(poll_msg := true) {
-	window.mouse_scroll = {0, 0}
+	window.mouse_scroll = 0
 	clear(&window.text_input)
 	reset_scissor()
 
