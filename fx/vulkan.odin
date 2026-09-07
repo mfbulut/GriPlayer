@@ -213,6 +213,7 @@ vk_init :: proc() {
 			sType = .PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
 			pNext = &features_13,
 			storageBuffer16BitAccess = true,
+			uniformAndStorageBuffer16BitAccess = true,
 		}
 
 		features_12 := vk.PhysicalDeviceVulkan12Features {
