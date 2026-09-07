@@ -50,31 +50,45 @@ adjust_panel_widths :: proc(window_width: f32) {
 	}
 }
 
+Splitter :: enum {
+	None,
+	Playlists,
+	Main,
+}
+
+active_splitter: Splitter
+drag_start_x: f32
+drag_start_playlists_width: f32
+drag_start_songs_width: f32
+drag_start_player_width: f32
+
 handle_playlists_resize :: proc(delta: f32) {
 	if delta > 0 {
-		d1 := min(delta, max(songs_width - MIN_SONGS_WIDTH, 0))
-		d2 := min(delta - d1, max(player_width - MIN_PLAYER_WIDTH, 0))
-		playlists_width += d1 + d2
-		songs_width     -= d1
-		player_width    -= d2
-	} else if delta < 0 {
-		d := min(-delta, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0))
-		playlists_width -= d
-		songs_width     += d
+		d1 := min(delta, max(drag_start_songs_width - MIN_SONGS_WIDTH, 0))
+		d2 := min(delta - d1, max(drag_start_player_width - MIN_PLAYER_WIDTH, 0))
+		playlists_width = drag_start_playlists_width + d1 + d2
+		songs_width     = drag_start_songs_width - d1
+		player_width    = drag_start_player_width - d2
+	} else {
+		d := min(-delta, max(drag_start_playlists_width - MIN_PLAYLISTS_WIDTH, 0))
+		playlists_width = drag_start_playlists_width - d
+		songs_width     = drag_start_songs_width + d
+		player_width    = drag_start_player_width
 	}
 }
 
 handle_main_resize :: proc(delta: f32) {
 	if delta > 0 {
-		d := min(delta, max(player_width - MIN_PLAYER_WIDTH, 0))
-		songs_width  += d
-		player_width -= d
-	} else if delta < 0 {
-		d1 := min(-delta, max(songs_width - MIN_SONGS_WIDTH, 0))
-		d2 := min(-delta - d1, max(playlists_width - MIN_PLAYLISTS_WIDTH, 0))
-		player_width    += d1 + d2
-		songs_width     -= d1
-		playlists_width -= d2
+		d := min(delta, max(drag_start_player_width - MIN_PLAYER_WIDTH, 0))
+		songs_width     = drag_start_songs_width + d
+		player_width    = drag_start_player_width - d
+		playlists_width = drag_start_playlists_width
+	} else {
+		d1 := min(-delta, max(drag_start_songs_width - MIN_SONGS_WIDTH, 0))
+		d2 := min(-delta - d1, max(drag_start_playlists_width - MIN_PLAYLISTS_WIDTH, 0))
+		player_width    = drag_start_player_width + d1 + d2
+		songs_width     = drag_start_songs_width - d1
+		playlists_width = drag_start_playlists_width - d2
 	}
 }
 
@@ -146,6 +160,10 @@ frame :: proc() {
 
 	size := fx.window_size()
 
+	if active_splitter != .None && (!fx.key_is_down(.Mouse_Left) || library_hidden) {
+		active_splitter = .None
+	}
+
 	adjust_panel_widths(size.x)
 
 	lib_rect: fx.Rect
@@ -196,11 +214,16 @@ frame :: proc() {
 					}
 					res_pl := panel_splitter("playlists_splitter", playlists_splitter_rect)
 					if .ACTIVE in res_pl {
-						delta := fx.mouse_pos().x - ctx.drag_start.x
-						if delta != 0 {
-							handle_playlists_resize(delta)
-							ctx.drag_start = fx.mouse_pos()
+						if active_splitter != .Playlists {
+							active_splitter = .Playlists
+							drag_start_x = fx.mouse_pos().x
+							drag_start_playlists_width = playlists_width
+							drag_start_songs_width = songs_width
+							drag_start_player_width = player_width
 						}
+						handle_playlists_resize(fx.mouse_pos().x - drag_start_x)
+					} else if active_splitter == .Playlists {
+						active_splitter = .None
 					}
 				}
 
@@ -277,11 +300,16 @@ frame :: proc() {
 			}
 			res_main := panel_splitter("main_splitter", main_splitter_rect)
 			if .ACTIVE in res_main {
-				delta := fx.mouse_pos().x - ctx.drag_start.x
-				if delta != 0 {
-					handle_main_resize(delta)
-					ctx.drag_start = fx.mouse_pos()
+				if active_splitter != .Main {
+					active_splitter = .Main
+					drag_start_x = fx.mouse_pos().x
+					drag_start_playlists_width = playlists_width
+					drag_start_songs_width = songs_width
+					drag_start_player_width = player_width
 				}
+				handle_main_resize(fx.mouse_pos().x - drag_start_x)
+			} else if active_splitter == .Main {
+				active_splitter = .None
 			}
 		}
 
