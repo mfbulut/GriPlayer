@@ -6,6 +6,7 @@ import "core:strings"
 import "core:sync"
 
 import "flac"
+import "mp3"
 import "opusfile"
 import "vendor:stb/vorbis"
 
@@ -13,6 +14,7 @@ Decoder_Union :: union {
 	^opusfile.File,
 	^vorbis.vorbis,
 	^flac.File,
+	^mp3.File,
 }
 
 EqBand :: struct {
@@ -47,6 +49,8 @@ open :: proc(path: string) -> bool {
 		vorbis.close(d)
 	case ^flac.File:
 		flac.destroy(d)
+	case ^mp3.File:
+		mp3.destroy(d)
 	case:
 	}
 
@@ -79,6 +83,12 @@ open :: proc(path: string) -> bool {
 			decoder.sample_rate = u32(ff.info.sample_rate)
 			decoder.total_pcm = i64(flac.pcm_total(ff))
 		}
+	case ".mp3":
+		if mf := mp3.open_file(path); mf != nil {
+			decoder.decoder = mf
+			decoder.sample_rate = u32(mf.info.sample_rate)
+			decoder.total_pcm = i64(mp3.pcm_total(mf))
+		}
 	}
 
 	if decoder.decoder == nil || decoder.sample_rate == 0 do return false
@@ -110,6 +120,8 @@ decode_raw :: proc(samples: [][2]f32) -> int {
 			read = cast(int)vorbis.get_samples_float_interleaved(d, 2, cast([^]f32)raw_data(samples[frames_read:]), i32(remaining * 2))
 		case ^flac.File:
 			read = flac.read_float_stereo(d, samples[frames_read:frames_needed])
+		case ^mp3.File:
+			read = mp3.read_float_stereo(d, samples[frames_read:frames_needed])
 		}
 
 		if read == 0 do break;
@@ -176,6 +188,8 @@ seek :: proc(position: f32) {
 		vorbis.seek(d, u32(target_pcm))
 	case ^flac.File:
 		flac.pcm_seek(d, u64(target_pcm))
+	case ^mp3.File:
+		mp3.pcm_seek(d, u64(target_pcm))
 	case:
 	}
 
@@ -201,6 +215,8 @@ position :: proc() -> f32 {
 		current_pcm = i64(vorbis.get_sample_offset(d))
 	case ^flac.File:
 		current_pcm = i64(flac.pcm_tell(d))
+	case ^mp3.File:
+		current_pcm = i64(mp3.pcm_tell(d))
 	case:
 		return 0
 	}

@@ -7,6 +7,7 @@ import "core:strconv"
 import "core:encoding/base64"
 
 import "flac"
+import "mp3"
 import "opusfile"
 import "vendor:stb/vorbis"
 
@@ -31,6 +32,8 @@ metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 		meta, ok = parse_opus_metadata(path)
 	case ".flac":
 		meta, ok = parse_flac_metadata(path)
+	case ".mp3":
+		meta, ok = parse_mp3_metadata(path)
 	}
 
 	return
@@ -125,6 +128,34 @@ parse_flac_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
 	}
 
 	parse_tags(f.tags.comments, &meta)
+
+	if len(f.cover) > 0 {
+		meta.cover = slice.clone(f.cover, context.temp_allocator)
+	}
+
+	return
+}
+
+parse_mp3_metadata :: proc(path: string) -> (meta: Metadata, ok: bool) {
+	f := mp3.open_file(path)
+	if f == nil do return
+	defer mp3.destroy(f)
+
+	ok = true
+	if f.info.sample_rate > 0 {
+		meta.duration = f32(f.info.sample_count) / f32(f.info.sample_rate)
+	}
+
+	if len(f.tags.title) > 0 {
+		meta.title = strings.clone(f.tags.title, context.temp_allocator)
+	}
+	if len(f.tags.artist) > 0 {
+		meta.artist = strings.clone(f.tags.artist, context.temp_allocator)
+	}
+	if len(f.tags.album) > 0 {
+		meta.album = strings.clone(f.tags.album, context.temp_allocator)
+	}
+	meta.track = f.tags.track
 
 	if len(f.cover) > 0 {
 		meta.cover = slice.clone(f.cover, context.temp_allocator)

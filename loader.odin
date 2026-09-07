@@ -230,7 +230,7 @@ loader_start :: proc(reload := false) {
 				}
 
 				extension := strings.to_lower(os.ext(info.fullpath), context.temp_allocator)
-				if extension != ".opus" && extension != ".ogg" && extension != ".flac" {
+				if extension != ".opus" && extension != ".ogg" && extension != ".flac" && extension != ".mp3" {
 					continue
 				}
 
