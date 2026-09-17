@@ -550,6 +550,8 @@ Settings :: struct {
 	playlists_width: f32,
 	songs_width:     f32,
 	player_width:    f32,
+	window_placement: fx.Window_Placement,
+	mini_window_placement: fx.Window_Placement,
 }
 
 get_app_dir :: proc(allocator := context.temp_allocator) -> (app_dir: string, err: os.Error) {
@@ -569,6 +571,8 @@ save_settings :: proc() -> os.Error {
 		playlists_width = playlists_width,
 		songs_width     = songs_width,
 		player_width    = player_width,
+		window_placement = mini_player_active ? saved_window_placement : fx.get_window_placement(),
+		mini_window_placement = mini_player_active ? fx.get_window_placement() : saved_mini_window_placement,
 	}
 
 	for i in 0..<10 {
@@ -586,8 +590,15 @@ load_settings :: proc() -> os.Error {
 
 	data := os.read_entire_file(settings_path, context.temp_allocator) or_return
 
-	if len(data) >= size_of(Settings) {
-		settings := (cast(^Settings)raw_data(data))^
+	if len(data) >= int(offset_of(Settings, window_placement)) {
+		settings: Settings
+		copy(slice.bytes_from_ptr(&settings, int(offset_of(Settings, window_placement))), data)
+		if len(data) >= int(offset_of(Settings, mini_window_placement)) {
+			copy(slice.bytes_from_ptr(&settings, int(offset_of(Settings, mini_window_placement))), data)
+		}
+		if len(data) >= size_of(Settings) {
+			settings = (cast(^Settings)raw_data(data))^
+		}
 		audio.set_volume(settings.volume)
 		audio.decoder.pregain_db = settings.pregain_db
 		for i in 0..<10 {
@@ -601,6 +612,12 @@ load_settings :: proc() -> os.Error {
 		}
 		if settings.player_width >= MIN_PLAYER_WIDTH {
 			player_width = settings.player_width
+		}
+		if settings.window_placement.rect.z > 0 && settings.window_placement.rect.w > 0 {
+			saved_window_placement = settings.window_placement
+		}
+		if settings.mini_window_placement.rect.z > 0 && settings.mini_window_placement.rect.w > 0 {
+			saved_mini_window_placement = settings.mini_window_placement
 		}
 	} else if len(data) >= size_of(f32) * 12 {
 		settings := (cast(^struct {

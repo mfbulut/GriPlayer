@@ -12,6 +12,11 @@ Rect :: struct {
 	pos, size: Vec2,
 }
 
+Window_Placement :: struct {
+	rect:      [4]i32,
+	maximized: bool,
+}
+
 Bounds :: struct {
 	left, bottom, right, top: f32,
 }

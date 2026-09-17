@@ -33,7 +33,7 @@ window: struct {
 	cursor:         Cursor,
 }
 
-init :: proc(title: string, size := [2]int{1280, 720}) {
+init :: proc(title: string, placement: Window_Placement = {}) {
 	win.SetProcessDPIAware()
 
 	window.hInstance = cast(win.HINSTANCE)win.GetModuleHandleW(nil)
@@ -49,49 +49,42 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 
 	win.RegisterClassW(&wndclass)
 
-	window_rect: win.RECT = {
-		right  = i32(size.x),
-		bottom = i32(size.y),
-	}
-
 	dw_style := win.WS_OVERLAPPEDWINDOW | win.WS_CLIPCHILDREN
 	ex_style := win.WS_EX_APPWINDOW
-	win.AdjustWindowRectEx(&window_rect, dw_style, false, ex_style)
-
-	window_w := window_rect.right - window_rect.left
-	window_h := window_rect.bottom - window_rect.top
-
-	xpos := (win.GetSystemMetrics(win.SM_CXSCREEN) - window_w) / 2
-	ypos := (win.GetSystemMetrics(win.SM_CYSCREEN) - window_h) / 2
+	rect := placement.rect
+	has_placement := rect.z > 0 && rect.w > 0 && rect.z <= 65535 && rect.w <= 65535 &&
+	                 i64(rect.x) + i64(rect.z) <= 0x7fffffff && i64(rect.y) + i64(rect.w) <= 0x7fffffff
+	if !has_placement {
+		scale := f32(1)
+		if dc := win.GetDC(nil); dc != nil {
+			LOGPIXELSX :: 88
+			scale = f32(win.GetDeviceCaps(dc, LOGPIXELSX)) / 96
+			win.ReleaseDC(nil, dc)
+		}
+		bounds := win.RECT{right = i32(1280 * scale), bottom = i32(720 * scale)}
+		win.AdjustWindowRectEx(&bounds, dw_style, false, ex_style)
+		rect.z = bounds.right - bounds.left
+		rect.w = bounds.bottom - bounds.top
+		rect.x = (win.GetSystemMetrics(win.SM_CXSCREEN) - rect.z) / 2
+		rect.y = (win.GetSystemMetrics(win.SM_CYSCREEN) - rect.w) / 2
+	}
 
 	title16 := win.utf8_to_wstring(title, context.temp_allocator)
-	window.hwnd = win.CreateWindowExW(ex_style, "Font Renderer", title16, dw_style, xpos, ypos, window_w, window_h, nil, nil, window.hInstance, nil)
-
-	scale := dpi_scale()
-	if scale != 1.0 {
-		scaled_rect: win.RECT = {
-			right  = cast(i32)(f32(size.x) * scale),
-			bottom = cast(i32)(f32(size.y) * scale),
-		}
-		win.AdjustWindowRectEx(&scaled_rect, dw_style, false, ex_style)
-		new_w := scaled_rect.right - scaled_rect.left
-		new_h := scaled_rect.bottom - scaled_rect.top
-		new_x := (win.GetSystemMetrics(win.SM_CXSCREEN) - new_w) / 2
-		new_y := (win.GetSystemMetrics(win.SM_CYSCREEN) - new_h) / 2
-		win.SetWindowPos(window.hwnd, nil, new_x, new_y, new_w, new_h, win.SWP_NOZORDER)
-	}
+	window.hwnd = win.CreateWindowExW(ex_style, "Font Renderer", title16, dw_style, rect.x, rect.y, rect.z, rect.w, nil, nil, window.hInstance, nil)
 
 	window.prev_time = time.now()
 	window.mouse_pos = {-1, -1}
-	window.size = size
 
 	value := win.TRUE
 	win.DwmSetWindowAttribute(window.hwnd, u32(win.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE), &value, size_of(value))
 	win.RegisterHotKey(window.hwnd, 1, 0, win.VK_MEDIA_NEXT_TRACK)
 	win.RegisterHotKey(window.hwnd, 2, 0, win.VK_MEDIA_PREV_TRACK)
 	win.RegisterHotKey(window.hwnd, 3, 0, win.VK_MEDIA_PLAY_PAUSE)
-	win.ShowWindow(window.hwnd, win.SW_SHOW)
+	win.ShowWindow(window.hwnd, has_placement && placement.maximized ? win.SW_SHOWMAXIMIZED : win.SW_SHOWNORMAL)
 	win.UpdateWindow(window.hwnd)
+	client: win.RECT
+	win.GetClientRect(window.hwnd, &client)
+	window.size = {int(client.right - client.left), int(client.bottom - client.top)}
 
 	vk_init()
 	font_load(#load("../assets/fonts/SourceSans3-Medium.bin"))
@@ -143,6 +136,29 @@ text_input :: proc() -> []rune {
 
 set_cursor :: proc(c: Cursor) {
 	window.cursor = c
+}
+
+get_window_placement :: proc() -> Window_Placement {
+	placement := win.WINDOWPLACEMENT{length = size_of(win.WINDOWPLACEMENT)}
+	if !win.GetWindowPlacement(window.hwnd, &placement) do return {}
+	rect := placement.rcNormalPosition
+	return {
+		rect = {rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top},
+		maximized = placement.showCmd == u32(win.SW_SHOWMAXIMIZED) ||
+		            (window_is_minimized() && placement.flags & 2 != 0),
+	}
+}
+
+set_window_placement :: proc(placement: Window_Placement) {
+	rect := placement.rect
+	if rect.z <= 0 || rect.w <= 0 || rect.z > 65535 || rect.w > 65535 do return
+	if i64(rect.x) + i64(rect.z) > 0x7fffffff || i64(rect.y) + i64(rect.w) > 0x7fffffff do return
+	native := win.WINDOWPLACEMENT{
+		length = size_of(win.WINDOWPLACEMENT),
+		showCmd = u32(placement.maximized ? win.SW_SHOWMAXIMIZED : win.SW_SHOWNORMAL),
+		rcNormalPosition = {rect.x, rect.y, rect.x + rect.z, rect.y + rect.w},
+	}
+	win.SetWindowPlacement(window.hwnd, &native)
 }
 
 get_window_rect :: proc() -> Vec4 {

@@ -55,6 +55,19 @@ window: struct {
 	net_wm_state:       xlib.Atom,
 	net_wm_state_above: xlib.Atom,
 	net_wm_state_hidden: xlib.Atom,
+	net_wm_state_maximized_horz: xlib.Atom,
+	net_wm_state_maximized_vert: xlib.Atom,
+	net_wm_state_fullscreen: xlib.Atom,
+	net_wm_state_shaded: xlib.Atom,
+	net_frame_extents:  xlib.Atom,
+	wm_state:           xlib.Atom,
+	normal_placement:   Window_Placement,
+	placement_dirty:    bool,
+	placement_phase:    enum { None, Normalizing, Geometry, Maximizing },
+	placement_requested: Window_Placement,
+	placement_started: time.Time,
+	placement_serial:  uint,
+	placement_configured: bool,
 	net_wm_moveresize:  xlib.Atom,
 	motif_wm_hints:     xlib.Atom,
 	clipboard_atom:     xlib.Atom,
@@ -77,7 +90,7 @@ window: struct {
 
 cursor_handles: [Cursor]xlib.Cursor
 
-init :: proc(title: string, size := [2]int{1280, 720}) {
+init :: proc(title: string, placement: Window_Placement = {}) {
 	window.display = xlib.OpenDisplay(nil)
 	if window.display == nil do panic("Failed to open X display (is a Linux desktop running?)")
 
@@ -85,7 +98,16 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 	root := xlib.RootWindow(window.display, window.screen)
 	black := xlib.BlackPixel(window.display, window.screen)
 
-	window.win = xlib.CreateSimpleWindow(window.display, root, 0, 0, u32(size.x), u32(size.y), 0, black, black)
+	rect := placement.rect
+	has_placement := rect.z > 0 && rect.w > 0 && rect.z <= 65535 && rect.w <= 65535
+	if !has_placement {
+		rect = {0, 0, 1280, 720}
+		rect.x = (xlib.DisplayWidth(window.display, window.screen) - rect.z) / 2
+		rect.y = (xlib.DisplayHeight(window.display, window.screen) - rect.w) / 2
+	}
+	window.win = xlib.CreateSimpleWindow(window.display, root, rect.x, rect.y, u32(rect.z), u32(rect.w), 0, black, black)
+	hints := xlib.XSizeHints{flags = {.USPosition, .USSize}, x = rect.x, y = rect.y, width = rect.z, height = rect.w}
+	xlib.SetWMNormalHints(window.display, window.win, &hints)
 
 	event_mask := xlib.EventMask{
 		.KeyPress, .KeyRelease, .ButtonPress, .ButtonRelease,
@@ -103,6 +125,12 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 	window.net_wm_state        = xlib.InternAtom(window.display, "_NET_WM_STATE", false)
 	window.net_wm_state_above  = xlib.InternAtom(window.display, "_NET_WM_STATE_ABOVE", false)
 	window.net_wm_state_hidden = xlib.InternAtom(window.display, "_NET_WM_STATE_HIDDEN", false)
+	window.net_wm_state_maximized_horz = xlib.InternAtom(window.display, "_NET_WM_STATE_MAXIMIZED_HORZ", false)
+	window.net_wm_state_maximized_vert = xlib.InternAtom(window.display, "_NET_WM_STATE_MAXIMIZED_VERT", false)
+	window.net_wm_state_fullscreen = xlib.InternAtom(window.display, "_NET_WM_STATE_FULLSCREEN", false)
+	window.net_wm_state_shaded = xlib.InternAtom(window.display, "_NET_WM_STATE_SHADED", false)
+	window.net_frame_extents = xlib.InternAtom(window.display, "_NET_FRAME_EXTENTS", false)
+	window.wm_state = xlib.InternAtom(window.display, "WM_STATE", false)
 	window.net_wm_moveresize   = xlib.InternAtom(window.display, "_NET_WM_MOVERESIZE", false)
 	window.motif_wm_hints      = xlib.InternAtom(window.display, "_MOTIF_WM_HINTS", false)
 	window.clipboard_atom      = xlib.InternAtom(window.display, "CLIPBOARD", false)
@@ -115,6 +143,12 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 	cursor_handles[.SizeAll] = xlib.CreateFontCursor(window.display, .XC_fleur)
 	cursor_handles[.ResizeH] = xlib.CreateFontCursor(window.display, .XC_sb_h_double_arrow)
 
+	window.normal_placement = {rect = rect, maximized = has_placement && placement.maximized}
+	window.placement_dirty = true
+	if window.normal_placement.maximized {
+		states := [2]xlib.Atom{window.net_wm_state_maximized_horz, window.net_wm_state_maximized_vert}
+		xlib.ChangeProperty(window.display, window.win, window.net_wm_state, xlib.XA_ATOM, 32, xlib.PropModeReplace, &states[0], len(states))
+	}
 	xlib.MapWindow(window.display, window.win)
 	xlib.Flush(window.display)
 
@@ -135,7 +169,7 @@ init :: proc(title: string, size := [2]int{1280, 720}) {
 
 	window.prev_time = time.now()
 	window.mouse_pos = {-1, -1}
-	window.size = size
+	window.size = {int(rect.z), int(rect.w)}
 
 	vk_init()
 	font_load(#load("../assets/fonts/SourceSans3-Medium.bin"))
@@ -216,7 +250,173 @@ get_window_rect :: proc() -> Vec4 {
 
 set_window_rect :: proc(rect: Vec4) {
 	scale := dpi_scale()
-	xlib.MoveResizeWindow(window.display, window.win, i32(rect.x), i32(rect.y), u32(rect.z * scale), u32(rect.w * scale))
+	set_window_placement({rect = {i32(rect.x), i32(rect.y), i32(rect.z * scale), i32(rect.w * scale)}})
+}
+
+read_placement_property :: proc(property, expected_type: xlib.Atom, values: []uint) -> (count: int, ok: bool) {
+	actual_type: xlib.Atom
+	actual_format: i32
+	nitems, bytes_after: uint
+	data: rawptr
+	status := xlib.GetWindowProperty(window.display, window.win, property, 0, len(values), false, expected_type, &actual_type, &actual_format, &nitems, &bytes_after, &data)
+	defer if data != nil do xlib.Free(data)
+	if status != 0 do return 0, false
+	if actual_type == 0 do return 0, true
+	if actual_type != expected_type || actual_format != 32 || bytes_after != 0 || nitems > uint(len(values)) do return 0, false
+	if nitems != 0 && data == nil do return 0, false
+	for i in 0 ..< int(nitems) {
+		values[i] = (cast([^]uint)data)[i]
+	}
+	return int(nitems), true
+}
+
+Placement_State :: struct {
+	horizontal, vertical, hidden, blocked: bool,
+}
+
+query_placement_state :: proc() -> (state: Placement_State, ok: bool) {
+	values: [64]uint
+	count, valid := read_placement_property(window.net_wm_state, xlib.XA_ATOM, values[:])
+	if !valid do return {}, false
+	for value in values[:count] {
+		atom := xlib.Atom(value)
+		if atom == window.net_wm_state_maximized_horz do state.horizontal = true
+		if atom == window.net_wm_state_maximized_vert do state.vertical = true
+		if atom == window.net_wm_state_hidden do state.hidden = true
+		if atom == window.net_wm_state_fullscreen || atom == window.net_wm_state_shaded do state.blocked = true
+	}
+	count, valid = read_placement_property(window.wm_state, window.wm_state, values[:2])
+	if !valid do return {}, false
+	if count > 0 && values[0] == 3 do state.hidden = true
+	return state, true
+}
+
+query_placement_rect :: proc(attrs: xlib.XWindowAttributes) -> (rect: [4]i32, ok: bool) {
+	if attrs.width <= 0 || attrs.height <= 0 do return {}, false
+	root := xlib.RootWindow(window.display, window.screen)
+	child: xlib.Window
+	x, y: i32
+	if !xlib.TranslateCoordinates(window.display, window.win, root, 0, 0, &x, &y, &child) do return {}, false
+
+	extents: [4]uint
+	count, valid := read_placement_property(window.net_frame_extents, xlib.XA_CARDINAL, extents[:])
+	if valid && count == 4 && extents[0] <= 0x7fffffff && extents[2] <= 0x7fffffff {
+		x = i32(clamp(i64(x) - i64(extents[0]), -0x80000000, 0x7fffffff))
+		y = i32(clamp(i64(y) - i64(extents[2]), -0x80000000, 0x7fffffff))
+		return {x, y, attrs.width, attrs.height}, true
+	}
+
+	frame := window.win
+	for _ in 0 ..< 64 {
+		tree_root, parent: xlib.Window
+		children: [^]xlib.Window
+		nchildren: u32
+		status := xlib.QueryTree(window.display, frame, &tree_root, &parent, &children, &nchildren)
+		if children != nil do xlib.Free(children)
+		if i32(status) == 0 do return {}, false
+		if parent == root {
+			frame_attrs: xlib.XWindowAttributes
+			if xlib.GetWindowAttributes(window.display, frame, &frame_attrs) == 0 do return {}, false
+			return {frame_attrs.x, frame_attrs.y, attrs.width, attrs.height}, true
+		}
+		if parent == 0 || parent == frame do return {}, false
+		frame = parent
+	}
+	return {}, false
+}
+
+request_placement_maximized :: proc(maximized: bool) {
+	ev: xlib.XEvent
+	ev.xclient.type = .ClientMessage
+	ev.xclient.window = window.win
+	ev.xclient.message_type = window.net_wm_state
+	ev.xclient.format = 32
+	ev.xclient.data.l[0] = maximized ? 1 : 0
+	ev.xclient.data.l[1] = int(window.net_wm_state_maximized_horz)
+	ev.xclient.data.l[2] = int(window.net_wm_state_maximized_vert)
+	ev.xclient.data.l[3] = 1
+	xlib.SendEvent(window.display, xlib.RootWindow(window.display, window.screen), false, {.SubstructureNotify, .SubstructureRedirect}, &ev)
+	xlib.Flush(window.display)
+}
+
+update_window_placement :: proc() {
+	if window.display == nil || window.win == 0 do return
+	if !window.placement_dirty && window.placement_phase == .None do return
+	window.placement_dirty = false
+
+	state, valid := query_placement_state()
+	if !valid do return
+	attrs: xlib.XWindowAttributes
+	if xlib.GetWindowAttributes(window.display, window.win, &attrs) == 0 do return
+	maximized := state.horizontal || state.vertical
+	normal := !maximized && !state.hidden && !state.blocked && attrs.map_state == .IsViewable
+
+	if window.placement_phase != .None {
+		elapsed := time.diff(window.placement_started, time.now())
+		switch window.placement_phase {
+		case .Normalizing:
+			if normal {
+				rect := window.placement_requested.rect
+				window.placement_serial = xlib.NextRequest(window.display)
+				window.placement_configured = false
+				xlib.MoveResizeWindow(window.display, window.win, rect.x, rect.y, u32(rect.z), u32(rect.w))
+				xlib.Flush(window.display)
+				window.placement_phase = .Geometry
+				window.placement_started = time.now()
+				return
+			}
+		case .Geometry:
+			if normal {
+				rect, ok := query_placement_rect(attrs)
+				if ok && (rect == window.placement_requested.rect || window.placement_configured || elapsed >= 500 * time.Millisecond) {
+					window.normal_placement.rect = rect
+					request_placement_maximized(window.placement_requested.maximized)
+					window.placement_phase = window.placement_requested.maximized ? .Maximizing : .None
+					window.placement_started = time.now()
+					return
+				}
+			}
+		case .Maximizing:
+			if state.horizontal && state.vertical {
+				window.normal_placement.maximized = true
+				window.placement_phase = .None
+				return
+			}
+		case .None:
+		}
+		if elapsed < 2 * time.Second do return
+		window.placement_phase = .None
+		window.normal_placement.maximized = maximized
+		return
+	}
+
+	window.normal_placement.maximized = maximized
+	if !normal do return
+	rect, ok := query_placement_rect(attrs)
+	if !ok do return
+	after, state_ok := query_placement_state()
+	if !state_ok || after.horizontal || after.vertical || after.hidden || after.blocked do return
+	window.normal_placement.rect = rect
+}
+
+get_window_placement :: proc() -> Window_Placement {
+	window.placement_dirty = true
+	update_window_placement()
+	return window.normal_placement
+}
+
+set_window_placement :: proc(placement: Window_Placement) {
+	if window.display == nil || window.win == 0 do return
+	if placement.rect.z <= 0 || placement.rect.w <= 0 || placement.rect.z > 65535 || placement.rect.w > 65535 do return
+	window.placement_requested = placement
+	window.normal_placement = placement
+	window.placement_phase = .Normalizing
+	window.placement_started = time.now()
+	window.placement_configured = false
+	request_placement_maximized(false)
+	xlib.MapWindow(window.display, window.win)
+	xlib.Flush(window.display)
+	update_window_placement()
 }
 
 // EWMH _NET_WM_STATE client message, the X11 analogue of SetWindowPos(HWND_TOPMOST).
@@ -402,11 +602,27 @@ handle_event :: proc(event: ^xlib.XEvent) {
 	case .MotionNotify:
 		window.mouse_pos = Vec2{f32(event.xmotion.x), f32(event.xmotion.y)} / dpi_scale()
 	case .ConfigureNotify:
+		if event.xconfigure.window != window.win do break
 		new_size := [2]int{int(event.xconfigure.width), int(event.xconfigure.height)}
 		if new_size != window.size {
 			window.size = new_size
 			window.is_resized = true
 		}
+		window.placement_dirty = true
+		if window.placement_phase == .Geometry && event.xconfigure.serial >= window.placement_serial {
+			window.placement_configured = true
+		}
+	case .PropertyNotify:
+		if event.xproperty.window == window.win &&
+		   (event.xproperty.atom == window.net_wm_state || event.xproperty.atom == window.wm_state || event.xproperty.atom == window.net_frame_extents) {
+			window.placement_dirty = true
+		}
+	case .MapNotify:
+		if event.xmap.window == window.win do window.placement_dirty = true
+	case .UnmapNotify:
+		if event.xunmap.window == window.win do window.placement_dirty = true
+	case .ReparentNotify:
+		if event.xreparent.window == window.win do window.placement_dirty = true
 	case .FocusOut:
 		for &state in window.key_state {
 			state = {}
@@ -440,6 +656,7 @@ update :: proc(poll_msg := true) {
 			xlib.NextEvent(window.display, &event)
 			handle_event(&event)
 		}
+		update_window_placement()
 	}
 
 	cur_time := time.now()

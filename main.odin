@@ -24,6 +24,8 @@ scrub_time := f32(-1)
 lyrics_synced := true
 lyrics_sync_now := false
 mini_player_active := false
+saved_window_placement: fx.Window_Placement
+saved_mini_window_placement: fx.Window_Placement
 library_hidden := false
 muted := false
 saved_volume: f32 = 0.5
@@ -109,7 +111,7 @@ context_menu: struct {
 main :: proc() {
 	loader_start()
 
-	fx.init("GriPlayer")
+	fx.init("GriPlayer", saved_window_placement)
 	audio.init()
 	audio.set_callback(visualizer_push)
 
@@ -1078,18 +1080,24 @@ handle_keyboard_input :: proc() {
 }
 
 toggle_mini_player :: proc() {
-	@(static) saved_window_rect : fx.Vec4
-
 	mini_player_active = !mini_player_active
 	if mini_player_active {
-		saved_window_rect = fx.get_window_rect()
+		saved_window_placement = fx.get_window_placement()
+		normal_placement := saved_window_placement
+		normal_placement.maximized = false
+		fx.set_window_placement(normal_placement)
 		fx.set_window_borderless(true)
-		fx.set_window_rect({0, 0, 500, 100})
+		if saved_mini_window_placement.rect.z > 0 && saved_mini_window_placement.rect.w > 0 {
+			fx.set_window_placement(saved_mini_window_placement)
+		} else {
+			fx.set_window_rect({0, 0, 500, 100})
+		}
 		fx.set_always_on_top(true)
 	} else {
+		saved_mini_window_placement = fx.get_window_placement()
 		fx.set_always_on_top(false)
 		fx.set_window_borderless(false)
-		fx.set_window_rect(saved_window_rect)
+		fx.set_window_placement(saved_window_placement)
 	}
 }
 
